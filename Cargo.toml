@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/framework-core",
+    "crates/framework-windows",
+    "examples/hello-label",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+framework-core = { path = "crates/framework-core" }
+framework-windows = { path = "crates/framework-windows" }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemServices",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
