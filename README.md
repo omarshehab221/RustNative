@@ -1,4 +1,4 @@
-# ReactNative
+# RustNative
 
 A Rust-first, native-control-oriented cross-platform application framework.
 
@@ -12,7 +12,7 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Structured Task Scopes**.
+The latest completed milestone is **Window Lifecycle + Multi-Window Support**.
 
 ## Architecture
 
@@ -23,11 +23,11 @@ The latest completed milestone is **Structured Task Scopes**.
                            │
         ┌──────────────────┼──────────────────┐
         │                  │                  │
-     Components          Scheduler          Services*
+     Components          Scheduler          Services
         │                  │                  │
         ├── state          ├── tasks          └── future platform APIs
         ├── props          ├── scopes
-        ├── effects*       └── wakeups
+        ├── effects        └── wakeups
         ├── lifecycle
         └── messages
         │
@@ -48,7 +48,8 @@ The latest completed milestone is **Structured Task Scopes**.
                                     Windows / Win32
 ```
 
-`*` Effects and services are the next major runtime milestones; their architecture is planned but not yet implemented.
+The runtime also carries theme/style data and portable capability discovery;
+platform-specific APIs remain behind explicit service and native-extension boundaries.
 
 ## Crate boundaries
 
@@ -92,7 +93,12 @@ Contains the portable runtime and UI model:
 - focus/keyboard abstractions;
 - accessibility semantics;
 - scheduler;
-- task scopes.
+- task scopes;
+- dependency-aware effects and effect-owned task scopes.
+- injected async services and deterministic mock services;
+- theme tokens, component styles, and node-level visual overrides;
+- platform capabilities and native-extension escape hatch;
+- multiple independently owned window roots and window lifecycle state.
 
 It must not import Windows or any other operating-system API.
 
@@ -159,7 +165,9 @@ Component message/update
 Render → diff → layout → native update
 ```
 
-Each framework-managed component owns one persistent `TaskScope`.
+Each framework-managed component owns one persistent `TaskScope`. Effects use a
+separate scope per keyed dependency run, so replacing an effect cancels only the
+work owned by that effect.
 
 ### Lifetime rules
 
@@ -169,6 +177,8 @@ Each framework-managed component owns one persistent `TaskScope`.
 - Removing a component cancels all outstanding tasks in its scope.
 - Cancellation occurs before `unmounted()`.
 - Completed results for removed components are ignored.
+- Effects run after rendering, are retained for unchanged dependencies, and run
+  cleanup before replacement or component removal.
 
 ## Native object identity
 
@@ -294,32 +304,15 @@ cargo test --workspace
 cargo run -p hello-label
 ```
 
-The current model has been developed incrementally with regression tests in `framework-core` covering reconciliation, layout, scrolling, input, components, callbacks, scheduling, and task scopes.
+The current model has been developed incrementally with regression tests in `framework-core` covering reconciliation, layout, scrolling, input, components, callbacks, scheduling, task scopes, and effects.
 
-The environment used to package this repository does not provide `cargo`, `rustc`, or `rustfmt`, so the final Windows verification must be performed on a Windows Rust toolchain.
+The workspace test suite has been verified locally. A Windows interactive run is
+still needed to verify native Win32 behavior.
 
 ## Roadmap
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is:
-
-### Effects + reactive invalidation
-
-We will add dependency-aware effects with cleanup and integration with structured task scopes. This will allow patterns such as:
-
-```text
-state/props change
-      ↓
- effect dependency changes
-      ↓
- cleanup previous effect
-      ↓
- start new effect/task
-      ↓
- result message
-      ↓
- state update
-```
-
-After that, the roadmap proceeds through services/capabilities, styling, system integration, advanced input/accessibility, animations, virtualization, custom rendering, persistence/navigation, CLI/packaging, and additional native backends.
+The next implementation target is **Advanced Input System**. The roadmap then
+proceeds through accessibility, animations, virtualization, custom rendering,
+persistence/navigation, CLI/packaging, and additional native backends.

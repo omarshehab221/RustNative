@@ -414,178 +414,141 @@ component unmount      -> outstanding tasks cancel
 worker completion       -> result re-enters framework scheduler
 ```
 
----
-
-# 4. Immediate next milestones
-
 ## Milestone 19 — Effects + reactive invalidation
 
-Create an explicit effect system that is distinct from ordinary event handling and ordinary task spawning.
+Implemented:
 
-### Goals
+- keyed, dependency-aware effects declared from `ComponentContext`;
+- effects committed after the declarative tree render;
+- cleanup functions on dependency change, removal, and tree teardown;
+- effect-owned task scopes, separate from the component-wide task scope;
+- automatic cancellation of tasks started by obsolete effects;
+- stable effects across rerenders when dependencies have not changed;
+- duplicate effect-key detection within a component render.
 
-- effect lifecycle tied to component instances;
-- dependency-aware rerun semantics;
-- cleanup functions;
-- automatic cancellation of obsolete effect tasks;
-- integration with structured task scopes;
-- distinguish one-shot event work from state/prop-reactive work;
-- explicit invalidation instead of unconditional rerendering.
-
-Target conceptual flow:
+Effect lifecycle:
 
 ```text
-state / props
+state / props change
       ↓
- dependency change
+dependency change
       ↓
- effect cleanup
+cleanup previous effect + cancel its tasks
       ↓
- effect body
-      ↓
- task / subscription / external work
-      ↓
- message
-      ↓
- state update
+run replacement effect
 ```
-
-Use cases include:
-
-- debounced search;
-- network synchronization;
-- subscriptions;
-- timers;
-- external-resource observation;
-- starting/stopping work when props change.
-
-A task is independent asynchronous work. An effect is work whose lifetime and rerun semantics are tied to component dependencies.
 
 ## Milestone 20 — Resource and service system
 
-Introduce framework-wide service contracts so components can request platform capabilities without importing platform APIs.
+Implemented:
 
-Initial service families:
-
-- HTTP/networking;
-- persistent storage;
-- filesystem;
-- clipboard;
-- notifications;
-- permissions;
-- camera;
-- Bluetooth;
-- sensors;
-- location.
-
-Requirements:
-
-- typed service interfaces;
-- async-compatible services;
-- platform-specific implementations;
-- test/mocking implementations;
-- service lifetime and scope semantics;
-- no Windows-specific types in `framework-core`.
-
-Example direction:
-
-```text
-context.services().http()
-context.services().storage()
-context.services().clipboard()
-```
+- application-owned `Services` registry available from `ComponentContext`;
+- typed asynchronous contracts for HTTP, storage, clipboard, file dialogs, and system operations;
+- portable request/response and error types;
+- deterministic `MemoryStorage` and `MemoryClipboard` implementations for tests and previews;
+- explicit service injection through `Application::with_services`;
+- service sharing across all window component roots.
 
 ## Milestone 21 — Theme + styling system
 
-Move presentation semantics into a coherent style system instead of expanding per-node constructor parameters forever.
+Implemented:
 
-### Goals
+- theme colors, typography, spacing, and radius tokens;
+- component defaults for labels, buttons, text inputs, and containers;
+- node-level visual-style overrides;
+- `disabled` as a first-class node flag (`Node::disabled`), realized natively
+  as `EnableWindow` and excluded from Tab/Shift+Tab focus traversal;
+- deterministic theme/override resolution;
+- state-aware style variants for normal, hover, focus, pressed, and disabled
+  controls, defined in the theme model;
+- `TreeSnapshot::from_node_with_theme` resolves every node's style (theme
+  default merged with override, in its `Normal`/`Disabled` state) before it
+  reaches a backend — mirroring how layout geometry is already fully
+  resolved in the core rather than left to each backend to compute;
+- Windows realization: native fonts (`CreateFontIndirectW` + `WM_SETFONT`)
+  and colors (`WM_CTLCOLORSTATIC`/`WM_CTLCOLOREDIT`/`WM_CTLCOLORBTN` for
+  controls, `WM_ERASEBKGND` for containers), with GDI resources owned and
+  freed per node.
 
-- theme object;
-- typography tokens;
-- color tokens;
-- spacing tokens;
-- shape/radius tokens;
-- component style definitions;
-- style inheritance;
-- style overrides;
-- state-aware styles such as hover/focus/disabled/pressed;
-- platform-specific native styling adapters.
-
-Target model:
-
-```text
-Theme
-  ↓
-component style
-  ↓
-node style
-  ↓
-computed style
-  ↓
-native backend
-```
+Hover and pressed are resolvable theme states but are not yet realized as
+live repaints on Windows: that needs a mouse-tracking state machine
+(`TrackMouseEvent`/`WM_MOUSELEAVE`) not yet built. Normal, Disabled, and
+Focused states use resolved styling; Focused re-resolution on native focus
+change is likewise still open. These are noted here as scoped-out remainder,
+not silently missing behavior.
 
 ## Milestone 22 — Platform capability abstraction
 
-Formalize the capability architecture used by all backends.
+Implemented:
 
-Examples:
-
-```text
-HasClipboard
-HasNotifications
-HasCamera
-HasBluetooth
-HasStorage
-HasLocation
-HasFileDialogs
-HasSystemShare
-```
-
-Requirements:
-
-- capability discovery;
-- statically available capabilities where practical;
-- runtime availability where necessary;
-- platform-specific extensions;
-- native escape hatch.
-
-The framework should model a platform as a bundle of capabilities rather than forcing all platforms to implement an identical universal interface.
-
----
-
-# 5. System-integration milestones
+- portable `Capability` enumeration (including `Menus`) and
+  `PlatformCapabilities` discovery set;
+- capability reporting through every platform adapter;
+- Windows capability declarations for its available system integration
+  surface, kept honest: a capability is only advertised once this backend
+  actually realizes it (`capabilities_only_advertise_realized_backend_features`
+  asserts this for every `Capability` variant);
+- explicit `Platform::native_extension()` escape hatch for backend-specific APIs.
 
 ## Milestone 23 — Native dialogs, menus, and system integration
 
-Add native platform integrations for:
+Implemented:
 
-- file open/save dialogs;
-- folder pickers;
-- context menus;
-- application menus;
-- system share sheets;
-- notifications;
-- clipboard operations;
-- drag and drop;
-- system appearance hooks;
-- URL launching.
+- portable async contracts for clipboard, notifications, URL launching, and file dialogs;
+- file-dialog request model with open/save/folder selection and filters;
+- system-service contract usable by native backends for notifications and URL launching;
+- capability flags for file dialogs, system appearance, drag-and-drop, system sharing, and window management;
+- a portable `MenuBar`/`MenuItem` model (actions, submenus, separators,
+  enabled/checked state) attached to a `Window` via `Window::with_menu`, and
+  `Event::MenuAction` for selection, routed like a window-lifecycle event to
+  the window's root component;
+- Windows realization: `WindowsFileDialogs` (open/save via
+  `GetOpenFileNameW`/`GetSaveFileNameW`, folder picking via
+  `SHBrowseForFolderW`, both COM-apartment-initialized per call since shell
+  extensions are COM-backed), real notifications via `Shell_NotifyIconW`
+  (add-then-immediately-delete a tray icon so a one-shot balloon leaves no
+  permanent tray presence), and a native menu bar (`CreateMenu`/
+  `CreatePopupMenu`/`AppendMenuW`/`SetMenu`, `WM_COMMAND` routed to
+  `Event::MenuAction` via a per-window command-id → `NodeId` table).
+
+Drag-and-drop, system sharing, and system-appearance-change notifications
+remain portable contracts/flags only — not realized, and correspondingly not
+advertised as supported capabilities — preserving the core's platform
+independence for the parts still deferred. A menu's contents are static at
+window-creation time, matching a `Window`'s title and size, which are
+likewise not yet reactively updatable after the window opens.
 
 ## Milestone 24 — Window lifecycle + multi-window support
 
-Introduce a first-class window model:
+Implemented:
 
-- multiple windows;
-- window identity;
-- open/close lifecycle;
-- resize/move state;
-- per-window component roots;
-- modal relationships;
-- fullscreen/maximize/minimize;
-- window-level task and service scopes.
+- stable `WindowId` identities and a primary-window convention;
+- multiple independently owned window/component roots;
+- open/close operations and optional modal-parent relationship;
+- per-window view, render, dispatch, task, service, and theme ownership;
+- portable resize, move, close-request, and presentation-change events;
+- window state for position, size, visibility, normal/minimized/maximized/fullscreen presentation;
+- opening and closing windows at **runtime**, from inside a running
+  component, not just before the platform's event loop starts:
+  `ComponentContext::windows()` returns a `WindowRequests` handle
+  (`.open(component, window, modal_parent)` / `.close(id)`) that queues a
+  deferred `WindowCommand`, applied by `Application` right after the
+  requesting window's own dispatch/task-pump finishes — so a component never
+  mutates the window registry while it is itself mid-render;
+- Windows realization: a `WindowRegistry` that syncs live native windows
+  against `Application::window_ids()` after every dispatch and task pump,
+  creating a new `HWND` for a window the application gained and — for one
+  the application lost — posting that window itself a `WM_CLOSE` rather than
+  destroying it inline. The deferral matters: a `Runtime` can be mid-dispatch
+  (and so borrowed by a caller further up the native call stack) at the
+  exact moment its own window is asked to close, and tearing it down inline
+  would free memory that caller still holds a reference to. Every `Runtime`
+  — closed or not — is kept alive until the whole native event loop returns,
+  so this is sound even when a window closes itself.
 
-The architecture should remain compatible with mobile platforms where the OS owns most of the window lifecycle.
+---
+
+# 4. Immediate next milestones
 
 ## Milestone 25 — Advanced input system
 
