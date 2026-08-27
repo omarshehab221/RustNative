@@ -106,6 +106,37 @@ impl Event {
             | Self::MenuAction { .. } => None,
         }
     }
+
+    /// Rewrites a platform-facing target to the component-local key exposed
+    /// to `Component::update`. Window and menu events have no node target.
+    fn with_local_target(mut self, target: Option<NodeId>) -> Self {
+        match &mut self {
+            Self::Click { target: current }
+            | Self::FocusGained { target: current }
+            | Self::FocusLost { target: current }
+            | Self::TextChanged {
+                target: current, ..
+            } => {
+                if let Some(target) = target {
+                    *current = target;
+                }
+            }
+            Self::KeyDown {
+                target: current, ..
+            }
+            | Self::TextInput {
+                target: current, ..
+            } => {
+                *current = target;
+            }
+            Self::WindowResized { .. }
+            | Self::WindowMoved { .. }
+            | Self::WindowCloseRequested { .. }
+            | Self::WindowStateChanged { .. }
+            | Self::MenuAction { .. } => {}
+        }
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -801,15 +832,14 @@ impl WindowRequests {
     /// Requests that `window`, owned by a fresh `component`, be opened. When
     /// `modal_parent` is `Some`, the platform backend disables that window's
     /// native input while this one remains open.
-    pub fn open<C: Component>(
-        &self,
-        component: C,
-        window: Window,
-        modal_parent: Option<WindowId>,
-    ) {
-        self.sink.borrow_mut().push_back(WindowCommand::Open(Box::new(
-            move |application: &mut Application| application.open_window(component, window, modal_parent),
-        )));
+    pub fn open<C: Component>(&self, component: C, window: Window, modal_parent: Option<WindowId>) {
+        self.sink
+            .borrow_mut()
+            .push_back(WindowCommand::Open(Box::new(
+                move |application: &mut Application| {
+                    application.open_window(component, window, modal_parent)
+                },
+            )));
     }
 
     /// Requests that `id` be closed. Requesting the primary window's own id
@@ -1258,6 +1288,9 @@ struct ComponentEntry {
     component_type: std::any::TypeId,
     children: HashMap<String, ComponentId>,
     view: Option<Node>,
+    // Global native-tree ID -> component-local ID. This keeps component event
+    // handlers independent of the composition path that realizes their view.
+    node_ids: HashMap<NodeId, NodeId>,
     used_generation: u64,
     task_scope: TaskScope,
     effects: HashMap<String, EffectEntry>,
@@ -1284,7 +1317,7 @@ struct DeclaredEffect {
 pub struct ComponentTree {
     components: HashMap<ComponentId, ComponentEntry>,
     pending_children: HashMap<ComponentId, HashMap<String, ComponentId>>,
-    node_owners: HashMap<NodeId, ComponentId>,
+    node_owners: HashMap<NodeId, (ComponentId, NodeId)>,
     generation: u64,
     root_view: Option<Node>,
     message_sink: Rc<RefCell<VecDeque<QueuedMessage>>>,
@@ -1331,6 +1364,7 @@ impl ComponentTree {
                 component: Box::new(root),
                 children: HashMap::new(),
                 view: None,
+                node_ids: HashMap::new(),
                 used_generation: 0,
                 task_scope: root_scope,
                 effects: HashMap::new(),
@@ -1358,8 +1392,11 @@ impl ComponentTree {
     pub fn dispatch(&mut self, event: Event) -> bool {
         let owner = event
             .target()
-            .and_then(|target| self.node_owners.get(&target).copied())
-            .unwrap_or(ComponentId::ROOT);
+            .and_then(|target| self.node_owners.get(&target).copied());
+        let (owner, event) = match owner {
+            Some((owner, local)) => (owner, event.with_local_target(Some(local))),
+            None => (ComponentId::ROOT, event),
+        };
 
         let handled = self.update_component(owner, &event);
 
@@ -1499,6 +1536,7 @@ impl ComponentTree {
                     component_type: std::any::TypeId::of::<C>(),
                     children: HashMap::new(),
                     view: None,
+                    node_ids: HashMap::new(),
                     used_generation: generation,
                     task_scope: TaskScope::new(self.scheduler.clone(), id),
                     effects: HashMap::new(),
@@ -1546,8 +1584,24 @@ impl ComponentTree {
         let task_scope = entry.task_scope.clone();
         self.pending_children.insert(id, entry.children.clone());
         self.pending_effects.insert(id, Vec::new());
-        let node = entry.component.render(self, id, generation, task_scope);
+        let mut node = entry.component.render(self, id, generation, task_scope);
+        let child_node_ids = self
+            .pending_children
+            .get(&id)
+            .into_iter()
+            .flat_map(|children| children.values())
+            .filter_map(|child| self.components.get(child))
+            .filter_map(|child| child.view.as_ref())
+            .flat_map(|view| {
+                let mut ids = Vec::new();
+                view.visit(&mut |node, _, _| ids.push(node.id()));
+                ids
+            })
+            .collect::<HashSet<_>>();
+        let mut node_ids = HashMap::new();
+        scope_component_node_ids(&mut node, id, &child_node_ids, &mut node_ids);
         entry.view = Some(node.clone());
+        entry.node_ids = node_ids;
         entry.children = self.pending_children.remove(&id).unwrap_or_default();
         self.components.insert(id, entry);
 
@@ -1633,28 +1687,15 @@ impl ComponentTree {
 
     fn rebuild_node_owners(&mut self) {
         self.node_owners.clear();
-        self.collect_node_owners(ComponentId::ROOT);
-    }
-
-    fn collect_node_owners(&mut self, id: ComponentId) {
-        let (children, view) = match self.components.get(&id) {
-            Some(entry) => (
-                entry.children.values().copied().collect::<Vec<_>>(),
-                entry.view.clone(),
-            ),
-            None => return,
-        };
-
-        // Children are registered first so a parent's view cannot claim a
-        // descendant that belongs to a more specific component.
-        for child in children {
-            self.collect_node_owners(child);
-        }
-
-        if let Some(view) = view {
-            view.visit(&mut |node, _, _| {
-                self.node_owners.entry(node.id()).or_insert(id);
-            });
+        for (component, entry) in &self.components {
+            for (global, local) in &entry.node_ids {
+                assert!(
+                    self.node_owners
+                        .insert(*global, (*component, *local))
+                        .is_none(),
+                    "duplicate node identity after component composition: {global:?}"
+                );
+            }
         }
     }
 
@@ -1861,13 +1902,18 @@ impl Application {
         };
         let mut windows = HashMap::new();
         windows.insert(primary_window, entry);
-        Self {
+        let mut application = Self {
             windows,
             primary_window,
             next_window_id: 1,
             services,
             theme,
-        }
+        };
+        // A component may request another window from its first render.  The
+        // root tree is rendered while this Application is being constructed,
+        // so drain those requests only after the primary entry is installed.
+        application.apply_queued_window_commands();
+        application
     }
 
     pub fn dispatch(&mut self, event: Event) -> bool {
@@ -1921,6 +1967,10 @@ impl Application {
         if let Some(entry) = self.windows.get_mut(&id) {
             entry.components.render();
         }
+        // Explicit renders have the same deferred-command guarantee as an
+        // event or task transaction.  Without this, a request made during a
+        // first/manual render would wait for an unrelated later event.
+        self.apply_queued_window_commands();
     }
     pub fn components(&self) -> &ComponentTree {
         &self.windows[&self.primary_window].components
@@ -1961,8 +2011,7 @@ impl Application {
         window: Window,
         modal_parent: Option<WindowId>,
     ) -> WindowId {
-        let id = WindowId(self.next_window_id);
-        self.next_window_id = self.next_window_id.wrapping_add(1).max(1);
+        let id = self.allocate_window_id();
         self.windows.insert(
             id,
             WindowEntry {
@@ -1978,6 +2027,10 @@ impl Application {
                 ),
             },
         );
+        // The new root has already rendered and may itself have queued
+        // follow-up requests.  Apply them now so initial rendering is a
+        // complete lifecycle transaction, including nested requests.
+        self.apply_queued_window_commands();
         id
     }
 
@@ -1985,7 +2038,27 @@ impl Application {
         if id == self.primary_window {
             return false;
         }
-        self.windows.remove(&id).is_some()
+        if !self.windows.contains_key(&id) {
+            return false;
+        }
+
+        // A modal child cannot remain alive after its parent disappears: its
+        // native backend would otherwise retain a dangling modal relationship
+        // and the application would report an impossible window topology.
+        let mut pending = vec![id];
+        let mut closing = HashSet::new();
+        while let Some(current) = pending.pop() {
+            if !closing.insert(current) {
+                continue;
+            }
+            pending.extend(self.windows.iter().filter_map(|(child, entry)| {
+                (entry.state.modal_parent == Some(current)).then_some(*child)
+            }));
+        }
+        for window in closing {
+            self.windows.remove(&window);
+        }
+        true
     }
 
     pub fn window_ids(&self) -> Vec<WindowId> {
@@ -2012,6 +2085,40 @@ impl Application {
     }
     pub fn window_for(&self, id: WindowId) -> Option<&Window> {
         self.windows.get(&id).map(|entry| &entry.window)
+    }
+
+    fn allocate_window_id(&mut self) -> WindowId {
+        let start = self.next_window_id;
+        loop {
+            let candidate = WindowId(self.next_window_id);
+            self.next_window_id = self.next_window_id.wrapping_add(1).max(1);
+            if !self.windows.contains_key(&candidate) {
+                return candidate;
+            }
+            assert!(
+                self.next_window_id != start,
+                "all non-primary WindowId values are exhausted"
+            );
+        }
+    }
+
+    fn apply_queued_window_commands(&mut self) {
+        loop {
+            let commands = self
+                .window_ids()
+                .into_iter()
+                .flat_map(|id| {
+                    self.windows
+                        .get_mut(&id)
+                        .map(|entry| entry.components.take_window_commands())
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>();
+            if commands.is_empty() {
+                break;
+            }
+            self.apply_window_commands(commands);
+        }
     }
 }
 
@@ -3458,6 +3565,59 @@ impl Node {
     }
 }
 
+/// Applies a component's stable identity to the nodes it owns. Nodes returned
+/// by managed children have already been scoped, so their complete subtrees
+/// are left intact when their parent is scoped.
+fn scope_component_node_ids(
+    node: &mut Node,
+    component: ComponentId,
+    child_node_ids: &HashSet<NodeId>,
+    node_ids: &mut HashMap<NodeId, NodeId>,
+) {
+    let local = node.id();
+    if child_node_ids.contains(&local) {
+        return;
+    }
+
+    // A node's identity stays the developer's own key: `Component::update`,
+    // `TreeSnapshot::get`, and platform-delivered events all address nodes by
+    // this same `NodeId`, so it must not be rewritten per owning component.
+    // Two different components using the same literal key is still caught
+    // below, exactly as it would be for two nodes within a single view.
+    let global = local;
+    node.set_id(global);
+    assert!(
+        node_ids.insert(global, local).is_none(),
+        "a component cannot use the same node key more than once: {local:?}"
+    );
+
+    match node {
+        Node::Column(column) => {
+            for child in &mut column.children {
+                scope_component_node_ids(child, component, child_node_ids, node_ids);
+            }
+        }
+        Node::Row(row) => {
+            for child in &mut row.children {
+                scope_component_node_ids(child, component, child_node_ids, node_ids);
+            }
+        }
+        Node::Label(_) | Node::Button(_) | Node::TextInput(_) => {}
+    }
+}
+
+impl Node {
+    fn set_id(&mut self, id: NodeId) {
+        match self {
+            Self::Label(node) => node.id = id,
+            Self::Button(node) => node.id = id,
+            Self::TextInput(node) => node.id = id,
+            Self::Column(node) => node.id = id,
+            Self::Row(node) => node.id = id,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeKind {
     Label,
@@ -3678,6 +3838,10 @@ pub struct TreeNode {
     pub column_style: Option<ColumnStyle>,
     pub row_style: Option<RowStyle>,
     pub accessibility: AccessibilityInfo,
+    /// The node's unresolved visual override. This remains available to a
+    /// platform backend so it can resolve live native interaction states
+    /// (such as focus) without losing per-node customization.
+    pub style_override: VisualStyle,
     pub visual_style: VisualStyle,
     pub disabled: bool,
 }
@@ -3701,6 +3865,7 @@ impl TreeNode {
             column_style: node.column_style(),
             row_style: node.row_style(),
             accessibility: node.accessibility().clone(),
+            style_override: node.visual_style().clone(),
             visual_style: node.visual_style().clone(),
             disabled: node.is_disabled(),
         }
@@ -3849,7 +4014,9 @@ impl TreeDiff {
                 || previous_node.column_style != node.column_style
                 || previous_node.row_style != node.row_style
                 || previous_node.accessibility != node.accessibility
+                || previous_node.style_override != node.style_override
                 || previous_node.visual_style != node.visual_style
+                || previous_node.disabled != node.disabled
             {
                 operations.push(TreeOp::Update(node.clone()));
             }
@@ -4459,6 +4626,7 @@ mod tests {
                 accessibility: AccessibilityInfo::new(AccessibilityRole::Label)
                     .name("B")
                     .focusable(false),
+                style_override: VisualStyle::default(),
                 visual_style: VisualStyle::default(),
                 disabled: false,
             })]
@@ -4589,6 +4757,7 @@ mod tests {
                 accessibility: AccessibilityInfo::new(AccessibilityRole::Label)
                     .name("A")
                     .focusable(false),
+                style_override: VisualStyle::default(),
                 visual_style: VisualStyle::default(),
                 disabled: false,
             }))
@@ -4606,6 +4775,7 @@ mod tests {
                 accessibility: AccessibilityInfo::new(AccessibilityRole::Label)
                     .name("C")
                     .focusable(false),
+                style_override: VisualStyle::default(),
                 visual_style: VisualStyle::default(),
                 disabled: false,
             }))
@@ -5337,12 +5507,27 @@ mod tests {
     fn disabled_flag_round_trips_into_tree_snapshot() {
         let root = Node::column(
             "root",
-            [Node::button("save", "Save").disabled(true), label("hint", "Hint")],
+            [
+                Node::button("save", "Save").disabled(true),
+                label("hint", "Hint"),
+            ],
         );
         let snapshot = TreeSnapshot::from_node(&root).unwrap();
 
         assert!(snapshot.get(NodeId::from_key("save")).unwrap().disabled);
         assert!(!snapshot.get(NodeId::from_key("hint")).unwrap().disabled);
+    }
+
+    #[test]
+    fn diff_updates_an_existing_node_when_its_disabled_state_changes() {
+        let enabled = TreeSnapshot::from_node(&Node::button("save", "Save")).unwrap();
+        let disabled =
+            TreeSnapshot::from_node(&Node::button("save", "Save").disabled(true)).unwrap();
+
+        assert!(matches!(
+            TreeDiff::between(&enabled, &disabled).operations.as_slice(),
+            [TreeOp::Update(node)] if node.disabled
+        ));
     }
 
     #[test]
@@ -5361,12 +5546,37 @@ mod tests {
         let snapshot = TreeSnapshot::from_node_with_theme(&root, &theme).unwrap();
 
         assert_eq!(
-            snapshot.get(NodeId::from_key("enabled")).unwrap().visual_style.background,
+            snapshot
+                .get(NodeId::from_key("enabled"))
+                .unwrap()
+                .visual_style
+                .background,
             Some(Color::rgb(10, 10, 10))
         );
         assert_eq!(
-            snapshot.get(NodeId::from_key("disabled")).unwrap().visual_style.background,
+            snapshot
+                .get(NodeId::from_key("disabled"))
+                .unwrap()
+                .visual_style
+                .background,
             Some(Color::rgb(200, 200, 200))
+        );
+    }
+
+    #[test]
+    fn themed_snapshot_retains_node_override_for_live_platform_states() {
+        let override_color = Color::rgb(25, 50, 75);
+        let root =
+            Node::button("save", "Save").with_style(VisualStyle::new().foreground(override_color));
+        let snapshot = TreeSnapshot::from_node_with_theme(&root, &Theme::default()).unwrap();
+
+        assert_eq!(
+            snapshot
+                .get(NodeId::from_key("save"))
+                .unwrap()
+                .style_override
+                .foreground,
+            Some(override_color)
         );
     }
 
@@ -5493,6 +5703,87 @@ mod tests {
     }
 
     #[test]
+    fn initial_and_explicit_renders_apply_deferred_window_requests() {
+        #[derive(Clone, Default)]
+        struct Launcher {
+            open_on_render: bool,
+        }
+        impl Component for Launcher {
+            type Props = bool;
+            type Message = ();
+            fn new(open_on_render: Self::Props) -> Self {
+                Self { open_on_render }
+            }
+            fn props(&self) -> &Self::Props {
+                &self.open_on_render
+            }
+            fn set_props(&mut self, open_on_render: Self::Props) {
+                self.open_on_render = open_on_render;
+            }
+            fn view(&self) -> Node {
+                Node::label("initial-launcher", "Launcher")
+            }
+            fn update(&mut self, _: Event) {}
+            fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+                if self.open_on_render {
+                    self.open_on_render = false;
+                    context.windows().open(
+                        WindowRequestDialog,
+                        Window::new("Initial dialog", Size::new(200, 120)),
+                        Some(WindowId::PRIMARY),
+                    );
+                }
+                self.view()
+            }
+        }
+
+        let mut application = Application::new(
+            Launcher::new(true),
+            Window::new("Primary", Size::new(320, 240)),
+        );
+        assert_eq!(application.window_ids().len(), 2);
+
+        // Opening a component directly also completes its initial render
+        // transaction, rather than waiting for an event in that window.
+        let direct = application.open_window(
+            Launcher::new(true),
+            Window::new("Direct launcher", Size::new(320, 240)),
+            None,
+        );
+        assert!(application.window_ids().len() >= 4);
+        assert!(application.window_state(direct).is_some());
+    }
+
+    #[test]
+    fn closing_a_modal_parent_closes_its_modal_descendants() {
+        let mut application = Application::new(
+            WindowRequestDialog,
+            Window::new("Primary", Size::new(320, 240)),
+        );
+        let parent = application.open_window(
+            WindowRequestDialog,
+            Window::new("Parent", Size::new(200, 160)),
+            None,
+        );
+        let child = application.open_window(
+            WindowRequestDialog,
+            Window::new("Child", Size::new(160, 120)),
+            Some(parent),
+        );
+        let grandchild = application.open_window(
+            WindowRequestDialog,
+            Window::new("Grandchild", Size::new(120, 80)),
+            Some(child),
+        );
+
+        assert!(application.close_window(parent));
+        assert!(application.window_state(parent).is_none());
+        assert!(application.window_state(child).is_none());
+        assert!(application.window_state(grandchild).is_none());
+        assert_eq!(application.window_ids(), vec![WindowId::PRIMARY]);
+    }
+
+    #[test]
     fn component_can_request_closing_a_window_at_runtime() {
         #[derive(Clone)]
         struct Dismissible {
@@ -5534,18 +5825,9 @@ mod tests {
             Window::new("Closer", Size::new(100, 100)),
             None,
         );
-        assert_eq!(application.window_ids().len(), 3);
-
-        // Rendering `closer` already queued the close request during its
-        // initial mount; a no-op dispatch on it drains and applies that
-        // request, matching how a real event delivery would.
-        application.dispatch_to_window(
-            closer,
-            Event::WindowMoved {
-                window: closer,
-                position: Point::new(0, 0),
-            },
-        );
+        // Initial rendering is a complete transaction: the close request is
+        // applied without requiring an unrelated later event in `closer`.
+        assert_eq!(application.window_ids().len(), 2);
 
         let ids = application.window_ids();
         assert!(!ids.contains(&second));

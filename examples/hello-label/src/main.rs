@@ -313,10 +313,7 @@ impl Component for SettingsWindow {
             "settings-root",
             [Node::label_with_layout(
                 "settings-label",
-                format!(
-                    "Opened from the menu (request #{})",
-                    self.opened_at_click
-                ),
+                format!("Opened from the menu (request #{})", self.opened_at_click),
                 LayoutStyle::new().height(SizeMode::Fixed(36)),
             )],
             LayoutStyle::new(),

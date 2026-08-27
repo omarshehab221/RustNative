@@ -121,7 +121,9 @@ fn show_file_dialog(
     request: framework_core::FileDialogRequest,
 ) -> Result<Option<String>, framework_core::ServiceError> {
     use framework_core::FileDialogKind;
-    use windows_sys::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows_sys::Win32::System::Com::{
+        COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize,
+    };
 
     // The common dialogs use COM-backed shell extensions (thumbnails, recent
     // places) internally. Each service call runs on its own dedicated
@@ -152,8 +154,8 @@ fn show_open_or_save(
 ) -> Result<Option<String>, framework_core::ServiceError> {
     use windows_sys::Win32::Foundation::MAX_PATH;
     use windows_sys::Win32::UI::Controls::Dialogs::{
-        GetOpenFileNameW, GetSaveFileNameW, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_HIDEREADONLY,
-        OFN_NOCHANGEDIR, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+        CommDlgExtendedError, GetOpenFileNameW, GetSaveFileNameW, OFN_EXPLORER, OFN_FILEMUSTEXIST,
+        OFN_HIDEREADONLY, OFN_NOCHANGEDIR, OFN_OVERWRITEPROMPT, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
 
     let filter = build_filter_string(&request.filters);
@@ -194,8 +196,15 @@ fn show_open_or_save(
 
     if succeeded == 0 {
         // A zero result with no extended error means the person cancelled
-        // the dialog; that is not a service failure.
-        return Ok(None);
+        // the dialog; a nonzero extended error is an actual native failure.
+        let error = unsafe { CommDlgExtendedError() };
+        return if error == 0 {
+            Ok(None)
+        } else {
+            Err(framework_core::ServiceError::new(format!(
+                "common file dialog failed with error code {error}"
+            )))
+        };
     }
 
     let selected_len = file_buffer.iter().position(|&c| c == 0).unwrap_or(0);
@@ -519,30 +528,30 @@ mod native {
         COLORREF, GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM,
     };
     use windows_sys::Win32::Graphics::Gdi::{
-        CLIP_DEFAULT_PRECIS, COLOR_WINDOW, COLOR_WINDOWTEXT, CreateFontIndirectW,
-        CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH, DEFAULT_QUALITY, DeleteObject,
-        DrawTextW, FF_DONTCARE, FillRect, GetDC, GetSysColor, GetSysColorBrush, HBRUSH, HDC,
-        HFONT, HGDIOBJ, InvalidateRect, LOGFONTW, OUT_DEFAULT_PRECIS, ReleaseDC, SetBkColor,
-        SetBkMode, SetTextColor, TRANSPARENT,
+        CLIP_DEFAULT_PRECIS, COLOR_WINDOW, COLOR_WINDOWTEXT, CreateFontIndirectW, CreateSolidBrush,
+        DEFAULT_CHARSET, DEFAULT_PITCH, DEFAULT_QUALITY, DeleteObject, DrawTextW, FF_DONTCARE,
+        FillRect, GetDC, GetSysColor, GetSysColorBrush, HBRUSH, HDC, HFONT, HGDIOBJ,
+        InvalidateRect, LOGFONTW, OUT_DEFAULT_PRECIS, ReleaseDC, SetBkColor, SetBkMode,
+        SetTextColor, TRANSPARENT,
     };
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::System::SystemServices::{SS_LEFT, SS_NOPREFIX};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        GetFocus, GetKeyState, SetFocus, VK_BACK, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT,
-        VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
+        GetFocus, GetKeyState, SetFocus, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent, VK_BACK,
+        VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, BN_CLICKED, BS_PUSHBUTTON, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW,
-        CW_USEDEFAULT, CreateMenu, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
-        DestroyWindow, DispatchMessageW, EN_CHANGE, ES_AUTOHSCROLL, ES_LEFT, GA_ROOT,
-        GWLP_USERDATA, GetAncestor, GetClientRect, GetCursorPos, GetMessageW, GetParent,
-        GetWindowLongPtrW, GetWindowTextLengthW, GetWindowTextW, HMENU, MF_CHECKED, MF_GRAYED,
-        MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW,
-        SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW, SetMenu, SetParent,
-        SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TranslateMessage, WM_APP,
-        WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC,
-        WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_SETFONT,
-        WM_SIZE, WNDCLASSW, WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+        CW_USEDEFAULT, CreateMenu, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyWindow,
+        DispatchMessageW, EN_CHANGE, ES_AUTOHSCROLL, ES_LEFT, GA_ROOT, GWLP_USERDATA, GetAncestor,
+        GetClientRect, GetCursorPos, GetMessageW, GetParent, GetWindowLongPtrW,
+        GetWindowTextLengthW, GetWindowTextW, HMENU, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR,
+        MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW, SW_SHOW, SWP_NOACTIVATE,
+        SWP_NOZORDER, SendMessageW, SetMenu, SetParent, SetWindowLongPtrW, SetWindowPos,
+        SetWindowTextW, ShowWindow, TranslateMessage, WM_APP, WM_CHAR, WM_CLOSE, WM_COMMAND,
+        WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN,
+        WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE,
+        WM_SETFONT, WM_SIZE, WNDCLASSW, WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
         WS_EX_CONTROLPARENT, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE, WindowFromPoint,
     };
 
@@ -551,6 +560,7 @@ mod native {
     const WINDOW_CLASS_NAME: &str = "NativeRustFrameworkWindow";
     const CONTAINER_CLASS_NAME: &str = "NativeRustFrameworkContainer";
     const WM_FRAMEWORK_SCHEDULE: u32 = WM_APP + 1;
+    const WM_MOUSELEAVE: u32 = 0x02A3;
 
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -715,7 +725,11 @@ mod native {
                 .map(color_ref)
                 .unwrap_or_else(|| unsafe { GetSysColor(COLOR_WINDOW) });
             let background_brush = unsafe { CreateSolidBrush(background) };
-            let font = style.typography.as_ref().map(create_font).unwrap_or(null_mut());
+            let font = style
+                .typography
+                .as_ref()
+                .map(create_font)
+                .unwrap_or(null_mut());
 
             Self {
                 foreground,
@@ -781,6 +795,8 @@ mod native {
         scroll_ranges: HashMap<NodeId, Size>,
         content_sizes: HashMap<NodeId, Size>,
         scroll_offsets: HashMap<NodeId, Point>,
+        control_states: HashMap<NodeId, framework_core::ControlState>,
+        theme: Theme,
         layout_engine: LayoutEngine,
         suppress_text_change: std::collections::HashSet<NodeId>,
     }
@@ -795,6 +811,8 @@ mod native {
                 scroll_ranges: HashMap::new(),
                 content_sizes: HashMap::new(),
                 scroll_offsets: HashMap::new(),
+                control_states: HashMap::new(),
+                theme: Theme::default(),
                 layout_engine: LayoutEngine,
                 suppress_text_change: std::collections::HashSet::new(),
             }
@@ -890,18 +908,29 @@ mod native {
             None
         }
 
-        fn render(&mut self, root: &framework_core::Node, window: HWND, theme: &Theme) -> Result<(), Error> {
-            let next = TreeSnapshot::from_node_with_theme(root, theme).map_err(|error| match error {
-                framework_core::TreeError::DuplicateNodeId(id) => Error::DuplicateNodeId(id.get()),
-            })?;
+        fn render(
+            &mut self,
+            root: &framework_core::Node,
+            window: HWND,
+            theme: &Theme,
+        ) -> Result<(), Error> {
+            let next =
+                TreeSnapshot::from_node_with_theme(root, theme).map_err(|error| match error {
+                    framework_core::TreeError::DuplicateNodeId(id) => {
+                        Error::DuplicateNodeId(id.get())
+                    }
+                })?;
 
             let diff = TreeDiff::between(&self.snapshot, &next);
+            self.theme = theme.clone();
             for operation in &diff.operations {
                 self.apply_operation(operation, window)?;
             }
 
             let layout_invalidated = diff.invalidates_layout();
             self.snapshot = next;
+            self.control_states
+                .retain(|id, _| self.snapshot.contains(*id));
             if layout_invalidated {
                 self.relayout(window);
             }
@@ -1028,7 +1057,16 @@ mod native {
             let hwnd = object.hwnd();
             let content_hwnd = object.content_hwnd();
 
-            let style = ControlStyle::resolve(&node.visual_style);
+            let state = if node.disabled {
+                framework_core::ControlState::Disabled
+            } else {
+                self.control_states
+                    .get(&node.id)
+                    .copied()
+                    .unwrap_or(framework_core::ControlState::Normal)
+            };
+            let style =
+                ControlStyle::resolve(&self.theme.resolve(node.kind, state, &node.style_override));
 
             if !style.font.is_null() {
                 unsafe {
@@ -1040,14 +1078,12 @@ mod native {
             }
 
             match node.kind {
-                NodeKind::Column | NodeKind::Row => {
-                    unsafe {
-                        SetWindowLongPtrW(hwnd, GWLP_USERDATA, style.background as isize);
-                        if let Some(content_hwnd) = content_hwnd {
-                            SetWindowLongPtrW(content_hwnd, GWLP_USERDATA, style.background as isize);
-                        }
+                NodeKind::Column | NodeKind::Row => unsafe {
+                    SetWindowLongPtrW(hwnd, GWLP_USERDATA, style.background as isize);
+                    if let Some(content_hwnd) = content_hwnd {
+                        SetWindowLongPtrW(content_hwnd, GWLP_USERDATA, style.background as isize);
                     }
-                }
+                },
                 NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {}
             }
 
@@ -1057,6 +1093,24 @@ mod native {
             }
 
             self.styles.insert(node.id, style);
+        }
+
+        /// Applies a live state transition without rebuilding the declarative
+        /// component tree. Native focus is transient interaction state, so a
+        /// focus repaint must not cause an application render.
+        fn set_control_state(&mut self, id: NodeId, state: framework_core::ControlState) {
+            let Some(node) = self.snapshot.get(id).cloned() else {
+                return;
+            };
+            if node.disabled {
+                return;
+            }
+            if state == framework_core::ControlState::Normal {
+                self.control_states.remove(&id);
+            } else {
+                self.control_states.insert(id, state);
+            }
+            self.apply_control_style(&node);
         }
 
         fn insert_node(&mut self, node: &TreeNode, window: HWND) -> Result<(), Error> {
@@ -1367,6 +1421,8 @@ mod native {
         error: Option<Error>,
         registry: *mut WindowRegistry,
         menu_commands: HashMap<u16, NodeId>,
+        hovered: Option<NodeId>,
+        pressed: Option<NodeId>,
         destroyed: bool,
     }
 
@@ -1378,7 +1434,8 @@ mod native {
             let Some(tree) = application.view_for(self.window_id) else {
                 return Ok(());
             };
-            self.renderer.render(&tree, self.window, application.theme())
+            self.renderer
+                .render(&tree, self.window, application.theme())
         }
 
         fn relayout(&mut self) {
@@ -1521,6 +1578,8 @@ mod native {
                 error: None,
                 registry: registry_ptr,
                 menu_commands: HashMap::new(),
+                hovered: None,
+                pressed: None,
                 destroyed: false,
             });
 
@@ -1769,13 +1828,66 @@ mod native {
                 runtime.error = Some(error);
                 return;
             }
+            runtime
+                .renderer
+                .set_control_state(previous, interaction_state(runtime, previous));
         }
 
         runtime.focused = next;
         if let Some(current) = next {
             if let Err(error) = runtime.dispatch(Event::FocusGained { target: current }) {
                 runtime.error = Some(error);
+            } else {
+                runtime
+                    .renderer
+                    .set_control_state(current, interaction_state(runtime, current));
             }
+        }
+    }
+
+    fn interaction_state(runtime: &Runtime, id: NodeId) -> framework_core::ControlState {
+        if runtime.pressed == Some(id) {
+            framework_core::ControlState::Pressed
+        } else if runtime.hovered == Some(id) {
+            framework_core::ControlState::Hovered
+        } else if runtime.focused == Some(id) {
+            framework_core::ControlState::Focused
+        } else {
+            framework_core::ControlState::Normal
+        }
+    }
+
+    fn refresh_interaction_style(runtime: &mut Runtime, id: NodeId) {
+        runtime
+            .renderer
+            .set_control_state(id, interaction_state(runtime, id));
+    }
+
+    fn set_hovered(runtime: &mut Runtime, next: Option<NodeId>) {
+        let previous = runtime.hovered;
+        if previous == next {
+            return;
+        }
+        runtime.hovered = next;
+        if let Some(previous) = previous {
+            refresh_interaction_style(runtime, previous);
+        }
+        if let Some(current) = next {
+            refresh_interaction_style(runtime, current);
+        }
+    }
+
+    fn set_pressed(runtime: &mut Runtime, next: Option<NodeId>) {
+        let previous = runtime.pressed;
+        if previous == next {
+            return;
+        }
+        runtime.pressed = next;
+        if let Some(previous) = previous {
+            refresh_interaction_style(runtime, previous);
+        }
+        if let Some(current) = next {
+            refresh_interaction_style(runtime, current);
         }
     }
 
@@ -1806,6 +1918,30 @@ mod native {
             let runtime_ptr = unsafe { GetWindowLongPtrW(root, GWLP_USERDATA) } as *mut Runtime;
             if !runtime_ptr.is_null() {
                 let runtime = unsafe { &mut *runtime_ptr };
+                match message.message {
+                    WM_MOUSEMOVE => {
+                        let hovered = runtime.renderer.registry.id_for_hwnd(message.hwnd);
+                        set_hovered(runtime, hovered);
+                        if hovered.is_some() {
+                            let mut tracking = TRACKMOUSEEVENT {
+                                cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                                dwFlags: TME_LEAVE,
+                                hwndTrack: message.hwnd,
+                                dwHoverTime: 0,
+                            };
+                            unsafe {
+                                TrackMouseEvent(&mut tracking);
+                            }
+                        }
+                    }
+                    WM_MOUSELEAVE => set_hovered(runtime, None),
+                    WM_LBUTTONDOWN => {
+                        let pressed = runtime.renderer.registry.id_for_hwnd(message.hwnd);
+                        set_pressed(runtime, pressed);
+                    }
+                    WM_LBUTTONUP => set_pressed(runtime, None),
+                    _ => {}
+                }
                 if message.message == WM_MOUSEWHEEL {
                     let mut point = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
                     unsafe {

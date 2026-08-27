@@ -468,14 +468,10 @@ Implemented:
 - Windows realization: native fonts (`CreateFontIndirectW` + `WM_SETFONT`)
   and colors (`WM_CTLCOLORSTATIC`/`WM_CTLCOLOREDIT`/`WM_CTLCOLORBTN` for
   controls, `WM_ERASEBKGND` for containers), with GDI resources owned and
-  freed per node.
-
-Hover and pressed are resolvable theme states but are not yet realized as
-live repaints on Windows: that needs a mouse-tracking state machine
-(`TrackMouseEvent`/`WM_MOUSELEAVE`) not yet built. Normal, Disabled, and
-Focused states use resolved styling; Focused re-resolution on native focus
-change is likewise still open. These are noted here as scoped-out remainder,
-not silently missing behavior.
+  freed per node;
+- live Windows hover, pressed, and focus state repaints, using
+  `TrackMouseEvent`/`WM_MOUSELEAVE` plus native focus synchronization, without
+  rebuilding the declarative component tree.
 
 ## Milestone 22 — Platform capability abstraction
 
