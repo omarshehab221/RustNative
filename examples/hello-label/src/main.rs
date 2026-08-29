@@ -196,6 +196,10 @@ impl Component for CounterPanel {
             | Event::WindowCloseRequested { .. }
             | Event::WindowStateChanged { .. }
             | Event::MenuAction { .. } => {}
+            // `Event` is `#[non_exhaustive]` (framework-core standards audit
+            // P2.4): a future new variant lands here by default rather than
+            // failing to build every downstream crate.
+            _ => {}
         }
     }
 

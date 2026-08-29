@@ -10,11 +10,19 @@ members = [
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
+description = "A Rust-first, native-control-oriented cross-platform application framework"
+repository = "https://github.com/<org>/RustNative"
+homepage = "https://github.com/<org>/RustNative"
+keywords = ["gui", "windows", "native", "framework", "ui"]
+categories = ["gui", "os::windows-apis"]
 
 [workspace.dependencies]
 framework-core = { path = "crates/framework-core" }
 framework-windows = { path = "crates/framework-windows" }
-windows-sys = { version = "0.61.2", features = [
+tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
+parking_lot = "0.12"
+async-trait = "0.1"
+windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_System_LibraryLoader",
@@ -28,3 +36,12 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_Shell_Common",
     "Win32_UI_Controls_Dialogs",
 ] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+too_many_arguments = "warn"
+missing_panics_doc = "warn"
+missing_errors_doc = "warn"

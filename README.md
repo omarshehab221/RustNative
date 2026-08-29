@@ -54,24 +54,41 @@ platform-specific APIs remain behind explicit service and native-extension bound
 ## Crate boundaries
 
 ```text
-native-rust-framework/
+RustNative/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── Cargo.toml
+├── Cargo.lock
+├── .gitignore
+├── .gitattributes
+├── rust-toolchain.toml
+├── rustfmt.toml
+├── clippy.toml
+├── deny.toml
+├── LICENSE-APACHE
+├── LICENSE-MIT
+├── SECURITY.md
+├── CONTRIBUTING.md
 ├── PLAN.md
 ├── BUILD_STATUS.md
 ├── README.md
 │
 ├── crates/
 │   ├── framework-core/
-│   │   └── src/lib.rs
+│   │   ├── Cargo.toml
+│   │   ├── src/lib.rs
+│   │   └── tests/
+│   │       └── component_lifecycle.rs
 │   │
 │   └── framework-windows/
+│       ├── Cargo.toml
 │       └── src/lib.rs
 │
-├── examples/
-│   └── hello-label/
-│       └── src/main.rs
-│
-└── windows.txt
+└── examples/
+    └── hello-label/
+        ├── Cargo.toml
+        └── src/main.rs
 ```
 
 ### `framework-core`
@@ -301,6 +318,7 @@ On Windows, run:
 cargo fmt --all
 cargo check --workspace
 cargo test --workspace
+cargo audit
 cargo run -p hello-label
 ```
 

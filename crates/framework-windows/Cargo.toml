@@ -4,9 +4,19 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
 framework-core.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

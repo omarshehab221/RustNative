@@ -6,7 +6,9 @@
 
 use std::fmt;
 
-use framework_core::{Application, Capability, Platform, PlatformCapabilities};
+#[cfg(windows)]
+use framework_core::Capability;
+use framework_core::{Application, Platform, PlatformCapabilities};
 
 /// Native Win32 clipboard service. Applications opt into it by injecting an
 /// `Arc<WindowsClipboard>` into `framework_core::Services`.
@@ -20,14 +22,38 @@ pub struct WindowsClipboard;
 #[derive(Debug, Default)]
 pub struct WindowsSystem;
 
+/// Runs `f` on tokio's dedicated blocking-task pool rather than a scheduler
+/// worker thread. Every `f` here wraps a synchronous Win32 call (there is no
+/// async I/O on this side of the FFI boundary at all) — running it inline in
+/// an `async fn` body would still block whichever worker thread executes it
+/// to completion, and with only a couple of shared workers backing the whole
+/// framework (see `framework_core`'s scheduler), one open file-picker or
+/// blocked `ShellExecuteW` call could stall every other component's pending
+/// task in the process. `spawn_blocking` moves the call to a pool sized for
+/// exactly this.
 #[cfg(windows)]
+async fn run_blocking<T, F>(f: F) -> Result<T, framework_core::ServiceError>
+where
+    F: FnOnce() -> Result<T, framework_core::ServiceError> + Send + 'static,
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .unwrap_or_else(|_| Err(framework_core::ServiceError::new("blocking task panicked")))
+}
+
+#[cfg(windows)]
+#[async_trait::async_trait]
 impl framework_core::SystemService for WindowsSystem {
-    fn open_url(&self, url: String) -> framework_core::ServiceFuture<()> {
-        Box::pin(async move {
+    async fn open_url(&self, url: String) -> Result<(), framework_core::ServiceError> {
+        run_blocking(move || {
             use windows_sys::Win32::UI::Shell::ShellExecuteW;
             use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
             let file = wide_string(&url);
+            // SAFETY: all pointer arguments are either null (hwnd, verb,
+            // directory) or point at `file`, a NUL-terminated UTF-16 buffer
+            // we own for the duration of this synchronous call.
             let result = unsafe {
                 ShellExecuteW(
                     std::ptr::null_mut(),
@@ -45,10 +71,15 @@ impl framework_core::SystemService for WindowsSystem {
             }
             Ok(())
         })
+        .await
     }
 
-    fn notify(&self, title: String, body: String) -> framework_core::ServiceFuture<()> {
-        Box::pin(async move {
+    async fn notify(
+        &self,
+        title: String,
+        body: String,
+    ) -> Result<(), framework_core::ServiceError> {
+        run_blocking(move || {
             use windows_sys::Win32::UI::Shell::{
                 NIF_ICON, NIF_INFO, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
                 Shell_NotifyIconW,
@@ -59,8 +90,15 @@ impl framework_core::SystemService for WindowsSystem {
             // routes the balloon through the icon it identifies by
             // (hWnd, uID), and tears it back down immediately after so no
             // permanent tray icon is left behind.
+            // SAFETY: a null hwnd and a standard system icon ID are a
+            // documented-valid `LoadIconW` call; the returned handle is a
+            // static system resource that does not need `DestroyIcon`.
             let icon = unsafe { LoadIconW(std::ptr::null_mut(), IDI_INFORMATION) };
 
+            // SAFETY: `zeroed()` is a valid initial bit pattern for
+            // `NOTIFYICONDATAW`, a plain-old-data Win32 struct with no
+            // internal invariants beyond `cbSize` being set before use,
+            // which happens on the next line.
             let mut data: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
             data.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
             data.hWnd = std::ptr::null_mut();
@@ -72,16 +110,24 @@ impl framework_core::SystemService for WindowsSystem {
             copy_into_wide_buffer(&body, &mut data.szInfo);
             copy_into_wide_buffer(&title, &mut data.szTip);
 
+            // SAFETY: `data` is a fully initialized, correctly sized
+            // `NOTIFYICONDATAW` owned on this stack frame for the duration
+            // of both calls below.
             if unsafe { Shell_NotifyIconW(NIM_ADD, &data) } == 0 {
                 return Err(framework_core::ServiceError::new(
                     "Shell_NotifyIconW(NIM_ADD) failed to post the notification",
                 ));
             }
+            // SAFETY: same `data`, still valid; NIM_DELETE only needs the
+            // (hWnd, uID) pair populated above to identify the icon to tear
+            // down, and best-effort cleanup here intentionally ignores a
+            // failure return since there is nothing more to do.
             unsafe {
                 Shell_NotifyIconW(NIM_DELETE, &data);
             }
             Ok(())
         })
+        .await
     }
 }
 
@@ -107,12 +153,16 @@ fn copy_into_wide_buffer(text: &str, buffer: &mut [u16]) {
 pub struct WindowsFileDialogs;
 
 #[cfg(windows)]
+#[async_trait::async_trait]
 impl framework_core::FileDialogService for WindowsFileDialogs {
-    fn show(
+    async fn show(
         &self,
         request: framework_core::FileDialogRequest,
-    ) -> framework_core::ServiceFuture<Option<String>> {
-        Box::pin(async move { show_file_dialog(request) })
+    ) -> Result<Option<String>, framework_core::ServiceError> {
+        // A modal file picker can stay open for as long as the user takes to
+        // decide; it must never occupy one of the scheduler's few shared
+        // worker threads for that whole time (see `run_blocking`).
+        run_blocking(move || show_file_dialog(request)).await
     }
 }
 
@@ -130,6 +180,11 @@ fn show_file_dialog(
     // framework worker thread (see `Scheduler::spawn`), so initializing a
     // fresh apartment here is both safe and necessary; `CoUninitialize` pairs
     // with it before this call returns.
+    // SAFETY: `CoInitializeEx` takes no pointer arguments that outlive the
+    // call (`pvReserved` is documented reserved-null) and is valid to call
+    // from any thread that has not already initialized COM with an
+    // incompatible concurrency model, which holds here since this is a
+    // freshly spawned, dedicated blocking-task thread (see `run_blocking`).
     let com_initialized =
         unsafe { CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32) } >= 0;
 
@@ -140,6 +195,9 @@ fn show_file_dialog(
     };
 
     if com_initialized {
+        // SAFETY: `CoUninitialize` pairs with the successful `CoInitializeEx`
+        // above (only reached when `com_initialized` is true), is called
+        // from the same thread that initialized COM, and takes no arguments.
         unsafe {
             CoUninitialize();
         }
@@ -186,6 +244,15 @@ fn show_open_or_save(
         ..Default::default()
     };
 
+    // SAFETY: `config` is a fully initialized `OPENFILENAMEW` (the `..Default::default()`
+    // spread zeroes every field this call site doesn't set explicitly, which
+    // is a valid initial state for this struct); `lpstrFile` points at
+    // `file_buffer`, sized `nMaxFile` wide chars, matching what the dialog is
+    // told it may write into; `lpstrFilter`/`lpstrTitle` are either null or
+    // point at NUL-terminated wide buffers (`filter`/`title`) that outlive
+    // this call. Both `GetOpenFileNameW` and `GetSaveFileNameW` only read
+    // `config` and write within the bounds it describes for the duration of
+    // this synchronous call.
     let succeeded = unsafe {
         if is_open {
             GetOpenFileNameW(&mut config)
@@ -197,6 +264,9 @@ fn show_open_or_save(
     if succeeded == 0 {
         // A zero result with no extended error means the person cancelled
         // the dialog; a nonzero extended error is an actual native failure.
+        // SAFETY: `CommDlgExtendedError` takes no arguments and is documented
+        // safe to call immediately after a common-dialog function reports
+        // failure, from the same thread.
         let error = unsafe { CommDlgExtendedError() };
         return if error == 0 {
             Ok(None)
@@ -234,6 +304,12 @@ fn show_folder_picker(
         ..Default::default()
     };
 
+    // SAFETY: `info` is a fully initialized `BROWSEINFOW` (the
+    // `..Default::default()` spread zeroes every unset field, a valid
+    // initial state here); `pszDisplayName` points at `display_name`, sized
+    // `MAX_PATH` wide chars as the API requires; `lpszTitle` is either null
+    // or points at a NUL-terminated wide buffer (`title`) that outlives this
+    // call.
     let item_list = unsafe { SHBrowseForFolderW(&info) };
     if item_list.is_null() {
         // The person cancelled the picker.
@@ -241,7 +317,14 @@ fn show_folder_picker(
     }
 
     let mut path = vec![0u16; MAX_PATH as usize];
+    // SAFETY: `item_list` was just checked non-null, so it's the valid
+    // `PIDLIST_ABSOLUTE` `SHBrowseForFolderW` returned above; `path` is a
+    // `MAX_PATH`-wide-char buffer, the size this API's documented contract
+    // requires the caller to provide.
     let resolved = unsafe { SHGetPathFromIDListW(item_list, path.as_mut_ptr()) };
+    // SAFETY: `item_list` was allocated by the shell (via `CoTaskMemAlloc`,
+    // per `SHBrowseForFolderW`'s documented contract) and is freed exactly
+    // once here, after its last use above.
     unsafe {
         CoTaskMemFree(item_list as *const std::ffi::c_void);
     }
@@ -294,32 +377,45 @@ unsafe extern "system" {
 }
 
 #[cfg(windows)]
+#[async_trait::async_trait]
 impl framework_core::ClipboardService for WindowsClipboard {
-    fn read_text(&self) -> framework_core::ServiceFuture<Option<String>> {
-        Box::pin(async move {
+    async fn read_text(&self) -> Result<Option<String>, framework_core::ServiceError> {
+        run_blocking(move || {
             use windows_sys::Win32::System::DataExchange::{
                 CloseClipboard, GetClipboardData, OpenClipboard,
             };
             use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
 
             const CF_UNICODETEXT: u32 = 13;
-            // The clipboard API permits a null owner for non-window-bound reads.
+            // SAFETY: a null owner window is a documented-valid argument to
+            // `OpenClipboard` for reads not tied to a specific window.
             if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
                 return Err(framework_core::ServiceError::new("OpenClipboard failed"));
             }
             struct ClipboardGuard;
             impl Drop for ClipboardGuard {
                 fn drop(&mut self) {
+                    // SAFETY: this guard is only ever constructed
+                    // immediately after `OpenClipboard` above succeeded on
+                    // this same thread, and is not `Clone`, so exactly one
+                    // matching `CloseClipboard` runs per successful open.
                     unsafe {
                         CloseClipboard();
                     }
                 }
             }
             let _guard = ClipboardGuard;
+            // SAFETY: `CF_UNICODETEXT` is a standard predefined clipboard
+            // format; `GetClipboardData` may validly return null (checked
+            // below) when no data of that format is present.
             let handle = unsafe { GetClipboardData(CF_UNICODETEXT) };
             if handle.is_null() {
                 return Ok(None);
             }
+            // SAFETY: `handle` is non-null and was just returned by
+            // `GetClipboardData` while the clipboard is open on this
+            // thread; `GlobalLock` on a valid `HGLOBAL` either returns a
+            // valid pointer or null, which is checked immediately below.
             let value = unsafe { GlobalLock(handle) } as *const u16;
             if value.is_null() {
                 return Err(framework_core::ServiceError::new(
@@ -327,20 +423,30 @@ impl framework_core::ClipboardService for WindowsClipboard {
                 ));
             }
             let mut length = 0usize;
+            // SAFETY: `CF_UNICODETEXT` data is contractually a
+            // NUL-terminated UTF-16 buffer; `value` was just validated
+            // non-null and remains locked (and therefore stable) for the
+            // duration of this loop.
             while unsafe { *value.add(length) } != 0 {
                 length += 1;
             }
+            // SAFETY: `value` points at `length` contiguous, initialized
+            // `u16`s (just walked above) inside memory still locked by the
+            // `GlobalLock` call above.
             let text =
                 String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(value, length) });
+            // SAFETY: `handle` is the same still-open handle locked above;
+            // this pairs that lock exactly once.
             unsafe {
                 GlobalUnlock(handle);
             }
             Ok(Some(text))
         })
+        .await
     }
 
-    fn write_text(&self, text: String) -> framework_core::ServiceFuture<()> {
-        Box::pin(async move {
+    async fn write_text(&self, text: String) -> Result<(), framework_core::ServiceError> {
+        run_blocking(move || {
             use windows_sys::Win32::System::DataExchange::{
                 CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
             };
@@ -351,21 +457,32 @@ impl framework_core::ClipboardService for WindowsClipboard {
             const CF_UNICODETEXT: u32 = 13;
             let mut utf16 = text.encode_utf16().collect::<Vec<_>>();
             utf16.push(0);
+            // SAFETY: a null owner window is a documented-valid argument to
+            // `OpenClipboard` for writes not tied to a specific window.
             if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
                 return Err(framework_core::ServiceError::new("OpenClipboard failed"));
             }
             struct ClipboardGuard;
             impl Drop for ClipboardGuard {
                 fn drop(&mut self) {
+                    // SAFETY: this guard is only constructed immediately
+                    // after `OpenClipboard` above succeeded on this same
+                    // thread, and is not `Clone`, so exactly one matching
+                    // `CloseClipboard` runs per successful open.
                     unsafe {
                         CloseClipboard();
                     }
                 }
             }
             let _guard = ClipboardGuard;
+            // SAFETY: the clipboard is open on this thread (checked above);
+            // `EmptyClipboard` takes no pointer arguments.
             if unsafe { EmptyClipboard() } == 0 {
                 return Err(framework_core::ServiceError::new("EmptyClipboard failed"));
             }
+            // SAFETY: `GMEM_MOVEABLE` with a nonzero byte count is a
+            // documented-valid `GlobalAlloc` call; a null return (checked
+            // below) is the documented failure signal.
             let memory =
                 unsafe { GlobalAlloc(GMEM_MOVEABLE, utf16.len() * std::mem::size_of::<u16>()) };
             if memory.is_null() {
@@ -373,8 +490,14 @@ impl framework_core::ClipboardService for WindowsClipboard {
                     "GlobalAlloc clipboard data failed",
                 ));
             }
+            // SAFETY: `memory` was just returned non-null by `GlobalAlloc`
+            // above and is still owned by this function (not yet handed to
+            // `SetClipboardData`).
             let destination = unsafe { GlobalLock(memory) } as *mut u16;
             if destination.is_null() {
+                // SAFETY: `memory` is the same handle allocated above and
+                // has not been freed or transferred yet, so freeing it here
+                // on the lock-failure path is the correct, matching release.
                 unsafe {
                     GlobalFree(memory);
                 }
@@ -382,18 +505,32 @@ impl framework_core::ClipboardService for WindowsClipboard {
                     "GlobalLock clipboard data failed",
                 ));
             }
+            // SAFETY: `destination` is a non-null pointer to `utf16.len()`
+            // `u16`s of freshly allocated, locked memory (validated above);
+            // `utf16` is a distinct source allocation, so the ranges cannot
+            // overlap. `GlobalUnlock` pairs the `GlobalLock` immediately
+            // above on the same still-valid `memory` handle.
             unsafe {
                 std::ptr::copy_nonoverlapping(utf16.as_ptr(), destination, utf16.len());
                 GlobalUnlock(memory);
             }
+            // SAFETY: `memory` is a valid `GMEM_MOVEABLE` handle populated
+            // with `CF_UNICODETEXT`-format data above.
             if unsafe { SetClipboardData(CF_UNICODETEXT, memory) }.is_null() {
+                // SAFETY: `SetClipboardData` failed, so ownership of
+                // `memory` was never transferred to the system clipboard
+                // (per its documented contract) and this function must free
+                // it itself, exactly as on every other error path above.
                 unsafe {
                     GlobalFree(memory);
                 }
                 return Err(framework_core::ServiceError::new("SetClipboardData failed"));
             }
+            // On success, `SetClipboardData` has taken ownership of
+            // `memory`; the system frees it, and it must NOT be freed here.
             Ok(())
         })
+        .await
     }
 }
 
@@ -406,6 +543,14 @@ pub enum Error {
     },
     DuplicateNodeId(u64),
     UnsupportedHost,
+    /// A `Component` implementation panicked while running inside a Win32
+    /// `WNDPROC` callback. The panic was caught at the FFI boundary (see
+    /// `native::wndproc_boundary`) before it could unwind into Win32's own
+    /// call frames, which is undefined behavior on stable Rust, and the
+    /// message loop was asked to exit cleanly instead.
+    ComponentPanicked {
+        message: String,
+    },
 }
 
 #[cfg(windows)]
@@ -413,6 +558,11 @@ impl Error {
     fn windows_api(operation: &'static str) -> Self {
         Self::WindowsApi {
             operation,
+            // SAFETY: `GetLastError` takes no arguments and reads only
+            // per-thread state; it is always safe to call, though callers of
+            // `Self::windows_api` are relied on to call it immediately after
+            // the failing API on the same thread, before any other call
+            // overwrites the thread-local error code.
             code: unsafe { windows_sys::Win32::Foundation::GetLastError() },
         }
     }
@@ -430,6 +580,12 @@ impl fmt::Display for Error {
             }
             Self::DuplicateNodeId(id) => write!(f, "duplicate UI node id: {id}"),
             Self::UnsupportedHost => f.write_str("framework-windows is only runnable on Windows"),
+            Self::ComponentPanicked { message } => {
+                write!(
+                    f,
+                    "a component panicked inside the native message loop: {message}"
+                )
+            }
         }
     }
 }
@@ -487,11 +643,10 @@ impl Platform for WindowsPlatform {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
 
-    #[cfg(windows)]
     #[test]
     fn capabilities_only_advertise_realized_backend_features() {
         let capabilities = WindowsPlatform::new().capabilities();
@@ -654,6 +809,9 @@ mod native {
                 );
             }
 
+            // SAFETY: `self.window` is a live HWND owned by this measurer for
+            // its whole lifetime; a null return (checked below) is
+            // `GetDC`'s documented failure signal.
             let hdc = unsafe { GetDC(self.window) };
             if hdc.is_null() {
                 return Size::new(1, 32);
@@ -682,7 +840,16 @@ mod native {
                     0
                 };
 
+            // SAFETY: `hdc` was just validated non-null and is still owned by
+            // this call (not yet released); `text_wide` is a NUL-terminated
+            // wide buffer, matching the `-1`-length-means-NUL-terminated
+            // contract; `rect` is a valid, exclusively borrowed `RECT` for
+            // `DrawTextW` to write the calculated bounds into with
+            // `DT_CALCRECT`.
             let measured = unsafe { DrawTextW(hdc, text_wide.as_ptr(), -1, &mut rect, flags) };
+            // SAFETY: `hdc` was obtained from `GetDC(self.window)` above and
+            // is released here exactly once, pairing that call as its
+            // documented contract requires.
             unsafe { ReleaseDC(self.window, hdc) };
 
             if measured == 0 {
@@ -716,14 +883,22 @@ mod native {
         /// to the corresponding system color so a control is never left
         /// unpainted.
         fn resolve(style: &VisualStyle) -> Self {
+            // SAFETY: `GetSysColor` takes a documented system-color index
+            // constant and no pointer arguments; it cannot fail (an
+            // unrecognized index simply returns black).
             let foreground = style
                 .foreground
                 .map(color_ref)
                 .unwrap_or_else(|| unsafe { GetSysColor(COLOR_WINDOWTEXT) });
+            // SAFETY: same as above.
             let background = style
                 .background
                 .map(color_ref)
                 .unwrap_or_else(|| unsafe { GetSysColor(COLOR_WINDOW) });
+            // SAFETY: `CreateSolidBrush` takes a plain `COLORREF` value and
+            // no pointer arguments, so the call itself cannot be unsound; a
+            // null return (GDI-handle-exhaustion) is a valid `HBRUSH` value
+            // that `Drop` below already checks for before freeing.
             let background_brush = unsafe { CreateSolidBrush(background) };
             let font = style
                 .typography
@@ -742,6 +917,10 @@ mod native {
 
     impl Drop for ControlStyle {
         fn drop(&mut self) {
+            // SAFETY: `background_brush`/`font` are either null (checked
+            // before use, matching `DeleteObject`'s documented no-op on
+            // null) or GDI handles this `ControlStyle` exclusively owns and
+            // has not freed before, since `Drop::drop` runs at most once.
             unsafe {
                 if !self.background_brush.is_null() {
                     DeleteObject(self.background_brush as HGDIOBJ);
@@ -783,6 +962,11 @@ mod native {
             lfFaceName: face_name,
         };
 
+        // SAFETY: `logfont` is a fully initialized `LOGFONTW`, exclusively
+        // borrowed for the duration of this call; `lfFaceName` is a
+        // fixed-size array already null-terminated by construction
+        // (`face_name` starts zeroed and only `encoded.len()` of its 32
+        // slots, at most 31, are overwritten above).
         unsafe { CreateFontIndirectW(&logfont) }
     }
 
@@ -875,6 +1059,11 @@ mod native {
             // Scrolling is a transient viewport transform. Do not rerun the
             // application component, tree reconciliation, or layout engine.
             // The content host alone moves inside the stable viewport.
+            // SAFETY: `content` is a live HWND owned by this node's registry
+            // entry (matched above); a null `hWndInsertAfter` combined with
+            // `SWP_NOZORDER` is the documented way to leave z-order
+            // untouched, so no window-handle argument beyond `*content`
+            // itself is dereferenced by this call.
             unsafe {
                 SetWindowPos(
                     *content,
@@ -903,6 +1092,11 @@ mod native {
                         }
                     }
                 }
+                // SAFETY: `current` was just checked non-null and is a live
+                // HWND (either the caller's starting handle or a value
+                // `GetParent` itself previously returned); a null return
+                // (checked at the top of the loop) is the documented
+                // "no parent" signal.
                 current = unsafe { GetParent(current) };
             }
             None
@@ -939,6 +1133,9 @@ mod native {
 
         fn relayout(&mut self, window: HWND) {
             let mut client = RECT::default();
+            // SAFETY: `window` is a live HWND owned by this renderer's
+            // window for the duration of `relayout`; `client` is a valid,
+            // exclusively borrowed `RECT` for `GetClientRect` to write into.
             unsafe {
                 GetClientRect(window, &mut client);
             }
@@ -1026,6 +1223,10 @@ mod native {
             // here and let the later UI Automation provider map custom semantics.
             if node.accessibility.role == AccessibilityRole::Button && node.accessibility.focusable
             {
+                // SAFETY: `object.hwnd()` is a live HWND owned by this
+                // renderer's registry; `GWL_STYLE` is a documented,
+                // always-valid index for both `GetWindowLongPtrW` and
+                // `SetWindowLongPtrW` on any window.
                 unsafe {
                     SetWindowLongPtrW(
                         object.hwnd(),
@@ -1069,6 +1270,13 @@ mod native {
                 ControlStyle::resolve(&self.theme.resolve(node.kind, state, &node.style_override));
 
             if !style.font.is_null() {
+                // SAFETY: `hwnd`/`content_hwnd` are live HWNDs owned by this
+                // renderer's registry; `style.font` was just checked
+                // non-null and is a valid `HFONT` kept alive in `self.styles`
+                // for at least as long as any control can still reference it
+                // (until the next `apply_control_style` or node removal
+                // replaces/frees it); `WM_SETFONT`'s `lParam` of `1`
+                // requests an immediate redraw, a documented valid value.
                 unsafe {
                     SendMessageW(hwnd, WM_SETFONT, style.font as WPARAM, 1);
                     if let Some(content_hwnd) = content_hwnd {
@@ -1078,6 +1286,13 @@ mod native {
             }
 
             match node.kind {
+                // SAFETY: `hwnd`/`content_hwnd` are live HWNDs owned by this
+                // renderer's registry; `GWLP_USERDATA` is a documented,
+                // always-valid index, and this container-only slot is
+                // reserved for the resolved background `COLORREF` (read back
+                // by the `WM_ERASEBKGND` handler in `container_proc`), never
+                // aliased with the `Runtime` pointer stored there for the
+                // top-level and other windows.
                 NodeKind::Column | NodeKind::Row => unsafe {
                     SetWindowLongPtrW(hwnd, GWLP_USERDATA, style.background as isize);
                     if let Some(content_hwnd) = content_hwnd {
@@ -1087,6 +1302,9 @@ mod native {
                 NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {}
             }
 
+            // SAFETY: `hwnd` is a live HWND owned by this renderer's
+            // registry; a null `lpRect` is `InvalidateRect`'s documented way
+            // to invalidate the entire client area.
             unsafe {
                 EnableWindow(hwnd, if node.disabled { 0 } else { 1 });
                 InvalidateRect(hwnd, null(), 1);
@@ -1156,6 +1374,10 @@ mod native {
                 NodeKind::Label | NodeKind::Button => {
                     if let Some(object) = self.registry.get(node.id) {
                         let text = wide(node.text.as_deref().unwrap_or_default());
+                        // SAFETY: `object.hwnd()` is a live HWND owned by
+                        // this renderer's registry; `text` is a
+                        // NUL-terminated wide buffer kept alive for the
+                        // duration of this synchronous call.
                         unsafe {
                             SetWindowTextW(object.hwnd(), text.as_ptr());
                         }
@@ -1170,6 +1392,10 @@ mod native {
                         if current != value {
                             self.suppress_text_change.insert(node.id);
                             let text = wide(value);
+                            // SAFETY: `hwnd` is a live HWND owned by this
+                            // renderer's registry; `text` is a
+                            // NUL-terminated wide buffer kept alive for the
+                            // duration of this synchronous call.
                             let succeeded = unsafe { SetWindowTextW(hwnd, text.as_ptr()) } != 0;
                             if !succeeded {
                                 self.suppress_text_change.remove(&node.id);
@@ -1195,6 +1421,10 @@ mod native {
             // parent. Scrolling is deliberately NOT part of those rectangles.
             // Instead, a scrollable container owns a viewport and a content host;
             // only the content host is translated by the scroll offset.
+            // SAFETY: `object.hwnd()` is a live HWND owned by this
+            // renderer's registry; a null `hWndInsertAfter` with
+            // `SWP_NOZORDER` leaves z-order untouched, per its documented
+            // contract.
             unsafe {
                 SetWindowPos(
                     object.hwnd(),
@@ -1222,6 +1452,10 @@ mod native {
                     .max(rect.height.max(0) as u32)
                     .min(i32::MAX as u32) as i32;
 
+                // SAFETY: `content` is a live HWND owned by this node's
+                // registry entry; a null `hWndInsertAfter` with
+                // `SWP_NOZORDER` leaves z-order untouched, per its
+                // documented contract.
                 unsafe {
                     SetWindowPos(
                         content,
@@ -1238,6 +1472,14 @@ mod native {
 
         fn create_container(&mut self, node: &TreeNode, parent: HWND) -> Result<(), Error> {
             let class = wide(CONTAINER_CLASS_NAME);
+            // SAFETY: `class` is a NUL-terminated wide buffer naming the
+            // window class `register_window_classes` registers before any
+            // window is created; `parent` is a live HWND owned by the
+            // renderer (or the top-level `window` passed down from
+            // `render`); a null `lpParam` is a documented valid value the
+            // resulting `WM_NCCREATE`/`WM_CREATE` handlers here do not read;
+            // a null return (checked below) is `CreateWindowExW`'s
+            // documented failure signal.
             let viewport = unsafe {
                 CreateWindowExW(
                     WS_EX_CONTROLPARENT,
@@ -1259,6 +1501,9 @@ mod native {
                 return Err(Error::windows_api("CreateWindowExW(CONTAINER_VIEWPORT)"));
             }
 
+            // SAFETY: same reasoning as the `viewport` creation above;
+            // `viewport` was just checked non-null and is the live parent
+            // HWND for this child window.
             let content = unsafe {
                 CreateWindowExW(
                     0,
@@ -1277,6 +1522,9 @@ mod native {
             };
 
             if content.is_null() {
+                // SAFETY: `viewport` was just created above and has not yet
+                // been handed to the registry, so this function is still its
+                // sole owner and must tear it down on this failure path.
                 unsafe {
                     DestroyWindow(viewport);
                 }
@@ -1287,6 +1535,10 @@ mod native {
                 .registry
                 .insert(node.id, NativeObject::Container { viewport, content })
             {
+                // SAFETY: `content` and `viewport` were just created above
+                // and have not yet been handed to the registry (the
+                // `insert` above failed), so this function is still their
+                // sole owner and must tear both down on this failure path.
                 unsafe {
                     DestroyWindow(content);
                     DestroyWindow(viewport);
@@ -1300,6 +1552,13 @@ mod native {
         fn create_label(&mut self, node: &TreeNode, parent: HWND) -> Result<(), Error> {
             let text = wide(node.text.as_deref().unwrap_or_default());
             let class = wide("STATIC");
+            // SAFETY: `class`/`text` are NUL-terminated wide buffers naming
+            // a predefined system window class and the initial window text;
+            // `parent` is a live HWND owned by the renderer (or the
+            // top-level `window` passed down from `render`); a null
+            // `lpParam` is a documented valid value this class's default
+            // window procedure does not read; a null return (checked below)
+            // is `CreateWindowExW`'s documented failure signal.
             let hwnd = unsafe {
                 CreateWindowExW(
                     0,
@@ -1322,6 +1581,10 @@ mod native {
             }
 
             if let Err(error) = self.registry.insert(node.id, NativeObject::Label(hwnd)) {
+                // SAFETY: `hwnd` was just created above and has not yet been
+                // handed to the registry (the `insert` above failed), so
+                // this function is still its sole owner and must tear it
+                // down on this failure path.
                 unsafe { DestroyWindow(hwnd) };
                 return Err(error);
             }
@@ -1332,6 +1595,8 @@ mod native {
         fn create_button(&mut self, node: &TreeNode, parent: HWND) -> Result<(), Error> {
             let text = wide(node.text.as_deref().unwrap_or_default());
             let class = wide("BUTTON");
+            // SAFETY: same reasoning as `create_label` above, for the
+            // predefined "BUTTON" system window class.
             let hwnd = unsafe {
                 CreateWindowExW(
                     0,
@@ -1354,6 +1619,10 @@ mod native {
             }
 
             if let Err(error) = self.registry.insert(node.id, NativeObject::Button(hwnd)) {
+                // SAFETY: `hwnd` was just created above and has not yet been
+                // handed to the registry (the `insert` above failed), so
+                // this function is still its sole owner and must tear it
+                // down on this failure path.
                 unsafe { DestroyWindow(hwnd) };
                 return Err(error);
             }
@@ -1363,6 +1632,8 @@ mod native {
         fn create_text_input(&mut self, node: &TreeNode, parent: HWND) -> Result<(), Error> {
             let value = wide(node.text.as_deref().unwrap_or_default());
             let class = wide("EDIT");
+            // SAFETY: same reasoning as `create_label` above, for the
+            // predefined "EDIT" system window class.
             let hwnd = unsafe {
                 CreateWindowExW(
                     0,
@@ -1390,6 +1661,10 @@ mod native {
             }
 
             if let Err(error) = self.registry.insert(node.id, NativeObject::TextInput(hwnd)) {
+                // SAFETY: `hwnd` was just created above and has not yet been
+                // handed to the registry (the `insert` above failed), so
+                // this function is still its sole owner and must tear it
+                // down on this failure path.
                 unsafe {
                     DestroyWindow(hwnd);
                 }
@@ -1523,6 +1798,10 @@ mod native {
                 // Deferred: see the type-level doc comment on why this must
                 // not destroy the window inline.
                 runtime.destroyed = true;
+                // SAFETY: `runtime.window` is a live HWND owned by this
+                // `Runtime` for as long as it remains in `self.runtimes`
+                // (see the type-level doc comment above); `PostMessageW`
+                // takes no pointer arguments beyond the HWND itself.
                 unsafe {
                     PostMessageW(runtime.window, WM_CLOSE, 0, 0);
                 }
@@ -1584,6 +1863,20 @@ mod native {
             });
 
             let runtime_ptr: *mut Runtime = &mut *runtime;
+            // SAFETY: `wide(WINDOW_CLASS_NAME)` names the top-level window
+            // class `register_window_classes` registers before any window
+            // is created; its `Vec<u16>` is a temporary whose lifetime
+            // Rust extends to the end of this statement, so the pointer
+            // stays valid for the whole call; `title` is a NUL-terminated
+            // wide buffer kept alive independently for the duration of this
+            // call; `owner`, if non-null, is a live HWND from this
+            // registry's own `runtimes`; `runtime_ptr` is later read back,
+            // unchanged, from `WM_NCCREATE`'s `lpCreateParams` (see
+            // `window_proc`'s `WM_NCCREATE` arm) and remains a valid
+            // `*mut Runtime` for the window's whole lifetime since
+            // `runtime` (boxed) is inserted into `self.runtimes`
+            // immediately below and never moved out; a null return (checked
+            // below) is `CreateWindowExW`'s documented failure signal.
             let hwnd = unsafe {
                 CreateWindowExW(
                     0,
@@ -1625,6 +1918,10 @@ mod native {
 
             if let Some(menu) = &menu {
                 let built = build_native_menu(menu)?;
+                // SAFETY: `hwnd` was just checked non-null above and is a
+                // live top-level HWND; `built.handle` is a live `HMENU` just
+                // constructed by `build_native_menu`, not yet attached to
+                // any window.
                 unsafe {
                     SetMenu(hwnd, built.handle);
                 }
@@ -1632,6 +1929,13 @@ mod native {
             }
 
             let wake_target = hwnd as usize;
+            // SAFETY: `wake_target` is `hwnd` captured as a plain integer
+            // above; the target window, if it still exists by the time
+            // this waker fires, is a valid HWND, and if it has since been
+            // destroyed `PostMessageW` simply fails (a stale HWND is a
+            // documented-safe, non-crashing input, never reused by Windows
+            // for an unrelated live window within a single process's
+            // lifetime in a way that would matter here).
             application
                 .scheduler_for(id)
                 .expect("framework window must own a scheduler")
@@ -1640,10 +1944,14 @@ mod native {
                 }));
 
             runtime.render()?;
+            // SAFETY: `hwnd` was checked non-null above and is a live,
+            // just-created top-level HWND.
             unsafe {
                 ShowWindow(hwnd, SW_SHOW);
             }
             if !owner.is_null() {
+                // SAFETY: `owner` was just checked non-null and is a live
+                // HWND from this registry's own `runtimes`.
                 unsafe {
                     EnableWindow(owner, 0);
                 }
@@ -1662,6 +1970,8 @@ mod native {
     }
 
     fn build_native_menu(menu: &MenuBar) -> Result<BuiltMenu, Error> {
+        // SAFETY: `CreateMenu` takes no arguments; a null return (checked
+        // below) is its documented failure signal.
         let handle = unsafe { CreateMenu() };
         if handle.is_null() {
             return Err(Error::windows_api("CreateMenu"));
@@ -1681,6 +1991,11 @@ mod native {
         next_command_id: &mut u16,
     ) -> Result<(), Error> {
         if item.is_separator() {
+            // SAFETY: `parent` is a live `HMENU` owned by the caller
+            // (either freshly created by `build_native_menu` or an ancestor
+            // `submenu` created below, in either case not yet attached to a
+            // window); `MF_SEPARATOR` ignores the `uIDNewItem`/`lpNewItem`
+            // arguments, so the null `lpNewItem` here is valid.
             if unsafe { AppendMenuW(parent, MF_SEPARATOR, 0, null()) } == 0 {
                 return Err(Error::windows_api("AppendMenuW(separator)"));
             }
@@ -1689,6 +2004,8 @@ mod native {
 
         let label = wide(item.label());
         if item.is_submenu() {
+            // SAFETY: `CreatePopupMenu` takes no arguments; a null return
+            // (checked below) is its documented failure signal.
             let submenu = unsafe { CreatePopupMenu() };
             if submenu.is_null() {
                 return Err(Error::windows_api("CreatePopupMenu"));
@@ -1700,6 +2017,11 @@ mod native {
             if !item.is_enabled() {
                 flags |= MF_GRAYED;
             }
+            // SAFETY: `parent` is a live `HMENU` as above; `submenu` was
+            // just checked non-null and, per `MF_POPUP`, is consumed as a
+            // submenu handle rather than a plain item id; `label` is a
+            // NUL-terminated wide buffer kept alive for the duration of
+            // this call.
             if unsafe { AppendMenuW(parent, flags, submenu as usize, label.as_ptr()) } == 0 {
                 return Err(Error::windows_api("AppendMenuW(submenu)"));
             }
@@ -1715,6 +2037,11 @@ mod native {
             if item.is_checked() == Some(true) {
                 flags |= MF_CHECKED;
             }
+            // SAFETY: `parent` is a live `HMENU` owned by the caller, as in
+            // the branches above; `label` is a NUL-terminated wide buffer
+            // kept alive for the duration of this call; `command_id`, per
+            // plain `MF_STRING`, is consumed as a numeric item id, not a
+            // pointer.
             if unsafe { AppendMenuW(parent, flags, command_id as usize, label.as_ptr()) } == 0 {
                 return Err(Error::windows_api("AppendMenuW(item)"));
             }
@@ -1762,13 +2089,19 @@ mod native {
     }
 
     fn modifiers() -> KeyModifiers {
+        // SAFETY: `GetKeyState` takes a plain virtual-key-code integer and
+        // no pointer arguments; it is always safe to call, from any thread.
         let shift = unsafe { GetKeyState(VK_SHIFT as i32) } & i16::MIN != 0;
+        // SAFETY: same as above.
         let ctrl = unsafe { GetKeyState(0x11) } & i16::MIN != 0;
+        // SAFETY: same as above.
         let alt = unsafe { GetKeyState(0x12) } & i16::MIN != 0;
         KeyModifiers { shift, ctrl, alt }
     }
 
     fn focused_node(runtime: &Runtime) -> Option<NodeId> {
+        // SAFETY: `GetFocus` takes no arguments; a null return (checked
+        // below) is its documented "no focus in this thread's queue" signal.
         let focus = unsafe { GetFocus() };
         if focus.is_null() {
             None
@@ -1811,6 +2144,8 @@ mod native {
 
         let next_id = focusable[next_index].id;
         if let Some(object) = runtime.renderer.registry.get(next_id) {
+            // SAFETY: `object.hwnd()` is a live HWND owned by this
+            // renderer's registry.
             unsafe {
                 SetFocus(object.hwnd());
             }
@@ -1895,6 +2230,11 @@ mod native {
         let mut message = MSG::default();
 
         loop {
+            // SAFETY: `message` is a valid, exclusively borrowed `MSG` for
+            // `GetMessageW` to write into; a null `hWnd` filter is the
+            // documented way to retrieve messages for every window owned by
+            // this thread. A `-1` return (checked below) is the documented
+            // failure signal; `0` (also checked below) signals `WM_QUIT`.
             let result = unsafe { GetMessageW(&mut message, null_mut(), 0, 0) };
 
             if result == -1 {
@@ -1906,17 +2246,46 @@ mod native {
             }
 
             if message.message == WM_FRAMEWORK_SCHEDULE {
+                // SAFETY: `message.hwnd` is the HWND Win32 just delivered
+                // this message for; `GWLP_USERDATA` is a documented,
+                // always-valid index. The returned value is a valid
+                // `*mut Runtime` (checked non-null below) exactly when
+                // `message.hwnd` is a top-level window whose `WM_NCCREATE`
+                // has already run and stored it there (see
+                // `create_window_once`) — the only way this custom message
+                // is ever posted is via the waker set up in that same
+                // function, targeting that same hwnd.
                 let runtime_ptr =
                     unsafe { GetWindowLongPtrW(message.hwnd, GWLP_USERDATA) } as *mut Runtime;
                 if !runtime_ptr.is_null() {
+                    // SAFETY: `runtime_ptr` was just checked non-null and,
+                    // per the reasoning above, is a live `*mut Runtime`; the
+                    // message loop has exclusive access to every `Runtime`
+                    // between dispatches.
                     unsafe { &mut *runtime_ptr }.pump_tasks()?;
                 }
                 continue;
             }
 
+            // SAFETY: `message.hwnd` is the HWND Win32 just delivered this
+            // message for; `GetAncestor` with `GA_ROOT` accepts any window
+            // handle and returns null (handled by the next call reading
+            // `GWLP_USERDATA` of a null `root`, itself always safe) if
+            // there is no such ancestor.
             let root = unsafe { GetAncestor(message.hwnd, GA_ROOT) };
+            // SAFETY: `GWLP_USERDATA` is a documented, always-valid index
+            // for any HWND, including a null one (`GetWindowLongPtrW`
+            // simply fails and this framework never stores a `Runtime`
+            // pointer under a null key, so the null case naturally yields
+            // null here too); when `root` is non-null it is a top-level
+            // window whose `GWLP_USERDATA` invariant is documented on
+            // `create_window_once`.
             let runtime_ptr = unsafe { GetWindowLongPtrW(root, GWLP_USERDATA) } as *mut Runtime;
             if !runtime_ptr.is_null() {
+                // SAFETY: `runtime_ptr` was just checked non-null and, per
+                // the reasoning above, is a live `*mut Runtime`; the message
+                // loop has exclusive access to every `Runtime` between
+                // dispatches.
                 let runtime = unsafe { &mut *runtime_ptr };
                 match message.message {
                     WM_MOUSEMOVE => {
@@ -1929,6 +2298,10 @@ mod native {
                                 hwndTrack: message.hwnd,
                                 dwHoverTime: 0,
                             };
+                            // SAFETY: `tracking` is a fully initialized,
+                            // exclusively borrowed `TRACKMOUSEEVENT`;
+                            // `hwndTrack` is `message.hwnd`, the live HWND
+                            // Win32 just delivered `WM_MOUSEMOVE` for.
                             unsafe {
                                 TrackMouseEvent(&mut tracking);
                             }
@@ -1944,9 +2317,16 @@ mod native {
                 }
                 if message.message == WM_MOUSEWHEEL {
                     let mut point = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
+                    // SAFETY: `point` is a valid, exclusively borrowed
+                    // `POINT` for `GetCursorPos` to write into.
                     unsafe {
                         GetCursorPos(&mut point);
                     }
+                    // SAFETY: `WindowFromPoint` takes a plain `POINT` value,
+                    // no pointer arguments; a null return is its documented
+                    // "no window at that point" signal, which
+                    // `scrollable_ancestor` already treats as "not found"
+                    // via its own null check on the same handle it walks.
                     let hovered = unsafe { WindowFromPoint(point) };
                     if let Some(id) = runtime.renderer.scrollable_ancestor(hovered) {
                         let delta = ((message.wParam >> 16) & 0xffff) as u16 as i16;
@@ -1972,6 +2352,8 @@ mod native {
                         modifiers: modifiers(),
                     }) {
                         runtime.error = Some(error);
+                        // SAFETY: `PostQuitMessage` takes a plain exit-code
+                        // integer and no pointer arguments.
                         unsafe {
                             PostQuitMessage(1);
                         }
@@ -1990,6 +2372,8 @@ mod native {
                                     text: character.to_string(),
                                 }) {
                                     runtime.error = Some(error);
+                                    // SAFETY: same as above — no pointer
+                                    // arguments.
                                     unsafe {
                                         PostQuitMessage(1);
                                     }
@@ -2001,11 +2385,19 @@ mod native {
                 }
             }
 
+            // SAFETY: `message` was just populated by `GetMessageW` above,
+            // which succeeded (the `-1`/`0` failure and quit cases both
+            // `return`/`break` before reaching here); both calls only read
+            // it for the duration of this statement.
             unsafe {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
             if !runtime_ptr.is_null() {
+                // SAFETY: `runtime_ptr` was checked non-null and, per the
+                // reasoning above, is a live `*mut Runtime`; the message
+                // loop has exclusive access to every `Runtime` between
+                // dispatches.
                 sync_focus(unsafe { &mut *runtime_ptr });
             }
         }
@@ -2033,13 +2425,24 @@ mod native {
             hInstance: instance,
             hIcon: null_mut(),
             hCursor: null_mut(),
+            // SAFETY: `COLOR_WINDOW` is a documented standard system-color
+            // index; `GetSysColorBrush` takes no pointer arguments and
+            // returns a static system brush that must not be deleted.
             hbrBackground: unsafe { GetSysColorBrush(COLOR_WINDOW) },
             lpszMenuName: null(),
             lpszClassName: class_name.as_ptr(),
         };
 
+        // SAFETY: `class` is a fully initialized `WNDCLASSW`, exclusively
+        // borrowed for the duration of this call; `class_name` (borrowed by
+        // `class.lpszClassName`) is a NUL-terminated wide buffer that
+        // outlives this call.
         let atom = unsafe { RegisterClassW(&class) };
         if atom == 0 {
+            // SAFETY: `GetLastError` takes no arguments and is called
+            // immediately after `RegisterClassW` reported failure, on the
+            // same thread, before any other call could overwrite the
+            // thread-local error code.
             let error = unsafe { GetLastError() };
             const ERROR_CLASS_ALREADY_EXISTS: u32 = 1410;
             if error != ERROR_CLASS_ALREADY_EXISTS {
@@ -2053,12 +2456,78 @@ mod native {
         Ok(())
     }
 
+    /// Wraps the body of a Win32 `WNDPROC` callback so a panic inside user
+    /// `Component` code cannot unwind across this `extern "system"` FFI
+    /// boundary — undefined behavior on stable Rust (standards audit P0.1).
+    /// A caught panic poisons the owning `Runtime` with a typed error and
+    /// posts `WM_QUIT`, so the message loop still exits, just cleanly and
+    /// through `run_application`'s ordinary error path instead of
+    /// potentially corrupting Win32's own call stack.
+    fn wndproc_boundary<F>(hwnd: HWND, f: F) -> LRESULT
+    where
+        F: FnOnce() -> LRESULT + std::panic::UnwindSafe,
+    {
+        match std::panic::catch_unwind(f) {
+            Ok(result) => result,
+            Err(payload) => {
+                let message = panic_payload_message(&payload);
+                // SAFETY: `hwnd` is the HWND Win32 just invoked this
+                // callback with. GWLP_USERDATA on every top-level window
+                // this crate creates is either null (WM_NCCREATE has not
+                // run yet) or a live `*mut Runtime` set exactly once in
+                // WM_NCCREATE and never reassigned to a dangling value for
+                // the window's lifetime — see WM_NCCREATE below.
+                let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
+                poison_runtime_and_quit(runtime_ptr, message);
+                0
+            }
+        }
+    }
+
+    /// Shared tail of both `wndproc_boundary` variants: records the panic on
+    /// the owning `Runtime` (if resolved) and asks the message loop to exit.
+    /// Factored out once so the two callback-specific boundaries — which
+    /// necessarily resolve `runtime_ptr` differently (see
+    /// `container_wndproc_boundary`) — do not each re-derive this
+    /// SAFETY-critical step independently.
+    fn poison_runtime_and_quit(runtime_ptr: *mut Runtime, message: String) {
+        if !runtime_ptr.is_null() {
+            // SAFETY: the caller guarantees `runtime_ptr` is either null or
+            // a live `*mut Runtime` per this module's GWLP_USERDATA
+            // invariant, and the Win32 message loop is single-threaded and
+            // non-reentrant, so nothing else can be concurrently mutating
+            // this `Runtime` right now.
+            let runtime = unsafe { &mut *runtime_ptr };
+            runtime.error = Some(Error::ComponentPanicked { message });
+        }
+        // SAFETY: `PostQuitMessage` takes no pointer arguments and is
+        // always valid to call; it only queues `WM_QUIT` so the message
+        // loop unwinds through its ordinary exit path.
+        unsafe { PostQuitMessage(1) };
+    }
+
+    fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
+        if let Some(message) = payload.downcast_ref::<&str>() {
+            (*message).to_string()
+        } else if let Some(message) = payload.downcast_ref::<String>() {
+            message.clone()
+        } else {
+            "component panicked with a non-string payload".to_string()
+        }
+    }
+
     unsafe extern "system" fn window_proc(
         hwnd: HWND,
         message: u32,
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        wndproc_boundary(hwnd, move || {
+            window_proc_impl(hwnd, message, wparam, lparam)
+        })
+    }
+
+    fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         match message {
             WM_NCCREATE => {
                 let create = lparam as *const CREATESTRUCTW;
@@ -2066,7 +2535,22 @@ mod native {
                     return 0;
                 }
 
+                // SAFETY: `create` was just checked non-null and, for a
+                // window created through `create_window_once`, points at a
+                // `CREATESTRUCTW` whose `lpCreateParams` Win32 forwards
+                // unchanged from the `lpParam` given to `CreateWindowExW` —
+                // here, `runtime_ptr.cast()`, a pointer into the
+                // `Box<Runtime>` owned by `WindowRegistry::runtimes` for as
+                // long as this window exists (see `WindowRegistry`'s type
+                // doc comment: a `Runtime` outlives its own `WM_DESTROY`
+                // and is only ever dropped after `run_application`'s
+                // message loop returns).
                 let runtime_ptr = unsafe { (*create).lpCreateParams } as *mut Runtime;
+                // SAFETY: `hwnd` was just created by Win32 and is being
+                // delivered its first message (`WM_NCCREATE` is always
+                // first); storing this pointer here is exactly what
+                // establishes the invariant every other `GWLP_USERDATA`
+                // read in this file and in `wndproc_boundary` relies on.
                 unsafe {
                     SetWindowLongPtrW(hwnd, GWLP_USERDATA, runtime_ptr as isize);
                 }
@@ -2075,15 +2559,22 @@ mod native {
             WM_COMMAND => {
                 let notification_code = ((wparam >> 16) & 0xffff) as u32;
                 let control = lparam as HWND;
+                // SAFETY: either null (before WM_NCCREATE above has run for
+                // this hwnd) or the live `*mut Runtime` WM_NCCREATE stored,
+                // per the invariant documented there.
                 let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
 
                 if !runtime_ptr.is_null() {
+                    // SAFETY: non-null per the invariant above; the message
+                    // loop is single-threaded and non-reentrant.
                     let runtime = unsafe { &mut *runtime_ptr };
                     if !control.is_null() {
                         if let Some(id) = runtime.renderer.registry.id_for_hwnd(control) {
                             if notification_code == BN_CLICKED {
                                 if let Err(error) = runtime.dispatch(Event::Click { target: id }) {
                                     runtime.error = Some(error);
+                                    // SAFETY: `PostQuitMessage` takes no
+                                    // pointer arguments.
                                     unsafe { PostQuitMessage(1) };
                                 }
                             } else if notification_code == EN_CHANGE {
@@ -2101,6 +2592,8 @@ mod native {
                                         runtime.dispatch(Event::TextChanged { target: id, value })
                                     {
                                         runtime.error = Some(error);
+                                        // SAFETY: `PostQuitMessage` takes no
+                                        // pointer arguments.
                                         unsafe { PostQuitMessage(1) };
                                     }
                                 }
@@ -2117,6 +2610,8 @@ mod native {
                                 item,
                             }) {
                                 runtime.error = Some(error);
+                                // SAFETY: `PostQuitMessage` takes no pointer
+                                // arguments.
                                 unsafe { PostQuitMessage(1) };
                             }
                         }
@@ -2125,19 +2620,33 @@ mod native {
                 0
             }
             WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
+                // SAFETY: GWLP_USERDATA read/dereference invariant — see
+                // WM_NCCREATE above.
                 let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
                 if runtime_ptr.is_null() {
+                    // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly
+                    // what Win32 just delivered this callback with;
+                    // `DefWindowProcW`'s documented default handling is
+                    // valid for any window message.
                     return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
                 }
+                // SAFETY: non-null per the invariant above; the message
+                // loop is single-threaded and non-reentrant.
                 let runtime = unsafe { &*runtime_ptr };
                 let control = lparam as HWND;
                 let hdc = wparam as HDC;
                 let Some(id) = runtime.renderer.registry.id_for_hwnd(control) else {
+                    // SAFETY: same as above.
                     return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
                 };
                 let Some(style) = runtime.renderer.styles.get(&id) else {
+                    // SAFETY: same as above.
                     return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
                 };
+                // SAFETY: `hdc` is the `HDC` Win32 passed via `wparam` for
+                // this control-color message, valid for the duration of
+                // this callback; `TRANSPARENT` is a documented mode
+                // constant, not a pointer.
                 unsafe {
                     SetTextColor(hdc, style.foreground);
                     SetBkColor(hdc, style.background);
@@ -2146,8 +2655,12 @@ mod native {
                 style.background_brush as LRESULT
             }
             WM_SIZE => {
+                // SAFETY: GWLP_USERDATA read/dereference invariant — see
+                // WM_NCCREATE above.
                 let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
                 if !runtime_ptr.is_null() {
+                    // SAFETY: non-null per the invariant above; the message
+                    // loop is single-threaded and non-reentrant.
                     let runtime = unsafe { &mut *runtime_ptr };
                     let size = Size::new(lparam as u32 & 0xffff, (lparam as u32 >> 16) & 0xffff);
                     if let Err(error) = runtime.dispatch(Event::WindowResized {
@@ -2155,6 +2668,8 @@ mod native {
                         size,
                     }) {
                         runtime.error = Some(error);
+                        // SAFETY: `PostQuitMessage` takes no pointer
+                        // arguments.
                         unsafe {
                             PostQuitMessage(1);
                         }
@@ -2169,6 +2684,7 @@ mod native {
                             state: presentation,
                         }) {
                             runtime.error = Some(error);
+                            // SAFETY: same as above.
                             unsafe {
                                 PostQuitMessage(1);
                             }
@@ -2179,8 +2695,12 @@ mod native {
                 0
             }
             WM_MOVE => {
+                // SAFETY: GWLP_USERDATA read/dereference invariant — see
+                // WM_NCCREATE above.
                 let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
                 if !runtime_ptr.is_null() {
+                    // SAFETY: non-null per the invariant above; the message
+                    // loop is single-threaded and non-reentrant.
                     let runtime = unsafe { &mut *runtime_ptr };
                     let position = Point::new(
                         (lparam as u32 & 0xffff) as u16 as i16 as i32,
@@ -2191,6 +2711,8 @@ mod native {
                         position,
                     }) {
                         runtime.error = Some(error);
+                        // SAFETY: `PostQuitMessage` takes no pointer
+                        // arguments.
                         unsafe {
                             PostQuitMessage(1);
                         }
@@ -2199,41 +2721,67 @@ mod native {
                 0
             }
             WM_CLOSE => {
+                // SAFETY: GWLP_USERDATA read/dereference invariant — see
+                // WM_NCCREATE above.
                 let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
                 if !runtime_ptr.is_null() {
+                    // SAFETY: non-null per the invariant above; the message
+                    // loop is single-threaded and non-reentrant.
                     let runtime = unsafe { &mut *runtime_ptr };
                     if let Err(error) = runtime.dispatch(Event::WindowCloseRequested {
                         window: runtime.window_id,
                     }) {
                         runtime.error = Some(error);
+                        // SAFETY: `PostQuitMessage` takes no pointer
+                        // arguments.
                         unsafe {
                             PostQuitMessage(1);
                         }
                         return 0;
                     }
                     if runtime.window_id != WindowId::PRIMARY {
+                        // SAFETY: `runtime.application` points to the
+                        // mutable `Application` borrowed by
+                        // `WindowsPlatform::run` and remains valid for this
+                        // event loop (see `Runtime::render`); the event loop
+                        // has exclusive access while it is running.
                         unsafe { &mut *runtime.application }.close_window(runtime.window_id);
                     }
                 }
+                // SAFETY: `hwnd` is the HWND Win32 just invoked this
+                // callback with, and is still live.
                 unsafe { DestroyWindow(hwnd) };
                 0
             }
             WM_DESTROY => {
+                // SAFETY: GWLP_USERDATA read/dereference invariant — see
+                // WM_NCCREATE above.
                 let runtime_ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Runtime;
                 if !runtime_ptr.is_null() {
+                    // SAFETY: non-null per the invariant above; the message
+                    // loop is single-threaded and non-reentrant.
                     let runtime = unsafe { &mut *runtime_ptr };
                     runtime.destroyed = true;
                     if !runtime.modal_parent.is_null() {
+                        // SAFETY: `modal_parent` was just checked non-null
+                        // and, per `create_window_once`, is a live HWND
+                        // from `WindowRegistry::runtimes` that owns this
+                        // window as a modal child.
                         unsafe {
                             EnableWindow(runtime.modal_parent, 1);
                         }
                     }
                     if runtime.window_id == WindowId::PRIMARY {
+                        // SAFETY: `PostQuitMessage` takes no pointer
+                        // arguments.
                         unsafe { PostQuitMessage(0) };
                     }
                 }
                 0
             }
+            // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly what
+            // Win32 just delivered this callback with; `DefWindowProcW`'s
+            // documented default handling is valid for any window message.
             _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
         }
     }
@@ -2244,16 +2792,70 @@ mod native {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        container_wndproc_boundary(hwnd, move || {
+            container_proc_impl(hwnd, message, wparam, lparam)
+        })
+    }
+
+    /// Same purpose as `wndproc_boundary`, for container windows. A
+    /// container's own `GWLP_USERDATA` holds a cached background color (see
+    /// WM_ERASEBKGND in `container_proc_impl`), not a `*mut Runtime`, so the
+    /// owning `Runtime` is resolved through the top-level ancestor window
+    /// instead — the same lookup `WM_COMMAND`/`WM_CTLCOLOR*` forwarding
+    /// already relies on below.
+    fn container_wndproc_boundary<F>(hwnd: HWND, f: F) -> LRESULT
+    where
+        F: FnOnce() -> LRESULT + std::panic::UnwindSafe,
+    {
+        match std::panic::catch_unwind(f) {
+            Ok(result) => result,
+            Err(payload) => {
+                let message = panic_payload_message(&payload);
+                // SAFETY: `hwnd` is the HWND Win32 just invoked this
+                // callback with; `GetAncestor` with `GA_ROOT` accepts any
+                // window handle and returns null (checked below) if there
+                // is no such ancestor.
+                let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+                let runtime_ptr = if root.is_null() {
+                    null_mut()
+                } else {
+                    // SAFETY: `root`, if non-null, is a top-level window
+                    // created by `register_window_classes`/`window_proc`,
+                    // whose GWLP_USERDATA carries the same invariant
+                    // documented on `wndproc_boundary`.
+                    unsafe { GetWindowLongPtrW(root, GWLP_USERDATA) as *mut Runtime }
+                };
+                poison_runtime_and_quit(runtime_ptr, message);
+                0
+            }
+        }
+    }
+
+    fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         match message {
             WM_COMMAND | WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
                 // These are all sent to a control's *immediate* parent. A
                 // container is frequently just one link in a chain of
                 // nested containers, so forward up to the top-level window,
                 // whose `window_proc` owns the `Runtime` these need.
+                // SAFETY: `hwnd` is the HWND Win32 just invoked this
+                // callback with; `GetAncestor` with `GA_ROOT` accepts any
+                // window handle and returns null (checked below) if there
+                // is no such ancestor.
                 let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
                 if !root.is_null() {
+                    // SAFETY: `root` was just checked non-null and, per
+                    // `GetAncestor`'s contract, is a live top-level HWND;
+                    // `message`/`wparam`/`lparam` are forwarded unchanged
+                    // from what Win32 delivered to this callback, which
+                    // `window_proc`'s handlers for these same message
+                    // values already expect in that shape.
                     unsafe { SendMessageW(root, message, wparam, lparam) }
                 } else {
+                    // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly
+                    // what Win32 just delivered this callback with;
+                    // `DefWindowProcW`'s documented default handling is
+                    // valid for any window message.
                     unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
                 }
             }
@@ -2264,13 +2866,30 @@ mod native {
                 // (unlike the messages above) this one is sent to the
                 // container itself, not to a parent that could look it up
                 // through a `Runtime`.
+                // SAFETY: `hwnd` is the HWND Win32 just invoked this
+                // callback with; `GWLP_USERDATA` is a documented,
+                // always-valid index for any window.
                 let colorref = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as u32;
+                // SAFETY: `CreateSolidBrush` takes a plain `COLORREF` value
+                // and no pointer arguments; a null return (checked below) is
+                // its documented failure signal.
                 let brush = unsafe { CreateSolidBrush(colorref) };
                 if brush.is_null() {
+                    // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly
+                    // what Win32 just delivered this callback with;
+                    // `DefWindowProcW`'s documented default handling is
+                    // valid for any window message.
                     return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
                 }
                 let hdc = wparam as HDC;
                 let mut client = RECT::default();
+                // SAFETY: `hwnd` is a live HWND owned by this callback;
+                // `client` is a valid, exclusively borrowed `RECT` for
+                // `GetClientRect` to write into; `hdc` is the `HDC` Win32
+                // passed via `wparam` for this erase-background message,
+                // valid for the duration of this callback; `brush` was just
+                // checked non-null and is freed exactly once, after its
+                // last use, in this same block.
                 unsafe {
                     GetClientRect(hwnd, &mut client);
                     FillRect(hdc, &client, brush);
@@ -2278,21 +2897,35 @@ mod native {
                 }
                 1
             }
+            // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly what
+            // Win32 just delivered this callback with; `DefWindowProcW`'s
+            // documented default handling is valid for any window message.
             _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
         }
     }
 
     fn module_instance() -> HINSTANCE {
+        // SAFETY: a null `lpModuleName` is `GetModuleHandleW`'s documented
+        // way to retrieve the calling process's own module handle; it takes
+        // no other arguments.
         unsafe { GetModuleHandleW(null()) }
     }
 
     fn window_text(hwnd: HWND) -> String {
+        // SAFETY: `hwnd` is a live HWND supplied by callers, all of which
+        // hold it from this renderer's registry or a Win32 callback
+        // parameter; `GetWindowTextLengthW` takes no pointer arguments.
         let length = unsafe { GetWindowTextLengthW(hwnd) };
         if length <= 0 {
             return String::new();
         }
 
         let mut buffer = vec![0u16; length as usize + 1];
+        // SAFETY: `hwnd` is the same live HWND validated above; `buffer` is
+        // sized `length + 1` wide chars, matching `GetWindowTextW`'s
+        // documented contract of needing room for the text plus a
+        // NUL terminator, and `buffer.len()` is passed as the exact
+        // capacity so the call cannot write past it.
         let copied = unsafe { GetWindowTextW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
         String::from_utf16_lossy(&buffer[..copied as usize])
     }

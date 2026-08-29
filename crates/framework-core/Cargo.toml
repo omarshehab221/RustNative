@@ -4,7 +4,31 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [lib]
 name = "framework_core"
 path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio.workspace = true
+parking_lot.workspace = true
+async-trait.workspace = true
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = []
+# Enables `serde::{Serialize, Deserialize}` on the newtype IDs and other
+# persistence-relevant types ahead of the roadmap's persistence milestone
+# (see PLAN.md). Off by default so embedders don't pay for it unused.
+serde = ["dep:serde"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "test-util"] }

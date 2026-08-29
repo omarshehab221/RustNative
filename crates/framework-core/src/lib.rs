@@ -14,13 +14,15 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use std::thread;
+use std::sync::{Arc, OnceLock};
+use std::task::{Context, Poll};
 use std::time::Duration;
+
+use parking_lot::Mutex;
 
 /// Stable identity for a UI node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NodeId(u64);
 
 impl NodeId {
@@ -43,6 +45,7 @@ impl NodeId {
 
 /// Input produced by a platform backend and delivered to the active component.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Event {
     Click {
         target: NodeId,
@@ -162,6 +165,7 @@ pub struct KeyModifiers {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AccessibilityRole {
     None,
     Label,
@@ -245,6 +249,7 @@ pub trait Component: 'static {
 
 /// Stable identity for an entry in the managed component tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentId(u64);
 
 impl ComponentId {
@@ -311,9 +316,46 @@ impl fmt::Display for ServiceError {
 
 impl Error for ServiceError {}
 
+/// A validated HTTP method. `Other` covers verbs this enum doesn't name yet
+/// (e.g. WebDAV extensions) without falling back to an unvalidated `String`
+/// for the common cases.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Method {
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Head,
+    Options,
+    Other(String),
+}
+
+impl Method {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Delete => "DELETE",
+            Self::Patch => "PATCH",
+            Self::Head => "HEAD",
+            Self::Options => "OPTIONS",
+            Self::Other(value) => value,
+        }
+    }
+}
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
-    pub method: String,
+    pub method: Method,
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
@@ -322,7 +364,7 @@ pub struct HttpRequest {
 impl HttpRequest {
     pub fn get(url: impl Into<String>) -> Self {
         Self {
-            method: "GET".into(),
+            method: Method::Get,
             url: url.into(),
             headers: Vec::new(),
             body: Vec::new(),
@@ -337,19 +379,35 @@ pub struct HttpResponse {
     pub body: Vec<u8>,
 }
 
+/// Executes a single HTTP request.
+///
+/// `#[async_trait::async_trait]` lets this stay a plain `async fn` in the
+/// trait and in every impl below; the macro desugars each into a
+/// `fn(...) -> Pin<Box<dyn Future<...> + Send>>` so the trait remains
+/// `dyn`-compatible for `Arc<dyn HttpService>` (see `Services` below) — no
+/// more hand-written `Box::pin(async move { ... })` at every call site.
+///
+/// (`trait_variant::make` was tried first here and reverted: it desugars
+/// `async fn` into `-> impl Future<...> + Send` instead of a boxed future,
+/// which is *not* `dyn`-compatible — exactly wrong for a trait this crate
+/// needs to store as `Arc<dyn _>`. Caught by `cargo check`, not by
+/// inspection; see BUILD_STATUS.md.)
+#[async_trait::async_trait]
 pub trait HttpService: Send + Sync {
-    fn execute(&self, request: HttpRequest) -> ServiceFuture<HttpResponse>;
+    async fn execute(&self, request: HttpRequest) -> Result<HttpResponse, ServiceError>;
 }
 
+#[async_trait::async_trait]
 pub trait StorageService: Send + Sync {
-    fn get(&self, key: String) -> ServiceFuture<Option<Vec<u8>>>;
-    fn set(&self, key: String, value: Vec<u8>) -> ServiceFuture<()>;
-    fn remove(&self, key: String) -> ServiceFuture<()>;
+    async fn get(&self, key: String) -> Result<Option<Vec<u8>>, ServiceError>;
+    async fn set(&self, key: String, value: Vec<u8>) -> Result<(), ServiceError>;
+    async fn remove(&self, key: String) -> Result<(), ServiceError>;
 }
 
+#[async_trait::async_trait]
 pub trait ClipboardService: Send + Sync {
-    fn read_text(&self) -> ServiceFuture<Option<String>>;
-    fn write_text(&self, value: String) -> ServiceFuture<()>;
+    async fn read_text(&self) -> Result<Option<String>, ServiceError>;
+    async fn write_text(&self, value: String) -> Result<(), ServiceError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -366,13 +424,15 @@ pub struct FileDialogRequest {
     pub filters: Vec<(String, Vec<String>)>,
 }
 
+#[async_trait::async_trait]
 pub trait FileDialogService: Send + Sync {
-    fn show(&self, request: FileDialogRequest) -> ServiceFuture<Option<String>>;
+    async fn show(&self, request: FileDialogRequest) -> Result<Option<String>, ServiceError>;
 }
 
+#[async_trait::async_trait]
 pub trait SystemService: Send + Sync {
-    fn open_url(&self, url: String) -> ServiceFuture<()>;
-    fn notify(&self, title: String, body: String) -> ServiceFuture<()>;
+    async fn open_url(&self, url: String) -> Result<(), ServiceError>;
+    async fn notify(&self, title: String, body: String) -> Result<(), ServiceError>;
 }
 
 /// Application-owned platform services. Components only receive this portable
@@ -442,33 +502,18 @@ pub struct MemoryStorage {
     values: Arc<Mutex<HashMap<String, Vec<u8>>>>,
 }
 
+#[async_trait::async_trait]
 impl StorageService for MemoryStorage {
-    fn get(&self, key: String) -> ServiceFuture<Option<Vec<u8>>> {
-        let values = Arc::clone(&self.values);
-        Box::pin(async move {
-            Ok(values
-                .lock()
-                .expect("memory storage poisoned")
-                .get(&key)
-                .cloned())
-        })
+    async fn get(&self, key: String) -> Result<Option<Vec<u8>>, ServiceError> {
+        Ok(self.values.lock().get(&key).cloned())
     }
-    fn set(&self, key: String, value: Vec<u8>) -> ServiceFuture<()> {
-        let values = Arc::clone(&self.values);
-        Box::pin(async move {
-            values
-                .lock()
-                .expect("memory storage poisoned")
-                .insert(key, value);
-            Ok(())
-        })
+    async fn set(&self, key: String, value: Vec<u8>) -> Result<(), ServiceError> {
+        self.values.lock().insert(key, value);
+        Ok(())
     }
-    fn remove(&self, key: String) -> ServiceFuture<()> {
-        let values = Arc::clone(&self.values);
-        Box::pin(async move {
-            values.lock().expect("memory storage poisoned").remove(&key);
-            Ok(())
-        })
+    async fn remove(&self, key: String) -> Result<(), ServiceError> {
+        self.values.lock().remove(&key);
+        Ok(())
     }
 }
 
@@ -477,22 +522,20 @@ pub struct MemoryClipboard {
     value: Arc<Mutex<Option<String>>>,
 }
 
+#[async_trait::async_trait]
 impl ClipboardService for MemoryClipboard {
-    fn read_text(&self) -> ServiceFuture<Option<String>> {
-        let value = Arc::clone(&self.value);
-        Box::pin(async move { Ok(value.lock().expect("memory clipboard poisoned").clone()) })
+    async fn read_text(&self) -> Result<Option<String>, ServiceError> {
+        Ok(self.value.lock().clone())
     }
-    fn write_text(&self, text: String) -> ServiceFuture<()> {
-        let value = Arc::clone(&self.value);
-        Box::pin(async move {
-            *value.lock().expect("memory clipboard poisoned") = Some(text);
-            Ok(())
-        })
+    async fn write_text(&self, text: String) -> Result<(), ServiceError> {
+        *self.value.lock() = Some(text);
+        Ok(())
     }
 }
 
 /// A portable capability exposed by a platform adapter at runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum Capability {
     Clipboard,
     Notifications,
@@ -554,6 +597,19 @@ impl Color {
             blue,
             alpha,
         }
+    }
+}
+
+/// Builds an opaque color from a packed `0xRRGGBB` hex value, e.g.
+/// `Color::from(0xFF00FF)` for magenta. Theme tokens defined this way stay
+/// `const`-constructible, matching `Color::rgb`/`Color::rgba` above.
+impl From<u32> for Color {
+    fn from(packed: u32) -> Self {
+        Self::rgb(
+            ((packed >> 16) & 0xFF) as u8,
+            ((packed >> 8) & 0xFF) as u8,
+            (packed & 0xFF) as u8,
+        )
     }
 }
 
@@ -849,7 +905,7 @@ impl WindowRequests {
     }
 }
 
-impl<'a, M: Send + 'static> ComponentContext<'a, M> {
+impl<M: Send + 'static> ComponentContext<'_, M> {
     /// Creates a typed child-to-parent callback for this component.
     pub fn callback<Msg: 'static>(&self) -> Callback<Msg> {
         Callback {
@@ -948,12 +1004,18 @@ impl<'a, M: Send + 'static> ComponentContext<'a, M> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TaskId(u64);
 
 #[derive(Debug, Clone)]
 pub struct TaskHandle {
     id: TaskId,
+    abort: tokio::task::AbortHandle,
+    // Tracks whether *we* cancelled this task, as distinct from
+    // `AbortHandle::is_finished`, which is also true after ordinary
+    // completion. `TaskHandle::is_cancelled` must answer "did someone call
+    // cancel()", not "is the task done".
     cancelled: Arc<AtomicBool>,
 }
 
@@ -961,9 +1023,16 @@ impl TaskHandle {
     pub fn id(&self) -> TaskId {
         self.id
     }
+
+    /// Cancels the task. Unlike the previous cooperative-only design (an
+    /// `AtomicBool` the task body had to remember to poll), this now aborts
+    /// the underlying tokio task pre-emptively at its next await point, so a
+    /// future that never yields cannot outlive `cancel()` on a leaked thread.
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
+        self.abort.abort();
     }
+
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
     }
@@ -1047,6 +1116,27 @@ struct SchedulerInner {
     waker: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
+/// Returns the single, process-wide tokio runtime that backs every
+/// `Scheduler`/`SleepFuture` in `framework-core`.
+///
+/// `framework-core` still imports no platform UI API: `tokio` is a portable,
+/// OS-abstracted async runtime, not a Windows/macOS/GTK binding, so this does
+/// not weaken the "core must not import OS APIs" invariant (see P0.2 in the
+/// standards audit). A single shared multi-threaded runtime replaces the
+/// previous one-OS-thread-per-task model; tasks are cooperatively scheduled
+/// on a small worker pool instead of each getting a dedicated ~MB stack.
+fn runtime() -> &'static tokio::runtime::Runtime {
+    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("framework-async")
+            .enable_time()
+            .build()
+            .expect("failed to start framework async runtime")
+    })
+}
+
 #[derive(Clone)]
 pub struct Scheduler {
     inner: Arc<SchedulerInner>,
@@ -1070,9 +1160,13 @@ impl Scheduler {
     }
 
     pub fn set_waker(&self, waker: Arc<dyn Fn() + Send + Sync>) {
-        *self.inner.waker.lock().expect("scheduler waker poisoned") = Some(waker);
+        *self.inner.waker.lock() = Some(waker);
     }
 
+    /// Spawns `future` on the shared tokio runtime. The task runs to
+    /// completion (or cancellation) off the caller's thread; its result is
+    /// queued on `target` and observed the next time `Scheduler::drain` is
+    /// called, exactly as before — only the execution engine changed.
     pub fn spawn<M, F>(&self, target: ComponentId, future: F) -> TaskHandle
     where
         M: Send + 'static,
@@ -1080,58 +1174,45 @@ impl Scheduler {
     {
         let id = TaskId(self.inner.next_id.fetch_add(1, Ordering::Relaxed));
         let cancelled = Arc::new(AtomicBool::new(false));
-        let cancelled_thread = Arc::clone(&cancelled);
         let inner = Arc::clone(&self.inner);
-        thread::Builder::new()
-            .name(format!("framework-task-{}", id.0))
-            .spawn(move || {
-                let value = block_on(future);
-                if cancelled_thread.load(Ordering::Acquire) {
-                    return;
-                }
-                inner
-                    .completed
-                    .lock()
-                    .expect("scheduler queue poisoned")
-                    .push_back(CompletedTask {
-                        target,
-                        message: Box::new(value),
-                    });
-                if let Some(waker) = inner
-                    .waker
-                    .lock()
-                    .expect("scheduler waker poisoned")
-                    .clone()
-                {
-                    waker();
-                }
-            })
-            .expect("failed to spawn framework task");
-        TaskHandle { id, cancelled }
+        let join_handle = runtime().spawn(async move {
+            let value = future.await;
+            inner.completed.lock().push_back(CompletedTask {
+                target,
+                message: Box::new(value),
+            });
+            if let Some(waker) = inner.waker.lock().clone() {
+                waker();
+            }
+        });
+        let abort = join_handle.abort_handle();
+        TaskHandle {
+            id,
+            abort,
+            cancelled,
+        }
     }
 
     fn drain(&self) -> Vec<CompletedTask> {
-        let mut q = self
-            .inner
-            .completed
-            .lock()
-            .expect("scheduler queue poisoned");
-        q.drain(..).collect()
+        self.inner.completed.lock().drain(..).collect()
     }
 }
 
+/// A cancellable delay. Backed by `tokio::time::sleep`; see `Scheduler` above
+/// for why depending on tokio does not reintroduce a platform dependency.
 pub struct SleepFuture {
-    shared: Arc<(Mutex<bool>, Condvar)>,
-    started: bool,
-    duration: Duration,
+    inner: Pin<Box<tokio::time::Sleep>>,
 }
 
 impl SleepFuture {
     pub fn new(duration: Duration) -> Self {
+        // `tokio::time::sleep` reads the ambient runtime from a thread-local
+        // at construction time, so it must be built while a runtime context
+        // is entered. `Runtime::enter` just sets that thread-local for the
+        // duration of the closure; it does not block or run anything.
+        let _guard = runtime().enter();
         Self {
-            shared: Arc::new((Mutex::new(false), Condvar::new())),
-            started: false,
-            duration,
+            inner: Box::pin(tokio::time::sleep(duration)),
         }
     }
 }
@@ -1139,73 +1220,19 @@ impl SleepFuture {
 impl Future for SleepFuture {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let (lock, _) = &*self.shared;
-        if *lock.lock().expect("sleep state poisoned") {
-            return Poll::Ready(());
-        }
-        if !self.started {
-            self.started = true;
-            let shared = Arc::clone(&self.shared);
-            let duration = self.duration;
-            let waker = cx.waker().clone();
-            thread::spawn(move || {
-                thread::sleep(duration);
-                let (lock, cv) = &*shared;
-                *lock.lock().expect("sleep state poisoned") = true;
-                cv.notify_all();
-                waker.wake();
-            });
-        }
-        Poll::Pending
+        self.inner.as_mut().poll(cx)
     }
 }
 
+/// Drives `future` to completion on the shared runtime from a synchronous
+/// context. Private, and only used by this crate's own tests below to call
+/// into the (now plain `async fn`, via `#[async_trait::async_trait]`)
+/// in-memory service impls from non-`async` `#[test]` functions. This has
+/// zero hand-rolled `unsafe` — `tokio::runtime::Runtime` owns a sound,
+/// audited waker implementation internally.
+#[cfg(test)]
 fn block_on<F: Future>(future: F) -> F::Output {
-    struct Parker {
-        ready: Mutex<bool>,
-        cv: Condvar,
-    }
-    let parker = Arc::new(Parker {
-        ready: Mutex::new(false),
-        cv: Condvar::new(),
-    });
-    unsafe fn clone(data: *const ()) -> RawWaker {
-        let arc = unsafe { Arc::<Parker>::from_raw(data as *const Parker) };
-        let cloned = Arc::clone(&arc);
-        std::mem::forget(arc);
-        RawWaker::new(Arc::into_raw(cloned) as *const (), &VTABLE)
-    }
-    unsafe fn wake(data: *const ()) {
-        let arc = unsafe { Arc::<Parker>::from_raw(data as *const Parker) };
-        *arc.ready.lock().expect("task parker poisoned") = true;
-        arc.cv.notify_one();
-    }
-    unsafe fn wake_by_ref(data: *const ()) {
-        let arc = unsafe { Arc::<Parker>::from_raw(data as *const Parker) };
-        *arc.ready.lock().expect("task parker poisoned") = true;
-        arc.cv.notify_one();
-        std::mem::forget(arc);
-    }
-    unsafe fn drop_waker(data: *const ()) {
-        drop(unsafe { Arc::<Parker>::from_raw(data as *const Parker) });
-    }
-    static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop_waker);
-    let raw = RawWaker::new(Arc::into_raw(Arc::clone(&parker)) as *const (), &VTABLE);
-    let waker = unsafe { Waker::from_raw(raw) };
-    let mut cx = Context::from_waker(&waker);
-    let mut future = Box::pin(future);
-    loop {
-        match future.as_mut().poll(&mut cx) {
-            Poll::Ready(value) => return value,
-            Poll::Pending => {
-                let mut ready = parker.ready.lock().expect("task parker poisoned");
-                while !*ready {
-                    ready = parker.cv.wait(ready).expect("task parker poisoned");
-                }
-                *ready = false;
-            }
-        }
-    }
+    runtime().block_on(future)
 }
 
 trait ManagedComponent {
@@ -1383,6 +1410,14 @@ impl ComponentTree {
         self.commit_effects(generation);
     }
 
+    /// Returns the current rendered tree.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called before the first render. In practice this cannot
+    /// happen through the public API: every constructor (`new`,
+    /// `with_services`, `with_services_and_theme`) performs an initial
+    /// render before returning.
     pub fn view(&self) -> Node {
         self.root_view
             .clone()
@@ -1428,6 +1463,21 @@ impl ComponentTree {
             if entry.component.message_any(completed_task.message) {
                 entry.component.updated();
                 changed = true;
+            } else {
+                // See `drain_messages` below for why this is not a normal,
+                // ignorable outcome.
+                debug_assert!(
+                    false,
+                    "task result for {:?} did not match its own component's Message type; \
+                     this indicates a framework bug in component identity/keying, not a \
+                     legitimate runtime condition",
+                    completed_task.target
+                );
+                eprintln!(
+                    "framework-core: dropped a task result for {:?} because it did not match \
+                     the target component's Message type (framework bug, not application code)",
+                    completed_task.target
+                );
             }
             self.components.insert(completed_task.target, entry);
         }
@@ -1487,10 +1537,30 @@ impl ComponentTree {
             };
             if entry.component.message_any(message) {
                 entry.component.updated();
-                self.components.insert(target, entry);
             } else {
-                self.components.insert(target, entry);
+                // `message_any` returns `false` only when the boxed
+                // `Message` failed to downcast to the target component's
+                // own `C::Message` — every message queued through
+                // `ComponentContext<C::Message>` is constructed with that
+                // exact type, so this is only reachable if a component's
+                // identity/keying is broken (e.g. two different component
+                // types ended up sharing a `ComponentId`), not a normal
+                // "message for someone else" situation. Silently dropping
+                // it here is exactly the "my button's onClick just...
+                // didn't arrive" trap the standards audit calls out (P1.4):
+                // surface it loudly instead of swallowing it.
+                debug_assert!(
+                    false,
+                    "message for {target:?} did not match its own component's Message type; \
+                     this indicates a framework bug in component identity/keying, not a \
+                     legitimate runtime condition"
+                );
+                eprintln!(
+                    "framework-core: dropped a message for {target:?} because it did not match \
+                     the target component's Message type (framework bug, not application code)"
+                );
             }
+            self.components.insert(target, entry);
         }
     }
 
@@ -1599,7 +1669,7 @@ impl ComponentTree {
             })
             .collect::<HashSet<_>>();
         let mut node_ids = HashMap::new();
-        scope_component_node_ids(&mut node, id, &child_node_ids, &mut node_ids);
+        scope_component_node_ids(&mut node, &child_node_ids, &mut node_ids);
         entry.view = Some(node.clone());
         entry.node_ids = node_ids;
         entry.children = self.pending_children.remove(&id).unwrap_or_default();
@@ -1953,6 +2023,14 @@ impl Application {
         }
     }
 
+    /// Returns the primary window's current rendered tree.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the primary window has been closed. `Application` does not
+    /// currently expose a way to close the primary window itself (only
+    /// secondary windows via `ComponentContext::windows`), so this cannot
+    /// happen through the public API today.
     pub fn view(&self) -> Node {
         self.view_for(self.primary_window)
             .expect("primary window must exist")
@@ -2123,6 +2201,7 @@ impl Application {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WindowId(u64);
 
 impl WindowId {
@@ -2453,12 +2532,17 @@ impl Default for EdgeInsets {
     }
 }
 
+/// Min/max size bounds for a node's layout. Fields are private and every
+/// constructor enforces `0 <= min <= max` (when a max is set) so an invalid
+/// `Constraints` (e.g. `max_width < min_width`, previously constructible
+/// directly since the fields were `pub`) cannot be built at all, rather than
+/// being silently re-clamped at every place a value is measured against it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Constraints {
-    pub min_width: i32,
-    pub max_width: Option<i32>,
-    pub min_height: i32,
-    pub max_height: Option<i32>,
+    min_width: i32,
+    max_width: Option<i32>,
+    min_height: i32,
+    max_height: Option<i32>,
 }
 
 impl Constraints {
@@ -2470,59 +2554,85 @@ impl Constraints {
             max_height: None,
         }
     }
-    pub const fn min_width(mut self, value: i32) -> Self {
-        self.min_width = if value > 0 { value } else { 0 };
+
+    pub const fn with_min_width(mut self, value: i32) -> Self {
+        self.min_width = non_negative(value);
+        self.max_width = raise_to(self.max_width, self.min_width);
         self
     }
-    pub const fn max_width(mut self, value: i32) -> Self {
-        self.max_width = Some(if value > 0 { value } else { 0 });
+    pub const fn with_max_width(mut self, value: i32) -> Self {
+        let value = non_negative(value);
+        self.max_width = Some(if value > self.min_width {
+            value
+        } else {
+            self.min_width
+        });
         self
     }
-    pub const fn min_height(mut self, value: i32) -> Self {
-        self.min_height = if value > 0 { value } else { 0 };
+    pub const fn with_min_height(mut self, value: i32) -> Self {
+        self.min_height = non_negative(value);
+        self.max_height = raise_to(self.max_height, self.min_height);
         self
     }
-    pub const fn max_height(mut self, value: i32) -> Self {
-        self.max_height = Some(if value > 0 { value } else { 0 });
+    pub const fn with_max_height(mut self, value: i32) -> Self {
+        let value = non_negative(value);
+        self.max_height = Some(if value > self.min_height {
+            value
+        } else {
+            self.min_height
+        });
         self
     }
 
+    pub const fn min_width(&self) -> i32 {
+        self.min_width
+    }
+    pub const fn max_width(&self) -> Option<i32> {
+        self.max_width
+    }
+    pub const fn min_height(&self) -> i32 {
+        self.min_height
+    }
+    pub const fn max_height(&self) -> Option<i32> {
+        self.max_height
+    }
+
     pub const fn clamp_width(self, value: i32) -> i32 {
-        let mut value = if value < self.min_width {
+        let value = if value < self.min_width {
             self.min_width
         } else {
             value
         };
-        if let Some(max) = self.max_width {
-            let max = if max < self.min_width {
-                self.min_width
-            } else {
-                max
-            };
-            if value > max {
-                value = max;
-            }
+        match self.max_width {
+            // SAFETY invariant established by the constructors above:
+            // `max_width >= min_width` always holds here, so no defensive
+            // re-clamp of `max` against `min` is needed at this use site.
+            Some(max) if value > max => max,
+            _ => value,
         }
-        value
     }
 
     pub const fn clamp_height(self, value: i32) -> i32 {
-        let mut value = if value < self.min_height {
+        let value = if value < self.min_height {
             self.min_height
         } else {
             value
         };
-        if let Some(max) = self.max_height {
-            let max = if max < self.min_height {
-                self.min_height
-            } else {
-                max
-            };
-            if value > max {
-                value = max;
-            }
+        match self.max_height {
+            Some(max) if value > max => max,
+            _ => value,
         }
-        value
+    }
+}
+
+const fn non_negative(value: i32) -> i32 {
+    if value > 0 { value } else { 0 }
+}
+
+const fn raise_to(max: Option<i32>, min: i32) -> Option<i32> {
+    match max {
+        Some(max) if max < min => Some(min),
+        other => other,
     }
 }
 
@@ -2699,6 +2809,39 @@ impl RowStyle {
     }
 }
 
+/// The resolved container layout parameters `layout_column`/`layout_row`
+/// need. Grouping `padding`/`gap`/`align_items` here (rather than passing
+/// each positionally) removes the last argument-order footgun between two
+/// same-typed `i32`/`Alignment` parameters and is what lets both functions
+/// drop `#[allow(clippy::too_many_arguments)]` entirely instead of
+/// suppressing the lint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResolvedContainerStyle {
+    padding: EdgeInsets,
+    gap: i32,
+    align_items: Alignment,
+}
+
+impl From<ColumnStyle> for ResolvedContainerStyle {
+    fn from(style: ColumnStyle) -> Self {
+        Self {
+            padding: style.padding,
+            gap: style.gap,
+            align_items: style.align_items,
+        }
+    }
+}
+
+impl From<RowStyle> for ResolvedContainerStyle {
+    fn from(style: RowStyle) -> Self {
+        Self {
+            padding: style.padding,
+            gap: style.gap,
+            align_items: style.align_items,
+        }
+    }
+}
+
 /// Provides platform-specific intrinsic measurements for leaf nodes.
 pub trait IntrinsicMeasurer {
     fn measure(&self, kind: NodeKind, text: Option<&str>, max_width: Option<i32>) -> Size;
@@ -2823,12 +2966,9 @@ impl LayoutEngine {
                 }
                 let content_size = self.layout_column(
                     snapshot,
-                    node,
                     content_rect,
                     children,
-                    style.padding,
-                    style.gap,
-                    style.align_items,
+                    style.into(),
                     result,
                     measurer,
                 );
@@ -2852,12 +2992,9 @@ impl LayoutEngine {
                 }
                 let content_size = self.layout_row(
                     snapshot,
-                    node,
                     content_rect,
                     children,
-                    style.padding,
-                    style.gap,
-                    style.align_items,
+                    style.into(),
                     result,
                     measurer,
                 );
@@ -2876,19 +3013,20 @@ impl LayoutEngine {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn layout_column<M: IntrinsicMeasurer>(
         &self,
         snapshot: &TreeSnapshot,
-        _node: &TreeNode,
         rect: Rect,
         children: Vec<&TreeNode>,
-        padding: EdgeInsets,
-        gap: i32,
-        align_items: Alignment,
+        style: ResolvedContainerStyle,
         result: &mut LayoutResult,
         measurer: &M,
     ) -> Size {
+        let ResolvedContainerStyle {
+            padding,
+            gap,
+            align_items,
+        } = style;
         let content = inner_rect(rect, padding);
         if children.is_empty() {
             return Size::new(
@@ -2986,19 +3124,20 @@ impl LayoutEngine {
         Size::new(natural_width.max(0) as u32, natural_height.max(0) as u32)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn layout_row<M: IntrinsicMeasurer>(
         &self,
         snapshot: &TreeSnapshot,
-        _node: &TreeNode,
         rect: Rect,
         children: Vec<&TreeNode>,
-        padding: EdgeInsets,
-        gap: i32,
-        align_items: Alignment,
+        style: ResolvedContainerStyle,
         result: &mut LayoutResult,
         measurer: &M,
     ) -> Size {
+        let ResolvedContainerStyle {
+            padding,
+            gap,
+            align_items,
+        } = style;
         let content = inner_rect(rect, padding);
         if children.is_empty() {
             return Size::new(
@@ -3570,7 +3709,6 @@ impl Node {
 /// are left intact when their parent is scoped.
 fn scope_component_node_ids(
     node: &mut Node,
-    component: ComponentId,
     child_node_ids: &HashSet<NodeId>,
     node_ids: &mut HashMap<NodeId, NodeId>,
 ) {
@@ -3594,12 +3732,12 @@ fn scope_component_node_ids(
     match node {
         Node::Column(column) => {
             for child in &mut column.children {
-                scope_component_node_ids(child, component, child_node_ids, node_ids);
+                scope_component_node_ids(child, child_node_ids, node_ids);
             }
         }
         Node::Row(row) => {
             for child in &mut row.children {
-                scope_component_node_ids(child, component, child_node_ids, node_ids);
+                scope_component_node_ids(child, child_node_ids, node_ids);
             }
         }
         Node::Label(_) | Node::Button(_) | Node::TextInput(_) => {}
@@ -3878,6 +4016,13 @@ pub struct TreeSnapshot {
 }
 
 impl TreeSnapshot {
+    /// Builds an immutable snapshot of `root` for the layout/hit-testing
+    /// passes to read from.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TreeError::DuplicateNodeId` if two nodes in `root` share the
+    /// same `NodeId` — every node key must be unique within a single view.
     pub fn from_node(root: &Node) -> Result<Self, TreeError> {
         root.validate_unique_ids()?;
 
@@ -3901,6 +4046,11 @@ impl TreeSnapshot {
     /// press, and focus — remain the backend's responsibility: it already
     /// tracks focus for Tab traversal and can re-resolve a single focused
     /// node's style against the same theme when focus changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TreeError::DuplicateNodeId` under the same condition as
+    /// `from_node` above.
     pub fn from_node_with_theme(root: &Node, theme: &Theme) -> Result<Self, TreeError> {
         let mut snapshot = Self::from_node(root)?;
         for node in snapshot.nodes.values_mut() {
@@ -4075,6 +4225,14 @@ impl Error for TreeError {}
 pub trait Platform {
     type Error: Error + Send + Sync + 'static;
 
+    /// Runs the native event loop until the application exits.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Self::Error` if the platform backend fails to initialize or
+    /// encounters an unrecoverable native error while running — for
+    /// `framework-windows`, this includes a component panicking inside a
+    /// `WNDPROC` callback (see `Error::ComponentPanicked`).
     fn run(&mut self, application: &mut Application) -> Result<(), Self::Error>;
 
     /// Reports the portable features available from this adapter at runtime.
@@ -4681,10 +4839,10 @@ mod tests {
             "This is a long label",
             LayoutStyle::new().constraints(
                 Constraints::new()
-                    .min_width(100)
-                    .max_width(120)
-                    .min_height(20)
-                    .max_height(40),
+                    .with_min_width(100)
+                    .with_max_width(120)
+                    .with_min_height(20)
+                    .with_max_height(40),
             ),
         );
         let snapshot = TreeSnapshot::from_node(&Node::column("root", [node])).unwrap();

@@ -95,6 +95,7 @@ The authoritative commands on Windows remain:
 cargo fmt --all
 cargo check --workspace
 cargo test --workspace
+cargo audit
 cargo run -p hello-label
 ```
 

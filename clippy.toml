@@ -1,0 +1,11 @@
+# Workspace-wide clippy configuration.
+#
+# Lint *levels* (which lints are warn/deny) live in `[workspace.lints]` in the
+# root Cargo.toml, per Rust 2024's native workspace-lints support. This file
+# is for the handful of lints that take a threshold rather than an on/off
+# switch.
+
+# `framework-windows`'s Win32 message-dispatch `match` arms are legitimately
+# large; keep clippy's default rather than fighting the lint on structurally
+# necessary code, but keep the value explicit here instead of implicit.
+too-many-lines-threshold = 200
