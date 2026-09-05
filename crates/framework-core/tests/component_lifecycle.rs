@@ -56,11 +56,7 @@ impl Component for Counter {
     type Message = CounterMessage;
 
     fn new(_props: CounterProps) -> Self {
-        Self {
-            ran: Arc::new(AtomicUsize::new(0)),
-            ticks: 0,
-            spawned: false,
-        }
+        Self { ran: Arc::new(AtomicUsize::new(0)), ticks: 0, spawned: false }
     }
     fn props(&self) -> &CounterProps {
         static PROPS: CounterProps = CounterProps;
@@ -80,8 +76,9 @@ impl Component for Counter {
         if !self.spawned {
             self.spawned = true;
             let ran = Arc::clone(&self.ran);
+            let sleep = context.sleep(Duration::from_millis(30));
             context.spawn(async move {
-                framework_core::SleepFuture::new(Duration::from_millis(30)).await;
+                sleep.await;
                 ran.fetch_add(1, Ordering::SeqCst);
                 CounterMessage::Tick
             });
@@ -111,16 +108,13 @@ fn rerendering_does_not_cancel_or_respawn_tasks() {
     // "rerendering does not cancel tasks" rule, none of these should cancel
     // or duplicate the single task spawned on the first render.
     for _ in 0..5 {
-        tree.render();
+        let _ = tree.render();
     }
 
     pump_until_quiet(&mut tree, SETTLE);
 
     let text = label_text(&tree.view(), "counter").expect("counter label must exist");
-    assert_eq!(
-        text, "1",
-        "exactly one Tick should have been delivered despite multiple rerenders"
-    );
+    assert_eq!(text, "1", "exactly one Tick should have been delivered despite multiple rerenders");
 }
 
 // ---------------------------------------------------------------------
@@ -154,10 +148,7 @@ impl Component for Child {
     type Message = ChildMessage;
 
     fn new(props: ChildProps) -> Self {
-        Self {
-            props,
-            spawned: false,
-        }
+        Self { props, spawned: false }
     }
     fn props(&self) -> &ChildProps {
         &self.props
@@ -174,10 +165,11 @@ impl Component for Child {
         if !self.spawned {
             self.spawned = true;
             let ran = Arc::clone(&self.props.0);
+            // Long enough that the parent can remove the child well before
+            // this would otherwise complete.
+            let sleep = context.sleep(Duration::from_millis(200));
             context.spawn(async move {
-                // Long enough that the parent can remove the child well
-                // before this would otherwise complete.
-                framework_core::SleepFuture::new(Duration::from_millis(200)).await;
+                sleep.await;
                 ran.fetch_add(1, Ordering::SeqCst);
                 ChildMessage::Done
             });
@@ -196,10 +188,7 @@ impl Component for Parent {
     type Message = ();
 
     fn new(_props: ToggleProps) -> Self {
-        Self {
-            show_child: true,
-            ran: Arc::new(AtomicUsize::new(0)),
-        }
+        Self { show_child: true, ran: Arc::new(AtomicUsize::new(0)) }
     }
     fn props(&self) -> &ToggleProps {
         static PROPS: ToggleProps = ToggleProps;
@@ -215,14 +204,16 @@ impl Component for Parent {
         }
     }
     fn render(&mut self, context: &mut ComponentContext<'_, ()>) -> Node {
+        let toggle = Node::button("toggle", "toggle");
         if self.show_child {
-            context.child_with_props::<Child, _>(
+            let child = context.child_with_props::<Child, _>(
                 "child",
                 ChildProps(Arc::clone(&self.ran)),
                 Child::new,
-            )
+            );
+            Node::column("root", [toggle, child])
         } else {
-            Node::label("empty", "empty")
+            Node::column("root", [toggle, Node::label("empty", "empty")])
         }
     }
 }
@@ -238,9 +229,7 @@ fn removing_a_component_cancels_its_outstanding_tasks() {
 
     // Remove the child well before its 200ms task would complete.
     std::thread::sleep(Duration::from_millis(20));
-    tree.dispatch(Event::Click {
-        target: NodeId::from_key("toggle"),
-    });
+    tree.dispatch(Event::Click { target: NodeId::from_key("toggle") });
     assert_eq!(
         label_text(&tree.view(), "empty"),
         Some("empty".to_string()),
@@ -319,10 +308,8 @@ impl Component for EffectProbe {
 
 #[test]
 fn effects_are_retained_across_unchanged_dependencies_and_cleaned_up_on_change() {
-    let counts = Arc::new(EffectCounts {
-        runs: AtomicUsize::new(0),
-        cleanups: AtomicUsize::new(0),
-    });
+    let counts =
+        Arc::new(EffectCounts { runs: AtomicUsize::new(0), cleanups: AtomicUsize::new(0) });
 
     let mut tree = ComponentTree::new(EffectProbe::new(EffectProbeProps {
         dependency: 1,
@@ -332,8 +319,8 @@ fn effects_are_retained_across_unchanged_dependencies_and_cleaned_up_on_change()
     assert_eq!(counts.cleanups.load(Ordering::SeqCst), 0);
 
     // Rerendering with the *same* dependency must not rerun the effect.
-    tree.render();
-    tree.render();
+    let _ = tree.render();
+    let _ = tree.render();
     assert_eq!(
         counts.runs.load(Ordering::SeqCst),
         1,

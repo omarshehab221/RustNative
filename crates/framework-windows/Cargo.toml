@@ -7,6 +7,7 @@ license.workspace = true
 description.workspace = true
 repository.workspace = true
 homepage.workspace = true
+readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
@@ -20,3 +21,21 @@ async-trait.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
+# Used only by `services::dialogs` for the modern `IFileOpenDialog`/
+# `IFileSaveDialog` COM interfaces: `windows-sys` (used everywhere else in
+# this crate) deliberately provides flat FFI bindings only — no COM
+# interface/vtable definitions at all (confirmed by their absence from its
+# own source) — so implementing these by hand against raw `windows-sys`
+# would mean re-deriving each interface's GUID, vtable layout, and calling
+# convention from Microsoft's documentation with no compiler or bindings-
+# crate help catching a mistake. `windows` provides the real, maintained
+# bindings for exactly this; every other file in this crate has no reason
+# to pull in COM interface support it doesn't use, hence this dependency
+# being scoped to the one module that needs it via minimal features below
+# rather than added workspace-wide.
+windows = { version = ">=0.60, <=0.62", default-features = false, features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+] }

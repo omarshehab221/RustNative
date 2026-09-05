@@ -1,0 +1,128 @@
+name: CI
+
+# This workflow closes the standards audit's P1.17 finding: before it
+# existed, nothing in this repository's history had ever actually compiled
+# `framework-windows`'s `native` module — it is `#[cfg(windows)]`-gated, and
+# every prior development/review pass ran on Linux, where that module is
+# simply excluded from the build. `cargo check`/`cargo test` on Linux only
+# ever validated `framework-core` and the small `#[cfg(windows)]`-free
+# surface of `framework-windows` (errors, the `Platform` trait impl
+# signature, service traits). `test-windows` (a real Windows runner) and
+# `windows-cross-wine` (a fast, Linux-hosted signal using this repository's
+# own `tools/windows-cross-test.sh`) are what actually build and test the
+# real Win32 window backend.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint:
+    name: fmt + clippy (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  test-linux:
+    name: build + test (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check
+        run: cargo check --workspace --all-targets
+      - name: cargo test
+        run: cargo test --workspace
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps
+
+  msrv:
+    name: MSRV (1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check (MSRV)
+        run: cargo check --workspace --all-targets
+
+  supply-chain:
+    name: cargo-deny + cargo-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-deny
+      - uses: taiki-e/install-action@cargo-audit
+      - name: cargo deny check
+        run: cargo deny check
+      - name: cargo audit
+        run: cargo audit
+
+  windows-cross-wine:
+    name: Windows cross-compile + Wine (ubuntu, fast signal)
+    runs-on: ubuntu-latest
+    # Complements `test-windows` below rather than replacing it: this job
+    # proves `framework-windows`'s native module compiles, links, and
+    # behaves plausibly under Wine on every push/PR, using only Ubuntu
+    # runner minutes and without waiting on the (often busier)
+    # `windows-latest` runner queue — see `tools/windows-cross-test.sh` for
+    # exactly what "behaves plausibly under Wine" does and does not verify
+    # relative to real Windows.
+    #
+    # RUSTFLAGS is cleared for this job: the workflow-level `-D warnings`
+    # would otherwise apply to `-Z build-std`'s from-source compilation of
+    # `core`/`alloc`/`std` themselves, which this repository does not
+    # control the warning-cleanliness of.
+    env:
+      RUSTFLAGS: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: install mingw-w64 + wine
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64
+      - name: cross-compile + run tests under Wine
+        run: ./tools/windows-cross-test.sh
+      - name: cross-compile clippy under Wine's toolchain
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo clippy \
+            -Z build-std=core,alloc,std,panic_abort,test \
+            --target x86_64-pc-windows-gnu --workspace --all-targets \
+            -- -D warnings
+
+  test-windows:
+    name: build + test (windows, native backend)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check (native backend included)
+        run: cargo check --workspace --all-targets
+      - name: cargo test (native backend included)
+        run: cargo test --workspace
+      - name: cargo clippy (native backend included)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings

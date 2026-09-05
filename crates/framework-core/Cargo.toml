@@ -7,6 +7,7 @@ license.workspace = true
 description.workspace = true
 repository.workspace = true
 homepage.workspace = true
+readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
@@ -32,3 +33,11 @@ serde = ["dep:serde"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "test-util"] }
+proptest = "1"
+
+[[bench]]
+name = "core_benchmarks"
+harness = false
+
+[dev-dependencies.criterion]
+version = "0.5"

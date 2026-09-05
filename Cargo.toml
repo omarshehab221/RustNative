@@ -1,9 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/framework-core",
-    "crates/framework-windows",
-    "examples/hello-label",
+    "crates/*",
+    "examples/*",
 ]
 
 [workspace.package]
@@ -13,6 +12,7 @@ license = "MIT OR Apache-2.0"
 description = "A Rust-first, native-control-oriented cross-platform application framework"
 repository = "https://github.com/<org>/RustNative"
 homepage = "https://github.com/<org>/RustNative"
+readme = "README.md"
 keywords = ["gui", "windows", "native", "framework", "ui"]
 categories = ["gui", "os::windows-apis"]
 
@@ -29,6 +29,7 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_System_SystemServices",
+    "Win32_System_Threading",
     "Win32_System_Com",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
@@ -45,3 +46,24 @@ undocumented_unsafe_blocks = "deny"
 too_many_arguments = "warn"
 missing_panics_doc = "warn"
 missing_errors_doc = "warn"
+# P2.40: move from the previous minimal, ad hoc lint set to a deliberately
+# curated policy — broad `pedantic`/`cargo` coverage, with specific `allow`s
+# only where this codebase makes a considered, load-bearing exception
+# (documented per lint below) rather than blanket-suppressing an entire
+# category.
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# `unsafe_op_in_unsafe_fn` (above) already denies the sharper, more
+# consequential half of this lint's concern — an `unsafe fn`'s body
+# silently treating its *entire* scope as pre-audited. The remaining
+# "explain why this whole function is unsafe" question is answered, in
+# `framework-windows`, per call site by that crate's own safety-comment
+# discipline (see its module docs) rather than forced into a doc section on
+# every signature; duplicating the same explanation at both levels would
+# drift, not add safety.
+missing_safety_doc = "allow"
+# This crate's modules are intentionally named after the *domain concept*
+# they own (`identity::ComponentId`, `layout::LayoutEngine`,
+# `scheduler::Scheduler`), which is what the standards audit's own
+# recommended module map asks for — not an accident this lint should flag.
+module_name_repetitions = "allow"

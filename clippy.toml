@@ -9,3 +9,14 @@
 # large; keep clippy's default rather than fighting the lint on structurally
 # necessary code, but keep the value explicit here instead of implicit.
 too-many-lines-threshold = 200
+
+# `services::dialogs`'s dependency on the `windows` crate (see its own
+# module docs for why, and `Cargo.toml`'s comment on the same dependency)
+# pulls in its own, independently-versioned proc-macro toolchain (a second
+# `syn` major version) alongside this workspace's own `syn` v3 dependency.
+# This is a real, but externally-imposed and cosmetic (proc-macro-only,
+# nothing at runtime) duplication this workspace does not control — the
+# `windows` crate ecosystem's own release cadence, not a choice made here —
+# so it is named as an accepted exception rather than left for
+# `multiple_crate_versions` to flag as if it were an oversight.
+allowed-duplicate-crates = ["syn"]

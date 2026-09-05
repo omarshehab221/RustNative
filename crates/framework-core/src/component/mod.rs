@@ -1,0 +1,168 @@
+//! Application components: the [`Component`] trait, the render-time
+//! [`ComponentContext`] capability, and the framework-managed
+//! [`ComponentTree`] that creates/reuses/removes them.
+//!
+//! This module owns exactly the "what is a component, and how does the
+//! framework keep a tree of them alive across renders" responsibility. It
+//! depends on [`crate::node`] (what a component *produces*),
+//! [`crate::event`] (what a component *receives*), and
+//! [`crate::scheduler`] (how a component does asynchronous work) — but
+//! nothing here depends on layout, styling, or any platform: see the
+//! standards audit's P1.21/P2.22 findings on module boundaries, which this
+//! split is a direct response to.
+
+mod context;
+mod effects;
+mod error;
+mod tree;
+
+pub use context::{Callback, ComponentContext, WindowRequests};
+pub use effects::{EffectCleanup, EffectContext};
+pub use error::RenderError;
+pub use tree::ComponentTree;
+
+pub(crate) use context::WindowCommand;
+
+use crate::event::Event;
+use crate::node::Node;
+
+/// The application/component contract.
+///
+/// A component owns its state and describes how state becomes UI. Platform
+/// backends only need to know how to feed framework events into this
+/// contract.
+pub trait Component: 'static {
+    /// Parent-provided, externally comparable inputs to this component.
+    type Props: Clone + PartialEq + 'static;
+    /// A typed message this component can emit to its parent through a
+    /// [`Callback`], or receive from an asynchronous task/effect.
+    type Message: Send + 'static;
+
+    fn new(props: Self::Props) -> Self;
+    fn props(&self) -> &Self::Props;
+    fn set_props(&mut self, props: Self::Props);
+
+    fn view(&self) -> Node;
+    fn update(&mut self, event: Event);
+
+    /// Handles typed messages emitted by child components through a
+    /// [`Callback`].
+    fn message(&mut self, _message: Self::Message) {}
+
+    /// Renders the component with access to the framework-managed child
+    /// tree. Components that do not compose child components can rely on
+    /// the default implementation, which simply calls `view()`.
+    fn render(&mut self, _context: &mut ComponentContext<'_, Self::Message>) -> Node {
+        self.view()
+    }
+
+    /// Called after the framework applies changed parent-provided props.
+    fn props_changed(&mut self) {}
+
+    /// Called when the component becomes part of the active component
+    /// tree.
+    fn mounted(&mut self) {}
+
+    /// Called after the component handles an event and has a chance to
+    /// update its state.
+    fn updated(&mut self) {}
+
+    /// Called when the component leaves the active component tree.
+    fn unmounted(&mut self) {}
+}
+
+/// A stable slot for composing one component directly outside a managed
+/// [`ComponentTree`]. Kept for low-level ownership scenarios; application
+/// code should prefer [`ComponentContext::child`].
+pub struct ComponentHost<C: Component> {
+    component: C,
+}
+
+impl<C: Component> ComponentHost<C> {
+    pub fn new(mut component: C) -> Self {
+        component.mounted();
+        Self { component }
+    }
+
+    pub fn is_mounted(&self) -> bool {
+        true
+    }
+    pub fn view(&self) -> Node {
+        self.component.view()
+    }
+
+    pub fn update(&mut self, event: Event) -> bool {
+        if !self.owns_event(&event) {
+            return false;
+        }
+        self.component.update(event);
+        self.component.updated();
+        true
+    }
+
+    pub fn owns_event(&self, event: &Event) -> bool {
+        match event.target() {
+            Some(target) => self.component.view().contains_id(target),
+            None => true,
+        }
+    }
+
+    pub fn component(&self) -> &C {
+        &self.component
+    }
+    pub fn component_mut(&mut self) -> &mut C {
+        &mut self.component
+    }
+
+    pub fn replace(&mut self, mut component: C) {
+        self.component.unmounted();
+        component.mounted();
+        self.component = component;
+    }
+}
+
+impl<C: Component> Drop for ComponentHost<C> {
+    fn drop(&mut self) {
+        self.component.unmounted();
+    }
+}
+
+#[cfg(test)]
+mod host_tests {
+    use super::*;
+
+    #[derive(Clone, PartialEq, Default)]
+    struct Props;
+
+    struct Simple {
+        updates: u32,
+    }
+
+    impl Component for Simple {
+        type Props = Props;
+        type Message = ();
+
+        fn new(_props: Self::Props) -> Self {
+            Self { updates: 0 }
+        }
+        fn props(&self) -> &Self::Props {
+            &Props
+        }
+        fn set_props(&mut self, _props: Self::Props) {}
+        fn view(&self) -> Node {
+            Node::button("go", "Go")
+        }
+        fn update(&mut self, _event: Event) {
+            self.updates += 1;
+        }
+    }
+
+    #[test]
+    fn component_host_only_delivers_events_it_owns() {
+        let mut host = ComponentHost::new(Simple::new(Props));
+        assert!(host.update(Event::Click { target: crate::identity::NodeId::from_key("go") }));
+        assert_eq!(host.component().updates, 1);
+        assert!(!host.update(Event::Click { target: crate::identity::NodeId::from_key("other") }));
+        assert_eq!(host.component().updates, 1);
+    }
+}

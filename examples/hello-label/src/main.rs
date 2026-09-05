@@ -89,9 +89,7 @@ impl Component for CounterPanel {
                         Node::button_with_layout(
                             "increment",
                             "Increment",
-                            LayoutStyle::new()
-                                .width(SizeMode::Auto)
-                                .height(SizeMode::Fixed(36)),
+                            LayoutStyle::new().width(SizeMode::Auto).height(SizeMode::Fixed(36)),
                         )
                         // Demonstrates `disabled`: past 5, the button is
                         // realized with `EnableWindow(hwnd, 0)` and the
@@ -99,21 +97,13 @@ impl Component for CounterPanel {
                         .disabled(self.count >= 5),
                         Node::button_with_layout(
                             "async-task",
-                            if self.async_task.is_some() {
-                                "Cancel Async"
-                            } else {
-                                "Run Async"
-                            },
-                            LayoutStyle::new()
-                                .width(SizeMode::Auto)
-                                .height(SizeMode::Fixed(36)),
+                            if self.async_task.is_some() { "Cancel Async" } else { "Run Async" },
+                            LayoutStyle::new().width(SizeMode::Auto).height(SizeMode::Fixed(36)),
                         ),
                         Node::label_with_layout(
                             "async-status",
                             format!("Async: {}", self.async_status),
-                            LayoutStyle::new()
-                                .width(SizeMode::Fill)
-                                .height(SizeMode::Auto),
+                            LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Auto),
                         ),
                         Node::label_with_layout(
                             "lifecycle",
@@ -121,14 +111,10 @@ impl Component for CounterPanel {
                                 "Mounted: {} | Unmounted: {} | Props updated: {}",
                                 self.mounted_count, self.unmounted_count, self.props_update_count
                             ),
-                            LayoutStyle::new()
-                                .width(SizeMode::Fill)
-                                .height(SizeMode::Auto),
+                            LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Auto),
                         ),
                     ],
-                    LayoutStyle::new()
-                        .width(SizeMode::Fixed(520))
-                        .align_self(Alignment::Center),
+                    LayoutStyle::new().width(SizeMode::Fixed(520)).align_self(Alignment::Center),
                     RowStyle::new()
                         .padding(EdgeInsets::symmetric(12, 20))
                         .gap(12)
@@ -154,10 +140,7 @@ impl Component for CounterPanel {
                 ),
             ],
             LayoutStyle::new(),
-            ColumnStyle::new()
-                .padding(EdgeInsets::all(24))
-                .gap(16)
-                .align_items(Alignment::Center),
+            ColumnStyle::new().padding(EdgeInsets::all(24)).gap(16).align_items(Alignment::Center),
         )
     }
 
@@ -165,26 +148,30 @@ impl Component for CounterPanel {
         match event {
             Event::Click { target } if target == NodeId::from_key("increment") => {
                 self.count += 1;
-                self.props
-                    .on_message
-                    .send(AppMessage::ChildCountChanged(self.count));
+                self.props.on_message.send(AppMessage::ChildCountChanged(self.count));
             }
             Event::Click { target } if target == NodeId::from_key("async-task") => {
                 if let Some(task) = &self.async_task {
                     task.cancel();
                     self.async_task = None;
-                    self.async_status = "Cancelled".to_owned();
+                    "Cancelled".clone_into(&mut self.async_status);
                 } else {
                     self.async_requested = true;
-                    self.async_status = "Running".to_owned();
+                    "Running".clone_into(&mut self.async_status);
                 }
             }
             Event::TextChanged { target, value } if target == NodeId::from_key("name") => {
-                self.name = value.clone();
-                self.props
-                    .on_message
-                    .send(AppMessage::ChildNameChanged(value));
+                self.name.clone_from(&value);
+                self.props.on_message.send(AppMessage::ChildNameChanged(value));
             }
+            // The explicit list below is deliberate documentation, not dead
+            // code: it names every event kind this component chooses not to
+            // react to, so a reader can see at a glance what was considered
+            // rather than just assuming an oversight. `#[allow]`d rather
+            // than collapsed into the wildcard alone, since collapsing it
+            // would lose exactly that value for a lint whose concern
+            // (identical arm bodies) doesn't apply to documentation intent.
+            #[allow(clippy::match_same_arms)]
             Event::KeyDown { .. }
             | Event::TextInput { .. }
             | Event::TextChanged { .. }
@@ -208,7 +195,7 @@ impl Component for CounterPanel {
             CounterMessage::AsyncCompleted => {
                 self.async_task = None;
                 self.async_requested = false;
-                self.async_status = "Completed".to_owned();
+                "Completed".clone_into(&mut self.async_status);
             }
         }
     }
@@ -260,7 +247,7 @@ impl Component for AuxiliaryWindow {
     type Props = ();
     type Message = ();
 
-    fn new(_: Self::Props) -> Self {
+    fn new((): Self::Props) -> Self {
         Self
     }
 
@@ -269,7 +256,7 @@ impl Component for AuxiliaryWindow {
         &PROPS
     }
 
-    fn set_props(&mut self, _: Self::Props) {}
+    fn set_props(&mut self, (): Self::Props) {}
 
     fn view(&self) -> Node {
         Node::column_with_layout(
@@ -299,9 +286,7 @@ impl Component for SettingsWindow {
     type Message = ();
 
     fn new(props: Self::Props) -> Self {
-        Self {
-            opened_at_click: props,
-        }
+        Self { opened_at_click: props }
     }
 
     fn props(&self) -> &Self::Props {
@@ -341,10 +326,8 @@ impl AppShell {
     }
 
     fn panel_title(&self) -> &'static str {
-        [
-            "Counter Panel — Parent-owned title",
-            "Counter Panel — Props changed without remounting",
-        ][self.title_index]
+        ["Counter Panel — Parent-owned title", "Counter Panel — Props changed without remounting"]
+            [self.title_index]
     }
 }
 
@@ -352,7 +335,7 @@ impl Component for AppShell {
     type Props = ();
     type Message = AppMessage;
 
-    fn new(_: Self::Props) -> Self {
+    fn new((): Self::Props) -> Self {
         Self::new()
     }
 
@@ -361,7 +344,7 @@ impl Component for AppShell {
         &PROPS
     }
 
-    fn set_props(&mut self, _: Self::Props) {}
+    fn set_props(&mut self, (): Self::Props) {}
 
     fn view(&self) -> Node {
         Node::label("app-shell-placeholder", "Managed component tree")
@@ -402,11 +385,7 @@ impl Component for AppShell {
                     [
                         Node::button_with_layout(
                             "toggle-panel",
-                            if self.panel_visible {
-                                "Unmount Panel"
-                            } else {
-                                "Mount Panel"
-                            },
+                            if self.panel_visible { "Unmount Panel" } else { "Mount Panel" },
                             LayoutStyle::new().height(SizeMode::Fixed(36)),
                         ),
                         Node::button_with_layout(
@@ -415,17 +394,12 @@ impl Component for AppShell {
                             LayoutStyle::new().height(SizeMode::Fixed(36)),
                         ),
                     ],
-                    LayoutStyle::new()
-                        .width(SizeMode::Fixed(520))
-                        .align_self(Alignment::Center),
+                    LayoutStyle::new().width(SizeMode::Fixed(520)).align_self(Alignment::Center),
                     RowStyle::new().gap(12).align_items(Alignment::Center),
                 ),
                 Node::label_with_layout(
                     "child-status",
-                    format!(
-                        "Child count: {} | Name: {}",
-                        self.child_count, self.child_name
-                    ),
+                    format!("Child count: {} | Name: {}", self.child_count, self.child_name),
                     LayoutStyle::new().height(SizeMode::Fixed(32)),
                 ),
                 panel.unwrap_or_else(|| {
@@ -439,10 +413,7 @@ impl Component for AppShell {
                 }),
             ],
             LayoutStyle::new(),
-            ColumnStyle::new()
-                .padding(EdgeInsets::all(24))
-                .gap(16)
-                .align_items(Alignment::Center),
+            ColumnStyle::new().padding(EdgeInsets::all(24)).gap(16).align_items(Alignment::Center),
         )
     }
 
@@ -479,16 +450,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         MenuItem::submenu(
             "file",
             "File",
-            [MenuItem::action(
-                "file.new-settings-window",
-                "New Settings Window",
-            )],
+            [MenuItem::action("file.new-settings-window", "New Settings Window")],
         ),
-        MenuItem::submenu(
-            "view",
-            "View",
-            [MenuItem::action("view.toggle-panel", "Toggle Panel")],
-        ),
+        MenuItem::submenu("view", "View", [MenuItem::action("view.toggle-panel", "Toggle Panel")]),
     ]);
 
     let mut application = Application::new(

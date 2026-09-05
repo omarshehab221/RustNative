@@ -77,9 +77,27 @@ RustNative/
 ├── crates/
 │   ├── framework-core/
 │   │   ├── Cargo.toml
-│   │   ├── src/lib.rs
-│   │   └── tests/
-│   │       └── component_lifecycle.rs
+│   │   ├── src/
+│   │   │   ├── lib.rs              (module map + flat public re-exports)
+│   │   │   ├── identity.rs          (NodeId/ComponentId/WindowId + key interning)
+│   │   │   ├── event.rs
+│   │   │   ├── node.rs
+│   │   │   ├── component/           (Component trait, context, effects, tree)
+│   │   │   ├── reconcile/           (snapshot + diff)
+│   │   │   ├── layout/              (geometry, constraints, measure, engine)
+│   │   │   ├── style/               (theme)
+│   │   │   ├── scheduler/           (Scheduler, TaskScope, pluggable Executor)
+│   │   │   ├── services/            (service contracts + in-memory impls)
+│   │   │   ├── capability.rs
+│   │   │   ├── menu.rs
+│   │   │   ├── window.rs
+│   │   │   ├── application.rs
+│   │   │   └── platform.rs
+│   │   ├── tests/
+│   │   │   ├── component_lifecycle.rs
+│   │   │   └── property_tests.rs
+│   │   └── benches/
+│   │       └── core_benchmarks.rs
 │   │
 │   └── framework-windows/
 │       ├── Cargo.toml
