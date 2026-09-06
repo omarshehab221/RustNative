@@ -17,8 +17,14 @@ keywords = ["gui", "windows", "native", "framework", "ui"]
 categories = ["gui", "os::windows-apis"]
 
 [workspace.dependencies]
-framework-core = { path = "crates/framework-core" }
-framework-windows = { path = "crates/framework-windows" }
+# `version` alongside `path` is not redundant: a path-only dependency is a
+# wildcard requirement, which `cargo deny check bans` rejects and which makes
+# the crate unpublishable — `cargo publish` refuses a dependency with no
+# version requirement, because a consumer resolving from a registry has no
+# path to follow. With both, a workspace build still uses the path and a
+# published build gets a real requirement.
+framework-core = { path = "crates/framework-core", version = "0.1.0" }
+framework-windows = { path = "crates/framework-windows", version = "0.1.0" }
 tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 parking_lot = "0.12"
 async-trait = "0.1"

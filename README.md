@@ -12,7 +12,10 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Window Lifecycle + Multi-Window Support**.
+The latest completed milestone is the **standards-audit remediation pass**
+(`Audit.md`), on top of Window Lifecycle + Multi-Window Support. See
+`BUILD_STATUS.md` for what that pass closed, what it found while closing it,
+and what is still open.
 
 ## Architecture
 
@@ -85,12 +88,13 @@ RustNative/
 │   │   │   ├── component/           (Component trait, context, effects, tree)
 │   │   │   ├── reconcile/           (snapshot + diff)
 │   │   │   ├── layout/              (geometry, constraints, measure, engine)
-│   │   │   ├── style/               (theme)
+│   │   │   ├── style/               (theme + the two style phases)
 │   │   │   ├── scheduler/           (Scheduler, TaskScope, pluggable Executor)
 │   │   │   ├── services/            (service contracts + in-memory impls)
 │   │   │   ├── capability.rs
 │   │   │   ├── menu.rs
 │   │   │   ├── window.rs
+│   │   │   ├── panic.rs             (component-panic policy)
 │   │   │   ├── application.rs
 │   │   │   └── platform.rs
 │   │   ├── tests/
@@ -101,12 +105,40 @@ RustNative/
 │   │
 │   └── framework-windows/
 │       ├── Cargo.toml
-│       └── src/lib.rs
+│       └── src/
+│           ├── lib.rs              (module map + flat public re-exports)
+│           ├── error.rs             (Error + NativeContext + Win32Category)
+│           ├── platform.rs          (WindowsPlatform: the Platform impl)
+│           ├── ffi.rs               (shared string/memory helpers)
+│           ├── services/            (clipboard, dialogs, notifications, system)
+│           └── native/              (the Win32 window backend)
+│               ├── context.rs       (the only place a raw handle becomes a reference)
+│               ├── win32.rs         (Win32 return-value classification)
+│               ├── message_loop.rs  (window class, message loop, WNDPROC)
+│               ├── runtime.rs       (per-window Runtime + WindowRegistry)
+│               ├── container.rs     (container WNDPROC)
+│               ├── registry.rs      (NodeId <-> native object, both directions)
+│               ├── rendering/       (realization, controls, styling,
+│               │                     accessibility, scrolling)
+│               ├── input.rs         (key translation, focus/hover/press)
+│               ├── measure.rs       (GDI text measurement)
+│               ├── menu.rs          (MenuBar -> HMENU, with RAII)
+│               ├── user_data.rs     (typed GWLP_USERDATA accessors)
+│               ├── window_handles.rs
+│               ├── harness.rs       (test-only bounded message pump)
+│               └── integration.rs   (test-only native scenarios)
 │
-└── examples/
-    └── hello-label/
-        ├── Cargo.toml
-        └── src/main.rs
+├── examples/
+│   ├── hello-label/
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   └── gdi-font-diagnostic/         (standalone GDI handle-lifetime probe)
+│       ├── Cargo.toml
+│       └── src/main.rs
+│
+└── tools/
+    ├── windows-cross-test.sh        (mingw + Wine cross-compile/run)
+    └── win_probes/                  (C ground-truth probes for Win32 behavior)
 ```
 
 ### `framework-core`
@@ -149,9 +181,22 @@ Owns Windows-specific implementation details:
 - native focus APIs;
 - native scrolling/viewport implementation;
 - Windows event-loop wakeups;
+- the accessibility bridge (`WS_TABSTOP`, and MSAA dynamic annotation for
+  name/description/role);
 - platform-specific unsafe code.
 
 This is the only place where Windows APIs should leak into the framework implementation.
+
+Two modules inside `native/` exist specifically to keep the unsafe surface
+small, and are worth reading before anything else there:
+
+- `native::context` is the **only** place a raw Win32 handle or stored raw
+  pointer becomes a Rust reference. The lifetime argument that makes every
+  such conversion sound is stated there once, rather than re-derived in a
+  `SAFETY` comment at each call site.
+- `native::win32` classifies Win32 return values — `must_succeed`,
+  `best_effort`, `informational`, `ignored_by_contract` — so that ignoring
+  one is a deliberate, readable decision rather than an omission.
 
 ## Current component data flow
 
@@ -306,7 +351,25 @@ Accessibility semantics currently include:
 - description;
 - focusability.
 
-Because the framework uses native controls, standard native accessibility behavior is retained. A full cross-platform accessibility bridge remains future work.
+Every node kind defaults to the role and focusability that describe it — a
+button is an activatable control and a keyboard stop, a label is static text
+and is not — so the model carries real information without an application
+filling it in node by node. `Node::with_accessibility` replaces it wholesale
+where that default is wrong.
+
+The Windows backend realizes all four through a single adapter
+(`native::rendering::accessibility`):
+
+- **focusability** as the `WS_TABSTOP` window style, applied symmetrically,
+  so a node that stops being focusable leaves the tab order rather than
+  merely stopping being added to it;
+- **name, description, and role** through Microsoft's Dynamic Annotation API
+  (`IAccPropServices`), which overrides those properties on a standard
+  control without replacing its own implementation. Where the annotation
+  service is unavailable, controls fall back to their native defaults.
+
+A full UI Automation provider — needed for custom, non-`HWND`-backed semantic
+nodes — remains future work, as does a cross-platform bridge.
 
 ## Text input
 
@@ -333,17 +396,35 @@ Programmatic updates are applied only when the native value differs, avoiding un
 On Windows, run:
 
 ```powershell
-cargo fmt --all
-cargo check --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
+cargo doc --workspace --no-deps
+cargo deny check
 cargo audit
 cargo run -p hello-label
 ```
 
-The current model has been developed incrementally with regression tests in `framework-core` covering reconciliation, layout, scrolling, input, components, callbacks, scheduling, task scopes, and effects.
+CI (`.github/workflows/ci.yml`) runs all of the above, plus an MSRV check,
+and — importantly — a `windows-latest` job. That job is what actually
+compiles and runs `framework-windows`'s `native` module: it is
+`#[cfg(windows)]`-gated, so a Linux-only pipeline silently excludes it.
 
-The workspace test suite has been verified locally. A Windows interactive run is
-still needed to verify native Win32 behavior.
+`framework-core` is covered by unit tests, integration tests, `proptest`
+property tests (identity, reconciliation, layout constraints, scroll ranges,
+removal ordering), and `criterion` benchmarks including scaling sweeps at
+10/100/1k/10k nodes.
+
+`framework-windows` is covered against **real** Win32: `native::integration`
+creates genuine top-level windows and drives them through the production
+message loop (`native::harness` replaces only the outermost blocking
+`GetMessageW` with a bounded `PeekMessageW` pump), covering window lifecycle,
+reconciliation, reorder, text input, focus traversal, dynamic and modal
+window lifecycle, menu dispatch, GDI resource lifetime, scheduler wakeups,
+creation reentrancy, stale-event rejection, and every component-panic policy.
+
+Those tests need an interactive window station — true on a developer machine
+and on GitHub's `windows-latest` runner, not true under a service account.
 
 ## Roadmap
 

@@ -2,15 +2,118 @@
 
 ## Current milestone
 
-**Standards-audit remediation is now fully closed**: every P0, P1, and P2
-finding in `Audit.md`, and every item in its Phase 1–3 roadmap, is
-implemented and verified (see below) — including the two items that
-earlier revisions of this document described as deliberately deferred
-(native-dialog owner-window support, and full `missing_docs` enforcement).
-**Window lifecycle + multi-window support** was the last feature milestone
-before that.
+**Second standards-audit remediation pass — complete.**
 
-The framework currently has a Rust-first component/runtime architecture with a native Win32 backend. Component-owned asynchronous task scopes now automatically cancel outstanding tasks when the component leaves the framework-managed component tree.
+An earlier revision of this document claimed every `Audit.md` finding was
+already closed. That claim was wrong, and this pass began by checking it
+rather than trusting it: the workspace was built, tested, linted, and read
+against the audit finding by finding on a real Windows machine with a real
+toolchain. Most findings genuinely were closed. Twelve were not, and several
+of those were closed only on paper — the code had moved in the right
+direction without the finding's actual requirement being met.
+
+That is worth stating plainly, because a status document that overstates
+completion is worse than one that admits a gap: the gap stays, and nobody
+looks for it again.
+
+### What this pass found still open, and closed
+
+| Finding | What was actually still missing |
+|---|---|
+| **P0.2** | `Runtime` still held bare `*mut Application`/`*mut WindowRegistry`, dereferenced at ~12 sites. The audit's recommended `NativeWindowContext::from_hwnd()` step did not exist. |
+| **P1.14** | `build_native_menu` wrapped its `HMENU` in `OwnedMenu` only on the success path, so any failure inside `append_menu_item` leaked the whole partially built menu tree. A real resource bug. |
+| **P1.16** | The Windows backend consumed exactly one field of the portable accessibility model (`is_focusable`). Role, name, and description reached no Win32 API at all — and every leaf node defaulted to `AccessibilityRole::None`, so the model carried nothing to consume. |
+| **P1.17** | No native message-loop test existed. The twelve scenarios the audit names by name were all absent. |
+| **P1.21** | `Renderer` was still the god object the audit describes: diff application, HWND creation, styling, accessibility, scrolling, layout, and positioning in one type. |
+| **P2.23** | `framework-windows` had no `deny(missing_docs)`; only `framework-core` did. |
+| **P2.28** | `style_override` and `visual_style` were two fields of the same type, distinguished only by name and a comment. |
+| **P2.30** | `WM_ERASEBKGND` still created and destroyed a brush on every repaint. |
+| **P2.31** | No Win32 return-value classification existed; ignored returns were indistinguishable from unconsidered ones. |
+| **P2.32** | `Error::WindowsApi` was still exactly the flat `{ operation, code }` the audit criticized. |
+| **P2.33** | A caught component panic had one hard-coded response: terminate. |
+| **P2.40** | The `pedantic`/`cargo` groups were on, but none of the individually chosen restriction lints the audit also asks for. |
+| Phase 7 | Benchmarks measured one tree size each rather than the 10/100/1k/10k sweep the audit asks for; four of the named properties had no property test; there was no long-running task stress test. |
+
+All of the above are now closed. See the commit history from
+`Close P0.2, P1.14, P1.16, P1.21, P2.30, P2.31 from Audit.md` onward for the
+per-finding detail.
+
+### Bugs the new tests found
+
+The point of P1.17 was never the test count. Within minutes of the native
+integration suite existing, it found four real defects that every prior
+review pass had missed — three of them in code that had been read,
+documented, and signed off:
+
+1. **Every caught component panic discarded its message.**
+   `panic_payload_message(&payload)` coerced the `Box<dyn Any + Send>`
+   *itself* to `&dyn Any` rather than dereferencing it, so both
+   `downcast_ref` calls missed and the boundary reported "component panicked
+   with a non-string payload" for every panic. The one piece of diagnostic
+   information a caught panic carries was being thrown away.
+
+2. **A task completing before a backend installed its waker was never
+   collected.** A component's first render runs inside `Application::new`,
+   strictly before a platform backend can install a waker, so any task
+   spawned there and finishing in that window left a result in the queue with
+   nothing scheduled to pick it up — delivered on the next unrelated input,
+   or never. `Scheduler::set_waker` now fires once immediately if a
+   completion is already pending.
+
+3. **`TreeSnapshot::from_node_with_theme` resolved against the wrong field.**
+   It read `visual_style` where it meant `style_override`, and was correct
+   only because `from_node` happened to initialize both to the same value.
+   Splitting the two phases into distinct types (P2.28) turned that latent
+   confusion into a compile error.
+
+4. **A declared layout minimum could be silently overridden.**
+   `LayoutEngine` applied the available-space cap *after* the constraint
+   clamp, so a child declaring `min_width: 150` inside a narrower parent came
+   out narrower than 150. Found by the constraints property test on its
+   seventh generated case.
+
+Two smaller ones: focus traversal started from the framework's cached focus
+rather than the live native focus, so the first Tab after a programmatic
+`SetFocus` did nothing; and two executor tests asserted after a fixed 20 ms
+sleep, which failed as soon as a stress test ran alongside them.
+
+### Where the bar sits now
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            148 passing
+cargo doc --workspace --no-deps                                   clean
+```
+
+Verified on real Windows (Windows 10, `rustc` 1.98.0, `x86_64-pc-windows-msvc`),
+not cross-compiled and not under Wine. `framework-windows`'s `native` module
+— the `#[cfg(windows)]`-gated part that a Linux pipeline silently excludes —
+is compiled, linted, and *executed* by that run, including 19 tests that
+create real top-level windows and drive them through the production message
+loop.
+
+### Known remaining work
+
+Genuinely open, and deliberately so:
+
+- **A full UI Automation provider.** The accessibility bridge annotates
+  standard controls; custom, non-`HWND`-backed semantic nodes will need a
+  real provider. The audit explicitly scopes this as future work.
+- **The `windows-cross-wine` CI job is commented out.** It did not work
+  reliably on GitHub Actions. The real `windows-latest` job covers what
+  matters; `tools/windows-cross-test.sh` still works locally.
+- **Drag-and-drop, system share, and system-appearance notifications**
+  remain portable contracts only, and are not advertised as supported
+  capabilities, so no application can depend on them by accident.
+- **Native menus are static at window creation**, matching the maturity of a
+  window's title and size.
+
+---
+
+The sections below are the historical record of earlier passes, kept as
+written at the time. Where they claim completeness, read the table above
+first.
 
 ## Completeness pass (milestones 1–24)
 
