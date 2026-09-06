@@ -454,6 +454,70 @@ mod tests {
         assert_eq!(wakes.load(Ordering::SeqCst), 0);
     }
 
+    /// A component that spawns and completes tasks continuously does not
+    /// accumulate state without bound.
+    ///
+    /// This is the standards audit's P1.5 finding turned into a test rather
+    /// than a review note. `TaskScope` used to push every `TaskHandle` it
+    /// ever created into a `Vec` and never remove any, so a long-lived
+    /// component doing repeated async work retained a handle, an
+    /// `AbortHandle`, and an `Arc<AtomicBool>` for every task in its entire
+    /// history. That is invisible in a short test — a few dozen tasks cost
+    /// nothing — and is a slow leak in an application left open all day,
+    /// which is exactly the shape of bug worth a stress test rather than an
+    /// example.
+    ///
+    /// The assertion is about the *registry*, not about memory: a bounded
+    /// registry is the property that makes the retention bounded, and it is
+    /// the one that can be checked deterministically.
+    #[test]
+    fn a_long_lived_scope_does_not_accumulate_handles_across_many_task_generations() {
+        const GENERATIONS: usize = 40;
+        const PER_GENERATION: usize = 25;
+
+        let scheduler = Scheduler::new();
+        let scope = TaskScope::new(scheduler.clone(), ComponentId::next(&mut 1));
+        let mut high_water = 0usize;
+
+        for _ in 0..GENERATIONS {
+            let handles = (0..PER_GENERATION)
+                .map(|value| scope.spawn::<usize, _>(async move { value }))
+                .collect::<Vec<_>>();
+
+            let deadline = std::time::Instant::now() + StdDuration::from_secs(10);
+            while std::time::Instant::now() < deadline
+                && !handles.iter().all(super::TaskHandle::is_finished)
+            {
+                std::thread::sleep(StdDuration::from_millis(1));
+            }
+            // The settlement callback that removes a finished task from the
+            // registry runs just after `is_finished` becomes observable.
+            std::thread::sleep(StdDuration::from_millis(20));
+            high_water = high_water.max(scope.task_count());
+        }
+
+        assert!(
+            high_water <= PER_GENERATION,
+            "the live-task registry peaked at {high_water} with only {PER_GENERATION} tasks ever \
+             in flight at once — handles from completed generations are being retained (P1.5)"
+        );
+        assert_eq!(
+            scope.task_count(),
+            0,
+            "every task completed, so the registry must be empty rather than holding \
+             {GENERATIONS} generations of finished handles"
+        );
+
+        // Completions are still delivered — a registry that stayed empty by
+        // dropping results would pass the assertions above and be useless.
+        let delivered = scheduler.drain().len();
+        assert_eq!(
+            delivered,
+            GENERATIONS * PER_GENERATION,
+            "every completed task's result must still reach the scheduler's queue"
+        );
+    }
+
     #[test]
     fn dropping_a_task_scope_cancels_every_owned_task() {
         let scheduler = Scheduler::new();

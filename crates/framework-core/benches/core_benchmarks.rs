@@ -16,7 +16,9 @@
 //! separate crate with no `cfg(test)`, so the exemption is stated here.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{
+    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
+};
 
 use framework_core::{
     Component, ComponentContext, ComponentTree, Event, LayoutEngine, LayoutStyle, Node, RowStyle,
@@ -208,6 +210,99 @@ fn bench_scheduler_spawn_and_drain(c: &mut Criterion) {
     });
 }
 
+// --- Scaling sweeps -------------------------------------------------------
+//
+// The benchmarks above measure one representative tree each, which answers
+// "is this fast enough?" but not "how does it grow?". The standards audit
+// asks for the second question explicitly — "use representative sizes such
+// as 10, 100, 1k, 10k nodes" — because the regression these paths are most
+// exposed to is *asymptotic*, not constant-factor: P1.11 was about
+// reconciliation rebuilding tree topology by rescanning the whole node map,
+// which looks merely slow at 500 nodes and is ruinous at 10,000. A single
+// data point cannot show that shape; a sweep can, and the ratio between
+// consecutive sizes is what a reader should watch.
+
+/// The node counts every sweep below runs at.
+const SCALING_SIZES: [usize; 4] = [10, 100, 1_000, 10_000];
+
+/// A flat list of `count` labelled leaves under one column — the shape a
+/// virtualized list or a large table degenerates to, and the one that most
+/// directly exposes per-sibling work.
+fn flat_tree(count: usize) -> Node {
+    Node::column(
+        "root",
+        (0..count).map(|i| Node::label(format!("item-{i}"), "item")).collect::<Vec<_>>(),
+    )
+}
+
+fn bench_snapshot_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scaling/tree_snapshot_from_node");
+    for size in SCALING_SIZES {
+        let tree = flat_tree(size);
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), &tree, |b, tree| {
+            b.iter(|| black_box(TreeSnapshot::from_node(black_box(tree)).unwrap()));
+        });
+    }
+    group.finish();
+}
+
+fn bench_diff_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scaling/tree_diff_between");
+    for size in SCALING_SIZES {
+        // One leaf's text differs, so the diff must walk everything to find
+        // the single `Update` — the worst realistic case for a rerender that
+        // changes almost nothing, and the one a topology rescan punishes.
+        let previous = TreeSnapshot::from_node(&flat_tree(size)).unwrap();
+        let mut children =
+            (0..size).map(|i| Node::label(format!("item-{i}"), "item")).collect::<Vec<_>>();
+        if let Some(last) = children.last_mut() {
+            *last = Node::label(format!("item-{}", size - 1), "changed");
+        }
+        let next = TreeSnapshot::from_node(&Node::column("root", children)).unwrap();
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            &(previous, next),
+            |b, (previous, next)| {
+                b.iter(|| black_box(TreeDiff::between(black_box(previous), black_box(next))));
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_layout_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scaling/layout");
+    let engine = LayoutEngine::new();
+    for size in SCALING_SIZES {
+        let snapshot = TreeSnapshot::from_node(&flat_tree(size)).unwrap();
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), &snapshot, |b, snapshot| {
+            b.iter(|| black_box(engine.layout(black_box(snapshot), Size::new(1200, 40_000))));
+        });
+    }
+    group.finish();
+}
+
+fn bench_deep_tree_scaling(c: &mut Criterion) {
+    // Depth rather than width: `TreeSnapshot`'s depth index and the diff's
+    // deepest-first removal ordering are both depth-sensitive, and a chain
+    // is the shape that isolates them from sibling-count effects.
+    let mut group = c.benchmark_group("scaling/deep_chain_snapshot");
+    for depth in [10usize, 100, 1_000] {
+        let mut node = Node::label("leaf", "leaf");
+        for level in 0..depth {
+            node = Node::column(format!("level-{level}"), [node]);
+        }
+        group.throughput(Throughput::Elements(depth as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(depth), &node, |b, node| {
+            b.iter(|| black_box(TreeSnapshot::from_node(black_box(node)).unwrap()));
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_snapshot_construction,
@@ -217,5 +312,9 @@ criterion_group!(
     bench_layout_nested_columns,
     bench_component_dispatch,
     bench_scheduler_spawn_and_drain,
+    bench_snapshot_scaling,
+    bench_diff_scaling,
+    bench_layout_scaling,
+    bench_deep_tree_scaling,
 );
 criterion_main!(benches);

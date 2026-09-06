@@ -273,8 +273,16 @@ impl LayoutEngine {
                 }
                 (_, mode) => resolve_width(mode, available_width),
             };
-            let width =
-                child.layout.constraints.clamp_width(width.max(0)).min(available_width.max(0));
+            // The available-space cap is applied *before* the constraint
+            // clamp, never after. Applied after, it would silently override
+            // a declared minimum — a child with `min_width: 150` in a
+            // narrower parent would come out narrower than 150, which is
+            // not "constrained", it is "ignored". Overflowing the parent is
+            // the correct outcome and the one the rest of the engine
+            // already expects: `content_sizes`/`scroll_ranges` below are
+            // computed from exactly this kind of overflow, which is what
+            // makes a scrollable container work at all.
+            let width = child.layout.constraints.clamp_width(width.max(0).min(available_width));
             let height = child.layout.constraints.clamp_height(height.max(0));
             let x = aligned_start(content.x, margin.left, available_width, width, alignment);
             let child_rect = Rect::new(x, y, width, height);
@@ -360,8 +368,10 @@ impl LayoutEngine {
                 (_, mode) => resolve_width(mode, available_height),
             };
             let width = child.layout.constraints.clamp_width(width.max(0));
-            let height =
-                child.layout.constraints.clamp_height(height.max(0)).min(available_height.max(0));
+            // Cap before clamp, for the same reason as the column axis
+            // above: a declared minimum must survive a parent too small to
+            // hold it.
+            let height = child.layout.constraints.clamp_height(height.max(0).min(available_height));
             let y = aligned_start(content.y, margin.top, available_height, height, alignment);
             let child_rect = Rect::new(x, y, width, height);
             self.layout_node(snapshot, child, child_rect, result, measurer);

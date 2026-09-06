@@ -400,6 +400,24 @@ impl Future for ManualSleep {
 
 #[cfg(test)]
 mod tests {
+    /// Polls `condition` until it holds or a generous deadline passes,
+    /// returning whether it held.
+    ///
+    /// Every "did the executor get there yet?" assertion in this module goes
+    /// through this instead of sleeping a fixed interval and hoping. The
+    /// deadline is long enough that only a real hang reaches it, and the
+    /// poll interval is short enough that a passing test costs milliseconds.
+    fn wait_until(mut condition: impl FnMut() -> bool) -> bool {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            if condition() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        condition()
+    }
+
     use super::*;
     use std::sync::atomic::Ordering as AtomicOrdering;
 
@@ -411,9 +429,10 @@ mod tests {
         let handle = dedicated.spawn(Box::pin(async move {
             ran_clone.store(true, AtomicOrdering::SeqCst);
         }));
-        while !handle.is_finished() {
-            std::thread::sleep(Duration::from_millis(5));
-        }
+        assert!(
+            wait_until(|| handle.is_finished()),
+            "a task spawned on a dedicated executor must run there"
+        );
         assert!(ran.load(AtomicOrdering::SeqCst));
     }
 
@@ -424,8 +443,16 @@ mod tests {
             tokio::time::sleep(Duration::from_secs(60)).await;
         }));
         handle.abort();
-        std::thread::sleep(Duration::from_millis(20));
-        assert!(handle.is_finished());
+        // Polled to a deadline rather than asserted after a fixed sleep.
+        // Abort is asynchronous — it unparks the worker, which then drops
+        // the future — so a fixed wait is a bet on scheduler latency, and
+        // that bet loses on a loaded machine (this test failed exactly that
+        // way once a task-retention stress test started running alongside
+        // it). A deadline is both faster in the common case and not a race.
+        assert!(
+            wait_until(|| handle.is_finished()),
+            "an aborted task must stop making progress rather than running its 60s sleep"
+        );
     }
 
     #[test]
