@@ -138,14 +138,18 @@ pub struct ComponentTree {
 }
 
 impl ComponentTree {
+    /// Creates a tree rooted at `root`, with default services and theme.
     pub fn new<C: Component>(root: C) -> Self {
         Self::with_services(root, Services::default())
     }
 
+    /// Creates a tree rooted at `root`, with `services` and the default
+    /// theme.
     pub fn with_services<C: Component>(root: C, services: Services) -> Self {
         Self::with_services_and_theme(root, services, Theme::default())
     }
 
+    /// Creates a tree rooted at `root`, with `services` and `theme`.
     pub fn with_services_and_theme<C: Component>(
         mut root: C,
         services: Services,
@@ -251,6 +255,9 @@ impl ComponentTree {
         self.root_view.clone().expect("component tree must be rendered before its view is read")
     }
 
+    /// Routes `event` to its owning component, re-rendering if it (or any
+    /// message it caused to be sent) changed component state. Returns
+    /// whether the event was delivered to a component.
     pub fn dispatch(&mut self, event: Event) -> bool {
         let (owner, event) = match event.target() {
             Some(target) => match self.node_owners.get(&target).copied().or_else(|| {
@@ -285,6 +292,9 @@ impl ComponentTree {
         handled || had_messages
     }
 
+    /// Delivers every completed background-task result to its owning
+    /// component, re-rendering if any changed state. Returns whether
+    /// anything changed.
     pub fn pump_tasks(&mut self) -> bool {
         let completed = self.scheduler.drain();
         if completed.is_empty() {
@@ -337,15 +347,18 @@ impl ComponentTree {
         &self.window_commands
     }
 
+    /// Returns the tree's scheduler.
     #[must_use]
     pub fn scheduler(&self) -> &Scheduler {
         &self.scheduler
     }
 
+    /// Returns the tree's platform-independent service contracts.
     #[must_use]
     pub fn services(&self) -> &Services {
         &self.services
     }
+    /// Returns the tree's active theme.
     #[must_use]
     pub fn theme(&self) -> &Theme {
         &self.theme

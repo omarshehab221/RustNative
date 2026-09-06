@@ -30,14 +30,24 @@ use crate::style::{ControlState, Theme, VisualStyle};
 /// concern").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TreeNode {
+    /// The node's identity.
     pub id: NodeId,
+    /// The node's kind.
     pub kind: crate::node::NodeKind,
+    /// The node's parent, or `None` for the tree's root.
     pub parent: Option<NodeId>,
+    /// The node's index among its siblings, in declarative order.
     pub index: usize,
+    /// The node's text content, for `Label`/`Button`/`TextInput` nodes;
+    /// `None` for containers.
     pub text: Option<String>,
+    /// The node's layout style.
     pub layout: LayoutStyle,
+    /// The node's column style, if it is a `Column`.
     pub column_style: Option<ColumnStyle>,
+    /// The node's row style, if it is a `Row`.
     pub row_style: Option<RowStyle>,
+    /// The node's accessibility metadata.
     pub accessibility: AccessibilityInfo,
     /// The node's unresolved visual override, exactly as the application
     /// authored it. Kept alongside the theme-resolved `visual_style` below
@@ -54,6 +64,7 @@ pub struct TreeNode {
     /// `style_override` only when synchronizing a transient interaction
     /// state (hover/press/focus) that a declarative rerender never observes.
     pub visual_style: VisualStyle,
+    /// Whether the node is disabled.
     pub disabled: bool,
 }
 
@@ -144,14 +155,20 @@ impl TreeSnapshot {
         Ok(snapshot)
     }
 
+    /// Returns node `id`'s resolved data, if it exists in this snapshot.
     #[must_use]
     pub fn get(&self, id: NodeId) -> Option<&TreeNode> {
         self.nodes.get(&id)
     }
+
+    /// Returns whether `id` names a node in this snapshot.
     #[must_use]
     pub fn contains(&self, id: NodeId) -> bool {
         self.nodes.contains_key(&id)
     }
+
+    /// Iterates every node in this snapshot, in unspecified order (see
+    /// [`Self::ordered_nodes`] for declarative preorder).
     pub fn nodes(&self) -> impl Iterator<Item = &TreeNode> {
         self.nodes.values()
     }

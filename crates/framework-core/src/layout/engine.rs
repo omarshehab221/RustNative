@@ -49,14 +49,17 @@ use crate::reconcile::{TreeNode, TreeSnapshot};
 /// accessibility-only) that decides when `full` is set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LayoutInvalidation {
+    /// Whether every node's geometry must be recomputed from scratch.
     pub full: bool,
 }
 
 impl LayoutInvalidation {
+    /// No relayout is required.
     #[must_use]
     pub const fn none() -> Self {
         Self { full: false }
     }
+    /// A full relayout is required.
     #[must_use]
     pub const fn full() -> Self {
         Self { full: true }
@@ -88,16 +91,24 @@ pub struct LayoutResult {
 pub struct LayoutEngine;
 
 impl LayoutEngine {
+    /// Creates a layout engine.
     #[must_use]
     pub const fn new() -> Self {
         Self
     }
 
+    /// Lays out `snapshot` within `size` using the default intrinsic-size
+    /// measurer, returning each node's rectangle.
     #[must_use]
     pub fn layout(&self, snapshot: &TreeSnapshot, size: Size) -> HashMap<NodeId, Rect> {
         self.layout_with(snapshot, size, &DefaultIntrinsicMeasurer)
     }
 
+    /// Lays out `snapshot` within `size` using `measurer` for any node
+    /// whose size depends on measuring its own content (e.g. `Auto`-sized
+    /// text), returning each node's rectangle. See
+    /// [`Self::layout_result_with`] for the complete [`LayoutResult`]
+    /// (clip regions, content sizes, and scroll ranges as well).
     pub fn layout_with<M: IntrinsicMeasurer>(
         &self,
         snapshot: &TreeSnapshot,

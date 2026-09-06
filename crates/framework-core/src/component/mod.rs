@@ -38,11 +38,17 @@ pub trait Component: 'static {
     /// [`Callback`], or receive from an asynchronous task/effect.
     type Message: Send + 'static;
 
+    /// Constructs the component from its initial props.
     fn new(props: Self::Props) -> Self;
+    /// Returns the component's current props.
     fn props(&self) -> &Self::Props;
+    /// Replaces the component's props (called by the framework when a
+    /// parent supplies new, unequal props; see [`Self::props_changed`]).
     fn set_props(&mut self, props: Self::Props);
 
+    /// Describes the component's current UI as a [`Node`] tree.
     fn view(&self) -> Node;
+    /// Updates the component's state in response to `event`.
     fn update(&mut self, event: Event);
 
     /// Handles typed messages emitted by child components through a
@@ -79,18 +85,27 @@ pub struct ComponentHost<C: Component> {
 }
 
 impl<C: Component> ComponentHost<C> {
+    /// Wraps `component`, calling its [`Component::mounted`] hook.
     pub fn new(mut component: C) -> Self {
         component.mounted();
         Self { component }
     }
 
+    /// Returns whether the hosted component is mounted. A `ComponentHost`
+    /// mounts its component immediately in [`Self::new`] and unmounts it
+    /// only when replaced or dropped, so this is always `true` for as long
+    /// as the host itself exists.
     pub fn is_mounted(&self) -> bool {
         true
     }
+
+    /// Returns the hosted component's current view.
     pub fn view(&self) -> Node {
         self.component.view()
     }
 
+    /// Delivers `event` to the hosted component if [`Self::owns_event`]
+    /// says it should receive it. Returns whether it was delivered.
     pub fn update(&mut self, event: Event) -> bool {
         if !self.owns_event(&event) {
             return false;
@@ -100,6 +115,8 @@ impl<C: Component> ComponentHost<C> {
         true
     }
 
+    /// Returns whether `event` targets a node within the hosted
+    /// component's current view (or has no specific target at all).
     pub fn owns_event(&self, event: &Event) -> bool {
         match event.target() {
             Some(target) => self.component.view().contains_id(target),
@@ -107,13 +124,17 @@ impl<C: Component> ComponentHost<C> {
         }
     }
 
+    /// Returns a reference to the hosted component.
     pub fn component(&self) -> &C {
         &self.component
     }
+
+    /// Returns a mutable reference to the hosted component.
     pub fn component_mut(&mut self) -> &mut C {
         &mut self.component
     }
 
+    /// Unmounts the current component and mounts `component` in its place.
     pub fn replace(&mut self, mut component: C) {
         self.component.unmounted();
         component.mounted();

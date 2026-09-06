@@ -48,14 +48,20 @@ impl fmt::Debug for Application {
 }
 
 impl Application {
+    /// Creates an application with a single primary window, default
+    /// services, and the default theme.
     pub fn new<C: Component>(component: C, window: Window) -> Self {
         Self::with_services_and_theme(component, window, Services::default(), Theme::default())
     }
 
+    /// Creates an application with a single primary window and `services`,
+    /// using the default theme.
     pub fn with_services<C: Component>(component: C, window: Window, services: Services) -> Self {
         Self::with_services_and_theme(component, window, services, Theme::default())
     }
 
+    /// Creates an application with a single primary window, `services`, and
+    /// `theme`.
     pub fn with_services_and_theme<C: Component>(
         component: C,
         window: Window,
@@ -83,10 +89,15 @@ impl Application {
         application
     }
 
+    /// Dispatches `event` to the primary window. Returns whether it was
+    /// handled.
     pub fn dispatch(&mut self, event: Event) -> bool {
         self.dispatch_to_window(self.primary_window, event)
     }
 
+    /// Dispatches `event` to window `id`. Returns whether it was handled;
+    /// returns `false` without effect if `event` names a different window,
+    /// or if `id` does not name an open window.
     pub fn dispatch_to_window(&mut self, id: WindowId, event: Event) -> bool {
         if event_window_id(&event).is_some_and(|event_window| event_window != id) {
             return false;
@@ -132,6 +143,9 @@ impl Application {
     pub fn view(&self) -> Node {
         self.view_for(self.primary_window).expect("primary window must exist")
     }
+
+    /// Returns window `id`'s current rendered tree, or `None` if it is not
+    /// open.
     #[must_use]
     pub fn view_for(&self, id: WindowId) -> Option<Node> {
         self.windows.get(&id).map(|entry| entry.components.view())
@@ -147,6 +161,8 @@ impl Application {
         self.render_window(self.primary_window)
     }
 
+    /// Re-renders window `id`'s tree explicitly.
+    ///
     /// # Errors
     ///
     /// See [`ComponentTree::render`]. Returns `Ok(())` if `id` does not
@@ -164,14 +180,20 @@ impl Application {
         result
     }
 
+    /// Returns the primary window's component tree.
     #[must_use]
     pub fn components(&self) -> &ComponentTree {
         &self.windows[&self.primary_window].components
     }
+
+    /// Returns window `id`'s component tree, or `None` if it is not open.
     #[must_use]
     pub fn components_for(&self, id: WindowId) -> Option<&ComponentTree> {
         self.windows.get(&id).map(|entry| &entry.components)
     }
+
+    /// Pumps completed background-task results for every open window.
+    /// Returns whether any window's tree changed as a result.
     pub fn pump_tasks(&mut self) -> bool {
         let mut changed = false;
         for id in self.window_ids() {
@@ -179,6 +201,7 @@ impl Application {
         }
         changed
     }
+
     /// Pumps completions for one native window without causing unrelated
     /// windows to rerender.
     pub fn pump_tasks_for(&mut self, id: WindowId) -> bool {
@@ -190,15 +213,22 @@ impl Application {
         self.apply_window_commands(commands);
         changed
     }
+
+    /// Returns the primary window's scheduler.
     #[must_use]
     pub fn scheduler(&self) -> &Scheduler {
         self.components().scheduler()
     }
+
+    /// Returns window `id`'s scheduler, or `None` if it is not open.
     #[must_use]
     pub fn scheduler_for(&self, id: WindowId) -> Option<&Scheduler> {
         self.windows.get(&id).map(|entry| entry.components.scheduler())
     }
 
+    /// Opens a new secondary window running `component`, returning its
+    /// assigned id. `modal_parent`, if set, names the window this one is
+    /// logically modal to (see [`WindowState::modal_parent`]).
     pub fn open_window<C: Component>(
         &mut self,
         component: C,
@@ -225,6 +255,9 @@ impl Application {
         id
     }
 
+    /// Closes window `id` and any window modal to it (transitively).
+    /// Returns whether anything was closed; the primary window can never be
+    /// closed this way and always returns `false`.
     pub fn close_window(&mut self, id: WindowId) -> bool {
         if id == self.primary_window {
             return false;
@@ -253,6 +286,7 @@ impl Application {
         true
     }
 
+    /// Returns every open window's id, in a stable (sorted) order.
     #[must_use]
     pub fn window_ids(&self) -> Vec<WindowId> {
         let mut ids = self.windows.keys().copied().collect::<Vec<_>>();
@@ -260,26 +294,37 @@ impl Application {
         ids
     }
 
+    /// Returns window `id`'s live state, or `None` if it is not open.
     #[must_use]
     pub fn window_state(&self, id: WindowId) -> Option<&WindowState> {
         self.windows.get(&id).map(|entry| &entry.state)
     }
+
+    /// Returns mutable access to window `id`'s live state, or `None` if it
+    /// is not open.
     pub fn window_state_mut(&mut self, id: WindowId) -> Option<&mut WindowState> {
         self.windows.get_mut(&id).map(|entry| &mut entry.state)
     }
+
+    /// Returns the application-wide services.
     #[must_use]
     pub fn services(&self) -> &Services {
         &self.services
     }
+
+    /// Returns the application-wide theme.
     #[must_use]
     pub fn theme(&self) -> &Theme {
         &self.theme
     }
 
+    /// Returns the primary window's definition.
     #[must_use]
     pub fn window(&self) -> &Window {
         &self.windows[&self.primary_window].window
     }
+
+    /// Returns window `id`'s definition, or `None` if it is not open.
     #[must_use]
     pub fn window_for(&self, id: WindowId) -> Option<&Window> {
         self.windows.get(&id).map(|entry| &entry.window)

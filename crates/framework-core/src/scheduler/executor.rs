@@ -54,7 +54,9 @@ pub type BoxedSleep = Pin<Box<dyn Future<Output = ()> + Send>>;
 /// cancellation and observe completion without knowing which [`Executor`]
 /// implementation is running it.
 pub trait ExecutorHandle: Send + Sync {
+    /// Requests that the task stop running as soon as possible.
     fn abort(&self);
+    /// Returns whether the task has finished running or been aborted.
     fn is_finished(&self) -> bool;
 }
 
@@ -67,6 +69,8 @@ pub trait ExecutorHandle: Send + Sync {
 /// controls both is one whose tests can control both, which is the whole
 /// point of [`ManualExecutor`].
 pub trait Executor: Send + Sync + 'static {
+    /// Runs `future` to completion (or abortion) without blocking the
+    /// caller, returning a handle to observe/cancel it.
     fn spawn(&self, future: BoxedTask) -> Box<dyn ExecutorHandle>;
 
     /// Returns a future that resolves after (at least) `duration` has
@@ -238,6 +242,7 @@ pub struct ManualExecutor {
 }
 
 impl ManualExecutor {
+    /// Creates an executor whose virtual clock starts at zero.
     #[must_use]
     pub fn new() -> Self {
         Self::default()

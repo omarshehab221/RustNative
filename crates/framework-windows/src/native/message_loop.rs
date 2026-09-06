@@ -586,6 +586,10 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                 // loop is single-threaded and non-reentrant.
                 let runtime = unsafe { &mut *runtime_ptr };
                 runtime.destroyed = true;
+                // Stop advertising this window as a dialog-owner candidate
+                // before it actually stops existing — see
+                // `native::window_handles`'s module doc comment.
+                super::window_handles::clear(runtime.window_id);
                 if !runtime.modal_parent.is_null() {
                     // SAFETY: `modal_parent` was just checked non-null
                     // and, per `create_window_once`, is a live HWND

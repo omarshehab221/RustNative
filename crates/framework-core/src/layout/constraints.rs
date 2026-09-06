@@ -20,11 +20,15 @@ pub struct Constraints {
 }
 
 impl Constraints {
+    /// Creates unconstrained bounds (`min == 0`, no `max`).
     #[must_use]
     pub const fn new() -> Self {
         Self { min_width: 0, max_width: None, min_height: 0, max_height: None }
     }
 
+    /// Sets the minimum width, clamped to be non-negative; raises the
+    /// maximum width to match if it would otherwise fall below the new
+    /// minimum.
     #[must_use]
     pub const fn with_min_width(mut self, value: i32) -> Self {
         self.min_width = non_negative(value);
@@ -32,6 +36,8 @@ impl Constraints {
         self
     }
 
+    /// Sets the maximum width, clamped to be non-negative and no lower than
+    /// the current minimum width.
     #[must_use]
     pub const fn with_max_width(mut self, value: i32) -> Self {
         let value = non_negative(value);
@@ -39,6 +45,9 @@ impl Constraints {
         self
     }
 
+    /// Sets the minimum height, clamped to be non-negative; raises the
+    /// maximum height to match if it would otherwise fall below the new
+    /// minimum.
     #[must_use]
     pub const fn with_min_height(mut self, value: i32) -> Self {
         self.min_height = non_negative(value);
@@ -46,6 +55,8 @@ impl Constraints {
         self
     }
 
+    /// Sets the maximum height, clamped to be non-negative and no lower
+    /// than the current minimum height.
     #[must_use]
     pub const fn with_max_height(mut self, value: i32) -> Self {
         let value = non_negative(value);
@@ -53,23 +64,31 @@ impl Constraints {
         self
     }
 
+    /// Returns the minimum width.
     #[must_use]
     pub const fn min_width(&self) -> i32 {
         self.min_width
     }
+
+    /// Returns the maximum width, if set.
     #[must_use]
     pub const fn max_width(&self) -> Option<i32> {
         self.max_width
     }
+
+    /// Returns the minimum height.
     #[must_use]
     pub const fn min_height(&self) -> i32 {
         self.min_height
     }
+
+    /// Returns the maximum height, if set.
     #[must_use]
     pub const fn max_height(&self) -> Option<i32> {
         self.max_height
     }
 
+    /// Clamps `value` into `[min_width, max_width]`.
     #[must_use]
     pub const fn clamp_width(self, value: i32) -> i32 {
         let value = if value < self.min_width { self.min_width } else { value };
@@ -82,6 +101,7 @@ impl Constraints {
         }
     }
 
+    /// Clamps `value` into `[min_height, max_height]`.
     #[must_use]
     pub const fn clamp_height(self, value: i32) -> i32 {
         let value = if value < self.min_height { self.min_height } else { value };
@@ -106,10 +126,16 @@ const fn raise_to(max: Option<i32>, min: i32) -> Option<i32> {
 /// A node's own sizing, margin, alignment, and constraints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LayoutStyle {
+    /// How this node's width is determined.
     pub width: SizeMode,
+    /// How this node's height is determined.
     pub height: SizeMode,
+    /// Space reserved outside this node's border, on each edge.
     pub margin: EdgeInsets,
+    /// This node's own cross-axis alignment override, if any, taking
+    /// precedence over its parent container's `align_items`.
     pub align_self: Option<Alignment>,
+    /// Min/max size bounds applied after `width`/`height` are resolved.
     pub constraints: Constraints,
 }
 
@@ -126,6 +152,8 @@ impl Default for LayoutStyle {
 }
 
 impl LayoutStyle {
+    /// Creates a layout style with the default width/height modes, no
+    /// margin, no self-alignment override, and unconstrained bounds.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -137,30 +165,35 @@ impl LayoutStyle {
         }
     }
 
+    /// Sets the width mode.
     #[must_use]
     pub const fn width(mut self, width: SizeMode) -> Self {
         self.width = width;
         self
     }
 
+    /// Sets the height mode.
     #[must_use]
     pub const fn height(mut self, height: SizeMode) -> Self {
         self.height = height;
         self
     }
 
+    /// Sets the margin.
     #[must_use]
     pub const fn margin(mut self, margin: EdgeInsets) -> Self {
         self.margin = margin;
         self
     }
 
+    /// Sets this node's cross-axis self-alignment override.
     #[must_use]
     pub const fn align_self(mut self, alignment: Alignment) -> Self {
         self.align_self = Some(alignment);
         self
     }
 
+    /// Sets the size constraints.
     #[must_use]
     pub const fn constraints(mut self, constraints: Constraints) -> Self {
         self.constraints = constraints;
@@ -180,9 +213,16 @@ macro_rules! container_style {
         /// one axis (see [`ColumnStyle`]/[`RowStyle`]).
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct $name {
+            /// Space reserved between this container's border and its
+            /// children, on each edge.
             pub padding: EdgeInsets,
+            /// Space reserved between adjacent children along the main
+            /// axis.
             pub gap: i32,
+            /// How children are aligned along the cross axis.
             pub align_items: Alignment,
+            /// How content that exceeds this container's bounds is
+            /// handled.
             pub overflow: Overflow,
         }
 
@@ -198,6 +238,8 @@ macro_rules! container_style {
         }
 
         impl $name {
+            /// Creates a container style with the default padding, gap,
+            /// alignment, and overflow behavior.
             pub const fn new() -> Self {
                 Self {
                     padding: EdgeInsets { top: 24, right: 24, bottom: 24, left: 24 },
@@ -207,24 +249,28 @@ macro_rules! container_style {
                 }
             }
 
+            /// Sets the padding.
             #[must_use]
             pub const fn padding(mut self, padding: EdgeInsets) -> Self {
                 self.padding = padding;
                 self
             }
 
+            /// Sets the gap between children.
             #[must_use]
             pub const fn gap(mut self, gap: i32) -> Self {
                 self.gap = gap;
                 self
             }
 
+            /// Sets the cross-axis alignment of children.
             #[must_use]
             pub const fn align_items(mut self, alignment: Alignment) -> Self {
                 self.align_items = alignment;
                 self
             }
 
+            /// Sets the overflow behavior.
             #[must_use]
             pub const fn overflow(mut self, overflow: Overflow) -> Self {
                 self.overflow = overflow;

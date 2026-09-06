@@ -97,6 +97,8 @@ impl<M: 'static> Callback<M> {
         Self { target, sink, _marker: std::marker::PhantomData }
     }
 
+    /// Queues `message` for delivery to the target component's
+    /// [`Component::message`](crate::Component::message).
     pub fn send(&self, message: M) {
         self.sink
             .borrow_mut()
@@ -122,6 +124,9 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
         Callback::new(self.parent, Rc::clone(self.tree.message_sink()))
     }
 
+    /// Spawns `future` on this component's task scope, delivering its
+    /// output as a message via [`Component::message`](crate::Component::message)
+    /// when it completes.
     pub fn spawn<F>(&self, future: F) -> TaskHandle
     where
         F: std::future::Future<Output = M> + Send + 'static,
@@ -139,6 +144,9 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
         self.task_scope.clone()
     }
 
+    /// Returns a future that completes after `duration`, driven by the
+    /// scheduler rather than a real-time OS sleep (see
+    /// [`crate::scheduler::Scheduler::sleep`]).
     #[must_use]
     pub fn sleep(&self, duration: Duration) -> SleepFuture {
         self.task_scope.scheduler().sleep(duration)
@@ -159,6 +167,7 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
         WindowRequests::new(Rc::clone(self.tree.window_commands()))
     }
 
+    /// Returns the active theme.
     #[must_use]
     pub fn theme(&self) -> &Theme {
         self.tree.theme()

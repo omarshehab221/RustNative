@@ -19,17 +19,24 @@ use crate::node::NodeKind;
 /// reasoning applied to geometric types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Color {
+    /// The red channel, 0-255.
     pub red: u8,
+    /// The green channel, 0-255.
     pub green: u8,
+    /// The blue channel, 0-255.
     pub blue: u8,
+    /// The alpha (opacity) channel, 0-255; 255 is fully opaque.
     pub alpha: u8,
 }
 
 impl Color {
+    /// Builds a fully-opaque color from its red/green/blue components.
     #[must_use]
     pub const fn rgb(red: u8, green: u8, blue: u8) -> Self {
         Self { red, green, blue, alpha: 255 }
     }
+
+    /// Builds a color from its red/green/blue/alpha components.
     #[must_use]
     pub const fn rgba(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
         Self { red, green, blue, alpha }
@@ -87,6 +94,8 @@ pub struct VisualStyle {
 }
 
 impl VisualStyle {
+    /// Creates a style with every property unset (fully deferring to the
+    /// active theme).
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -99,62 +108,86 @@ impl VisualStyle {
         }
     }
 
+    /// Sets the foreground (text/content) color override.
     #[must_use]
     pub const fn foreground(mut self, color: Color) -> Self {
         self.foreground = Some(color);
         self
     }
+
+    /// Sets the background color override.
     #[must_use]
     pub const fn background(mut self, color: Color) -> Self {
         self.background = Some(color);
         self
     }
+
+    /// Sets the border color override.
     #[must_use]
     pub const fn border(mut self, color: Color) -> Self {
         self.border = Some(color);
         self
     }
+
+    /// Sets the border corner-radius override, in pixels.
     #[must_use]
     pub const fn border_radius(mut self, radius: u16) -> Self {
         self.border_radius = Some(radius);
         self
     }
+
+    /// Sets the typography override.
     #[must_use]
     pub fn typography(mut self, typography: Typography) -> Self {
         self.typography = Some(typography);
         self
     }
+
+    /// Sets the padding override.
     #[must_use]
     pub const fn padding(mut self, padding: EdgeInsets) -> Self {
         self.padding = Some(padding);
         self
     }
 
+    /// Returns the foreground color override, if set.
     #[must_use]
     pub const fn foreground_override(&self) -> Option<Color> {
         self.foreground
     }
+
+    /// Returns the background color override, if set.
     #[must_use]
     pub const fn background_override(&self) -> Option<Color> {
         self.background
     }
+
+    /// Returns the border color override, if set.
     #[must_use]
     pub const fn border_override(&self) -> Option<Color> {
         self.border
     }
+
+    /// Returns the border corner-radius override, if set.
     #[must_use]
     pub const fn border_radius_override(&self) -> Option<u16> {
         self.border_radius
     }
+
+    /// Returns the typography override, if set.
     #[must_use]
     pub fn typography_override(&self) -> Option<&Typography> {
         self.typography.as_ref()
     }
+
+    /// Returns the padding override, if set.
     #[must_use]
     pub const fn padding_override(&self) -> Option<EdgeInsets> {
         self.padding
     }
 
+    /// Layers `override_style`'s set properties on top of `self`, keeping
+    /// `self`'s value for any property `override_style` leaves unset.
     fn merge(&self, override_style: &Self) -> Self {
         Self {
             foreground: override_style.foreground.or(self.foreground),
@@ -177,11 +210,16 @@ impl Default for VisualStyle {
 /// [`ComponentStyle`]'s state-specific overrides applies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ControlState {
+    /// No special interaction is occurring.
     #[default]
     Normal,
+    /// The pointer is hovering the control.
     Hovered,
+    /// The control has keyboard focus.
     Focused,
+    /// The control is currently being pressed/activated.
     Pressed,
+    /// The control is disabled and cannot be interacted with.
     Disabled,
 }
 
@@ -203,6 +241,8 @@ pub struct ComponentStyle {
 }
 
 impl ComponentStyle {
+    /// Resolves the fully-merged style for `state`: [`Self::normal`] with
+    /// that state's override (if any) layered on top.
     #[must_use]
     pub fn resolve(&self, state: ControlState) -> VisualStyle {
         let state_style = match state {
@@ -278,42 +318,64 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// Returns the default typography.
     #[must_use]
     pub const fn typography(&self) -> &Typography {
         &self.typography
     }
+
+    /// Returns the default foreground color.
     #[must_use]
     pub const fn foreground(&self) -> Color {
         self.foreground
     }
+
+    /// Returns the default background color.
     #[must_use]
     pub const fn background(&self) -> Color {
         self.background
     }
+
+    /// Returns the accent/primary color, used for emphasis (e.g. a button's
+    /// border).
     #[must_use]
     pub const fn primary(&self) -> Color {
         self.primary
     }
+
+    /// Returns the default spacing unit, in pixels, used between sibling
+    /// nodes in a layout container.
     #[must_use]
     pub const fn spacing(&self) -> u16 {
         self.spacing
     }
+
+    /// Returns the default border corner-radius, in pixels.
     #[must_use]
     pub const fn radius(&self) -> u16 {
         self.radius
     }
+
+    /// Returns the default style for [`NodeKind::Label`](crate::node::NodeKind::Label) nodes.
     #[must_use]
     pub const fn label(&self) -> &ComponentStyle {
         &self.label
     }
+
+    /// Returns the default style for [`NodeKind::Button`](crate::node::NodeKind::Button) nodes.
     #[must_use]
     pub const fn button(&self) -> &ComponentStyle {
         &self.button
     }
+
+    /// Returns the default style for [`NodeKind::TextInput`](crate::node::NodeKind::TextInput) nodes.
     #[must_use]
     pub const fn text_input(&self) -> &ComponentStyle {
         &self.text_input
     }
+
+    /// Returns the default style for container ([`NodeKind::Column`](crate::node::NodeKind::Column)/
+    /// [`NodeKind::Row`](crate::node::NodeKind::Row)) nodes.
     #[must_use]
     pub const fn container(&self) -> &ComponentStyle {
         &self.container
@@ -326,51 +388,70 @@ impl Theme {
     // the pre-encapsulation, public-field design offered through struct-
     // update syntax (`Theme { button: ..., ..Theme::default() }`).
 
+    /// Returns `self` with the default typography replaced.
     #[must_use]
     pub fn with_typography(mut self, typography: Typography) -> Self {
         self.typography = typography;
         self
     }
+
+    /// Returns `self` with the default foreground color replaced.
     #[must_use]
     pub const fn with_foreground(mut self, color: Color) -> Self {
         self.foreground = color;
         self
     }
+
+    /// Returns `self` with the default background color replaced.
     #[must_use]
     pub const fn with_background(mut self, color: Color) -> Self {
         self.background = color;
         self
     }
+
+    /// Returns `self` with the accent/primary color replaced.
     #[must_use]
     pub const fn with_primary(mut self, color: Color) -> Self {
         self.primary = color;
         self
     }
+
+    /// Returns `self` with the default spacing unit replaced.
     #[must_use]
     pub const fn with_spacing(mut self, spacing: u16) -> Self {
         self.spacing = spacing;
         self
     }
+
+    /// Returns `self` with the default border corner-radius replaced.
     #[must_use]
     pub const fn with_radius(mut self, radius: u16) -> Self {
         self.radius = radius;
         self
     }
+
+    /// Returns `self` with the label style replaced.
     #[must_use]
     pub fn with_label(mut self, style: ComponentStyle) -> Self {
         self.label = style;
         self
     }
+
+    /// Returns `self` with the button style replaced.
     #[must_use]
     pub fn with_button(mut self, style: ComponentStyle) -> Self {
         self.button = style;
         self
     }
+
+    /// Returns `self` with the text-input style replaced.
     #[must_use]
     pub fn with_text_input(mut self, style: ComponentStyle) -> Self {
         self.text_input = style;
         self
     }
+
+    /// Returns `self` with the container style replaced.
     #[must_use]
     pub fn with_container(mut self, style: ComponentStyle) -> Self {
         self.container = style;

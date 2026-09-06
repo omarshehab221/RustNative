@@ -32,6 +32,7 @@ pub struct TreeDiff {
 }
 
 impl TreeDiff {
+    /// Computes the operations needed to turn `previous` into `next`.
     pub fn between(previous: &TreeSnapshot, next: &TreeSnapshot) -> Self {
         let mut operations = Vec::new();
         let mut layout_dirty = false;

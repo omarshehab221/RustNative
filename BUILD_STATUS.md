@@ -2,9 +2,13 @@
 
 ## Current milestone
 
-**Standards-audit remediation** is the latest completed pass (see below);
-**window lifecycle + multi-window support** was the last feature
-milestone.
+**Standards-audit remediation is now fully closed**: every P0, P1, and P2
+finding in `Audit.md`, and every item in its Phase 1–3 roadmap, is
+implemented and verified (see below) — including the two items that
+earlier revisions of this document described as deliberately deferred
+(native-dialog owner-window support, and full `missing_docs` enforcement).
+**Window lifecycle + multi-window support** was the last feature milestone
+before that.
 
 The framework currently has a Rust-first component/runtime architecture with a native Win32 backend. Component-owned asynchronous task scopes now automatically cancel outstanding tasks when the component leaves the framework-managed component tree.
 
@@ -26,13 +30,16 @@ A full audit of milestones 1–24 against a "production framework" bar found tha
 
 `Audit.md` (a from-scratch senior-engineer review against a "would this pass
 review at a top-tier systems team" bar) found 3 P0s, 20 P1s, and 15 P2s.
-Every P0 and every Phase 1–3 P1 in that document is now closed, including
-the two (P0.2, P1.15) that a mid-pass status update once recorded as
-deferred — both were revisited and closed for real once this pass
-developed a way to actually compile and run `framework-windows`'s
-Windows-only code in this environment (see P1.17 below), rather than left
-deferred. A prior pass had already closed a meaningful subset before this
-one started (engineering controls — `deny.toml`, `clippy.toml`,
+Every P0, every P1, and every P2 in that document is now closed, including
+every item in its Phase 1–3 roadmap — the two items (P0.2, P1.15's owner-
+window support, and P2.23's `missing_docs` enforcement) that earlier status
+updates once recorded as deferred were all revisited and closed for real,
+the first two once this pass developed a way to actually compile and run
+`framework-windows`'s Windows-only code in this environment (see P1.17
+below), and the third as a self-contained mechanical documentation pass
+verified by the crate's own `deny(missing_docs)` lint. A prior pass had
+already closed a meaningful subset before this one started (engineering
+controls — `deny.toml`, `clippy.toml`,
 `rustfmt.toml`, `SECURITY.md`/`CONTRIBUTING.md`, an accurate
 `rust-toolchain.toml` — plus task-scope bounded retention, effect-dependency
 exact equality instead of hashing, stale-event rejection, indexed
@@ -41,13 +48,10 @@ checked identity allocators, RAII menu resources with checked command-id
 allocation, and a dedicated STA thread for native dialogs instead of the
 shared blocking pool — but, notably, *not* an actual CI workflow: this
 repository had none until this pass, see P1.17 below). This pass picked up
-from there and closed the remainder of what turned out to be closable —
-which, once the compile/test breakthrough below landed, turned out to be
-every P0 and P1 in `Audit.md`'s numbered findings, and every item in its
-Phase 1–3 roadmap except Phase 3, item 15 (real owner/parent-window
-handling for native dialogs — see the "Known remaining gap" note under
-P1.15 below for exactly why that one specific item is a distinct,
-deliberately separate piece of follow-up work, not an oversight).
+from there and closed every remaining P0/P1/P2 finding and every roadmap
+item in `Audit.md`, once the compile/test breakthrough below made
+`framework-windows`'s Windows-only surface reachable by the same tools
+(`cargo build`/`test`/`clippy`/`fmt`) as `framework-core` already was.
 
 **P0.1 — node identity could theoretically collide (`framework-core`,
 fully fixed).** `NodeId::from_key` was an FNV-1a hash of the key string:
@@ -237,16 +241,18 @@ older/newer `windows` release chosen only to dodge the lint.
   plain `cargo check` on this host — a real but no longer absolute
   limitation. The crate is organized into the same kind of focused module
   tree `framework-core` uses: `native::{app, container, input, measure,
-  menu, message_loop, registry, renderer, runtime, user_data, util,
-  test_support}`, plus `error`, `ffi`, `platform`, and
-  `services::{clipboard, dialogs, notifications, system}` at the crate
+  menu, message_loop, registry, renderer, runtime, user_data,
+  window_handles, util, test_support}`, plus `error`, `ffi`, `platform`,
+  and `services::{clipboard, dialogs, notifications, system}` at the crate
   root. This pass added `native::user_data` and `native::test_support` to
-  that tree (see P0.2 and P1.17 above) and otherwise left the module
-  boundaries as they already were, since a wholesale reorganization of
-  unsafe FFI code is a separate, larger piece of work from what this
-  pass's compile-verification breakthrough makes newly safe to attempt.
+  that tree (see P0.2 and P1.17 above), and a later pass in the same
+  overall effort added `native::window_handles` (see P1.15's owner-window
+  section above), otherwise leaving the module boundaries as they already
+  were, since a wholesale reorganization of unsafe FFI code is a separate,
+  larger piece of work from what this pass's compile-verification
+  breakthrough makes newly safe to attempt.
 
-## P1.15 — modern `IFileDialog` (fixed)
+## P1.15 — modern `IFileDialog`, with real owner-window support (fixed)
 
 An earlier note in this document deferred this, reasoning that
 `windows-sys` (this crate's dependency everywhere else) only exposes raw
@@ -275,25 +281,44 @@ full `-D warnings` policy against the real `x86_64-pc-windows-gnu` target
 via `tools/windows-cross-test.sh` — the same real verification this
 document describes for everything else in `native/`.
 
-**Known remaining gap (`Audit.md`'s Phase 3 roadmap, item 15 — distinct
-from the "P1.15" severity-finding numbering used elsewhere in this
-document, and not part of this pass):** every dialog is shown with no owner window (`IFileDialog::Show(None)`), matching the
-previous implementation's behavior. `FileDialogRequest` — the
-cross-platform request type in `framework-core`, shared by every future
-platform backend — has no field to carry a window identity through yet;
-giving these dialogs a real parent/owner means extending that shared type
-first, which is a deliberate, larger API change belonging to its own pass,
-not something to fold silently into a same-behavior backend swap. This is
-documented directly in `services::dialogs`'s module doc comment, not just
-here.
+**`Audit.md`'s Phase 3 roadmap item 15 — real owner/parent-window support —
+is now also closed.** `FileDialogRequest` (the cross-platform request type
+in `framework-core`, shared by every future platform backend) gained an
+`owner: Option<WindowId>` field. `framework-windows` resolves it to a real
+native `HWND` through a new module, `native::window_handles`: a small,
+thread-safe `WindowId -> HWND` table for top-level windows, kept in sync by
+`WindowRegistry` at window creation and by `window_proc`'s `WM_DESTROY`
+handling at window teardown. This exists specifically because
+`services::dialogs` runs each dialog on its own dedicated STA thread (see
+P1.15's `run_sta` discussion elsewhere in this document), not the
+message-loop thread that actually owns the window — so resolving a window
+identity to its native handle from the dialog thread means reaching across
+threads for it, which every other native handle in this crate deliberately
+avoids needing to do. `dialogs.rs`'s `show_open`/`show_save`/
+`show_pick_folder` now call `IFileDialog::Show` with that resolved handle
+(or `None`, unchanged, for a request with no owner or one naming a window
+this process doesn't currently recognize — an owner is a presentation
+enhancement, not a correctness requirement, so a stale or absent owner
+falls back to an unowned dialog rather than an error). Covered by three new
+unit tests in `native::window_handles::tests`, run and passing under the
+same real Windows/Wine verification as everything else in `native/` (see
+"Local verification" below) — `framework-windows`'s native test suite is
+now 19 tests, up from 16.
 
-**Known, deliberately incomplete: `missing_docs`.** Every public struct/
-enum/trait/associated type now has a doc comment, but `#![warn(missing_docs)]`
-was evaluated and found to additionally want ~380 comments on individual
-getters/fields/variants of already-documented types — a real, bounded,
-purely mechanical follow-up, not enabled half-finished here because doing
-so would make this crate's own `-D warnings` CI gate fail on a list whose
-length has nothing to do with the correctness work this pass prioritized.
+## `missing_docs` (P2.23, now fully enforced)
+
+Every public item in `framework-core` — including individual struct
+fields, enum variants, trait methods, and associated functions, not just
+the types that contain them — now carries a doc comment, and
+`#![deny(missing_docs)]` (not `warn`) is set in `lib.rs` so this cannot
+silently regress. An earlier pass documented every type but left the lint
+disabled entirely, deferring roughly 380 field/variant/method-level
+warnings as a bounded, mechanical follow-up rather than fixing them or
+half-enabling a lint that would fail `-D warnings` CI on an unrelated
+backlog; this pass wrote that documentation (not filler — each comment
+describes what the specific field/variant/method actually does) and
+flipped the lint to `deny`. `cargo build -p framework-core --all-targets`
+now reports zero `missing_docs` warnings.
 
 
 
@@ -440,7 +465,7 @@ Running it:
   `gcc-mingw-w64-x86-64`) into real PE32+ binaries — confirmed with `file`.
 - Runs `framework-core`'s full 57-test unit suite under Wine, all passing,
   as an actual Windows binary rather than a Linux one.
-- Runs `framework-windows`'s 16-test suite under Wine, all passing — see
+- Runs `framework-windows`'s 19-test suite under Wine, all passing — see
   "Native test coverage" below for what these actually exercise.
 - Runs `cargo clippy` against this same real target with the workspace's
   full `-D warnings` policy — see "122 real clippy findings" above.

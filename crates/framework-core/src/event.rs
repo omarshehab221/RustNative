@@ -13,41 +13,75 @@ use crate::window::WindowPresentation;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Event {
+    /// A pointer press-and-release (or equivalent activation, e.g. Space/
+    /// Enter on a focused control) completed on `target`.
     Click {
+        /// The node that was activated.
         target: NodeId,
     },
+    /// `target` became the focused node.
     FocusGained {
+        /// The node that gained focus.
         target: NodeId,
     },
+    /// `target` was the focused node and is no longer.
     FocusLost {
+        /// The node that lost focus.
         target: NodeId,
     },
+    /// A key was pressed while `target` (or, if `None`, no specific node)
+    /// had focus.
     KeyDown {
+        /// The focused node the key was delivered to, or `None` if no node
+        /// currently has focus.
         target: Option<NodeId>,
+        /// The key that was pressed.
         key: KeyCode,
+        /// Which modifier keys were held down at the same time.
         modifiers: KeyModifiers,
     },
+    /// Committed text input (e.g. from an IME or a printable keystroke),
+    /// delivered independently of [`Event::KeyDown`] since one physical key
+    /// press can produce zero, one, or many characters.
     TextInput {
+        /// The focused node the text was delivered to, or `None` if no node
+        /// currently has focus.
         target: Option<NodeId>,
+        /// The committed text.
         text: String,
     },
+    /// A text-input control's content changed to `value`.
     TextChanged {
+        /// The text-input node whose content changed.
         target: NodeId,
+        /// The control's new, complete text content.
         value: String,
     },
+    /// A window was resized to `size`.
     WindowResized {
+        /// The window that was resized.
         window: WindowId,
+        /// The window's new client-area size.
         size: Size,
     },
+    /// A window was moved to `position`.
     WindowMoved {
+        /// The window that was moved.
         window: WindowId,
+        /// The window's new top-left position, in screen coordinates.
         position: Point,
     },
+    /// The person asked to close a window (e.g. clicked its close button);
+    /// the window remains open until the application actually removes it.
     WindowCloseRequested {
+        /// The window the close request applies to.
         window: WindowId,
     },
+    /// A window's presentation (minimized/maximized/restored) changed.
     WindowStateChanged {
+        /// The window whose presentation changed.
         window: WindowId,
+        /// The window's new presentation.
         state: WindowPresentation,
     },
     /// A native menu item was selected. Menus are window chrome rather than
@@ -55,7 +89,9 @@ pub enum Event {
     /// — this always routes to the window's root component rather than to a
     /// specific node owner.
     MenuAction {
+        /// The window whose menu bar the selected item belongs to.
         window: WindowId,
+        /// The identity of the menu item that was selected.
         item: NodeId,
     },
 }
@@ -110,15 +146,25 @@ impl Event {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum KeyCode {
+    /// The Enter/Return key.
     Enter,
+    /// The Space bar.
     Space,
+    /// The Tab key.
     Tab,
+    /// The Escape key.
     Escape,
+    /// The Backspace key.
     Backspace,
+    /// The left arrow key.
     ArrowLeft,
+    /// The right arrow key.
     ArrowRight,
+    /// The up arrow key.
     ArrowUp,
+    /// The down arrow key.
     ArrowDown,
+    /// A printable character key, carrying the character it produces.
     Character(char),
     /// A key this crate does not yet name explicitly, carrying the
     /// backend's native virtual-key code for diagnostics/escape-hatch use.
@@ -128,8 +174,11 @@ pub enum KeyCode {
 /// Which modifier keys were held down when a [`KeyCode`] was produced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct KeyModifiers {
+    /// Whether either Shift key was held down.
     pub shift: bool,
+    /// Whether either Ctrl key was held down.
     pub ctrl: bool,
+    /// Whether either Alt key was held down.
     pub alt: bool,
 }
 
@@ -139,10 +188,16 @@ pub struct KeyModifiers {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AccessibilityRole {
+    /// No specific role; the node is not exposed as a distinct
+    /// accessibility element.
     None,
+    /// A static, non-interactive text label.
     Label,
+    /// An activatable control (e.g. a push button).
     Button,
+    /// An editable text field.
     TextInput,
+    /// A container grouping other accessible elements.
     Group,
 }
 
@@ -156,44 +211,55 @@ pub struct AccessibilityInfo {
 }
 
 impl AccessibilityInfo {
+    /// Creates accessibility metadata for `role`, with no name or
+    /// description yet and not focusable.
     #[must_use]
     pub fn new(role: AccessibilityRole) -> Self {
         Self { role, name: None, description: None, focusable: false }
     }
 
+    /// Sets the accessible name (the primary label assistive technology
+    /// announces for this node).
     #[must_use]
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    /// Sets the accessible description (supplementary detail announced
+    /// after the name).
     #[must_use]
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets whether this node can receive keyboard focus.
     #[must_use]
     pub const fn focusable(mut self, focusable: bool) -> Self {
         self.focusable = focusable;
         self
     }
 
+    /// Returns the accessible role.
     #[must_use]
     pub const fn role(&self) -> AccessibilityRole {
         self.role
     }
 
+    /// Returns the accessible name, if one was set.
     #[must_use]
     pub fn name_hint(&self) -> Option<&str> {
         self.name.as_deref()
     }
 
+    /// Returns the accessible description, if one was set.
     #[must_use]
     pub fn description_hint(&self) -> Option<&str> {
         self.description.as_deref()
     }
 
+    /// Returns whether this node can receive keyboard focus.
     #[must_use]
     pub const fn is_focusable(&self) -> bool {
         self.focusable

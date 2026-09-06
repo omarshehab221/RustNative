@@ -15,6 +15,8 @@ use crate::node::NodeKind;
 /// large a label/button/text-input's own content wants to be, independent of
 /// the space a parent container happens to offer it).
 pub trait IntrinsicMeasurer {
+    /// Returns the natural size a node of `kind` with `text` content wants,
+    /// wrapping within `max_width` if given.
     fn measure(&self, kind: NodeKind, text: Option<&str>, max_width: Option<i32>) -> Size;
 }
 

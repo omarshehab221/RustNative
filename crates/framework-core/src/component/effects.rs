@@ -23,6 +23,7 @@ pub struct EffectContext {
 }
 
 impl EffectContext {
+    /// Spawns `future` on this effect's task scope.
     pub fn spawn<M, F>(&self, future: F) -> TaskHandle
     where
         M: Send + 'static,
@@ -31,11 +32,14 @@ impl EffectContext {
         self.task_scope.spawn(future)
     }
 
+    /// Returns this effect's task scope.
     #[must_use]
     pub fn task_scope(&self) -> TaskScope {
         self.task_scope.clone()
     }
 
+    /// Returns a future that completes after `duration` (see
+    /// [`crate::scheduler::Scheduler::sleep`]).
     #[must_use]
     pub fn sleep(&self, duration: Duration) -> SleepFuture {
         self.task_scope.scheduler().sleep(duration)

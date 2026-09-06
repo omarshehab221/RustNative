@@ -15,6 +15,7 @@ mod runtime;
 mod test_support;
 mod user_data;
 mod util;
+pub(crate) mod window_handles;
 
 pub(super) use app::run_application;
 

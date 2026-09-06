@@ -13,10 +13,15 @@ use crate::menu::MenuBar;
 /// How a window is currently presented on screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WindowPresentation {
+    /// Displayed at its normal size and position.
     #[default]
     Normal,
+    /// Reduced to a taskbar/dock entry, not currently visible.
     Minimized,
+    /// Expanded to fill the screen (with system chrome, e.g. the taskbar,
+    /// still visible).
     Maximized,
+    /// Expanded to fill the screen with no system chrome visible.
     Fullscreen,
 }
 
@@ -55,22 +60,31 @@ impl WindowState {
         self
     }
 
+    /// Returns the window's current size.
     #[must_use]
     pub const fn size(&self) -> Size {
         self.size
     }
+
+    /// Returns the window's current position.
     #[must_use]
     pub const fn position(&self) -> Point {
         self.position
     }
+
+    /// Returns the window's current presentation.
     #[must_use]
     pub const fn presentation(&self) -> WindowPresentation {
         self.presentation
     }
+
+    /// Returns whether the window is currently visible.
     #[must_use]
     pub const fn is_visible(&self) -> bool {
         self.visible
     }
+
+    /// Returns the window this one is logically modal to, if any.
     #[must_use]
     pub const fn modal_parent(&self) -> Option<WindowId> {
         self.modal_parent
@@ -129,15 +143,18 @@ pub struct Window {
 }
 
 impl Window {
+    /// Creates a window definition with `title` and `size` and no menu.
     pub fn new(title: impl Into<String>, size: Size) -> Self {
         Self { title: title.into(), size, menu: None }
     }
 
+    /// Returns the window's title.
     #[must_use]
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    /// Returns the window's initial size.
     #[must_use]
     pub const fn size(&self) -> Size {
         self.size
@@ -153,6 +170,7 @@ impl Window {
         self
     }
 
+    /// Returns the window's menu bar, if it has one.
     #[must_use]
     pub fn menu(&self) -> Option<&MenuBar> {
         self.menu.as_ref()

@@ -237,6 +237,12 @@ impl WindowRegistry {
             return Err(Error::windows_api("CreateWindowExW(top-level)"));
         }
         runtime.window = hwnd;
+        // Published before any further native call for the same reason
+        // `self.runtimes.insert` below is: so a dialog request naming this
+        // window as an owner (see `FileDialogRequest::owner`) can resolve
+        // it as soon as the window exists, without a race against the
+        // rest of this function's setup work.
+        super::window_handles::set(id, hwnd);
 
         // Register *before* any further native call. `CreateWindowExW`
         // above (and `ShowWindow` below) can synchronously deliver

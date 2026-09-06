@@ -21,15 +21,14 @@
 //! family; see `Cargo.toml` for why that dependency is scoped to just this
 //! module rather than added workspace-wide.
 //!
-//! **Known remaining gap (`Audit.md`'s Phase 3 roadmap, item 15 — distinct
-//! from the "P1.15" severity-finding numbering used in `BUILD_STATUS.md`,
-//! and not yet addressed):** every dialog here is shown with no owner window (`IFileDialog::Show(None)`),
-//! matching this module's previous behavior. `FileDialogRequest` (in
-//! `framework-core`, shared across every platform backend) currently has no
-//! field to carry a window identity through, so giving these dialogs a real
-//! parent/owner would mean extending that cross-platform type first — a
-//! larger, deliberate API change belonging to its own pass, not something to
-//! fold silently into a same-behavior backend swap.
+//! Each dialog is shown with the owner window `request.owner` names, when it
+//! names a live top-level window this process created (`Audit.md`'s Phase 3
+//! roadmap item 15 — distinct from the "P1.15" severity-finding numbering
+//! used in `BUILD_STATUS.md`). A request with no owner, or one naming a
+//! `WindowId` this process does not currently recognize (already closed, or
+//! never existed), simply shows an unowned dialog — see
+//! `FileDialogRequest::owner`'s doc comment in `framework-core` for why that
+//! is a presentation fallback rather than an error.
 
 #[cfg(windows)]
 use super::run_sta;
@@ -62,11 +61,28 @@ fn show_file_dialog(
     // process/thread-level OS state, not tied to which bindings crate
     // observes it, so `windows`'s `CoCreateInstance` below runs within that
     // same already-initialized apartment without needing its own init call.
+    let owner = resolve_owner(request);
     match request.kind {
-        FileDialogKind::OpenFile => show_open(request),
-        FileDialogKind::SaveFile => show_save(request),
-        FileDialogKind::PickFolder => show_pick_folder(request),
+        FileDialogKind::OpenFile => show_open(request, owner),
+        FileDialogKind::SaveFile => show_save(request, owner),
+        FileDialogKind::PickFolder => show_pick_folder(request, owner),
     }
+}
+
+/// Resolves `request.owner` to a native `HWND`, if it names a live
+/// top-level window. This runs on the dedicated dialog STA thread
+/// (`run_sta`), not the Win32 message-loop thread that actually owns the
+/// window — see `crate::native::window_handles`'s module doc comment for
+/// why looking the handle up through that shared table, rather than
+/// reaching into `WindowRegistry`/`Runtime` directly, is what makes this
+/// cross-thread lookup sound.
+#[cfg(windows)]
+fn resolve_owner(
+    request: &framework_core::FileDialogRequest,
+) -> Option<windows::Win32::Foundation::HWND> {
+    let window_id = request.owner?;
+    let raw = crate::native::window_handles::get(window_id)?;
+    Some(windows::Win32::Foundation::HWND(raw as *mut core::ffi::c_void))
 }
 
 /// The documented `HRESULT` `IFileDialog::Show` returns when the person
@@ -95,6 +111,7 @@ fn is_user_cancelled(error: &windows::core::Error) -> bool {
 #[cfg(windows)]
 fn show_open(
     request: &framework_core::FileDialogRequest,
+    owner: Option<windows::Win32::Foundation::HWND>,
 ) -> Result<Option<String>, framework_core::ServiceError> {
     use windows::Win32::System::Com::CLSCTX_INPROC_SERVER;
     use windows::Win32::UI::Shell::{
@@ -116,9 +133,14 @@ fn show_open(
     configure_common_options(&file_dialog, request, FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST)?;
 
     // SAFETY: `dialog` is a live `IFileOpenDialog` just created and
-    // configured above; a null owner (`None`) is a documented-valid
-    // argument (see this module's doc comment on the P3.15 gap).
-    match unsafe { dialog.Show(None) } {
+    // configured above. `owner` is either `None` (a documented-valid
+    // "no owner" argument) or an `HWND` resolved moments ago from
+    // `native::window_handles`, which only ever holds handles to windows
+    // this process created; a window destroyed in the narrow window
+    // between that lookup and this call simply makes `Show` behave as
+    // though it had no owner, which is Win32's own documented behavior
+    // for a stale owner handle, not a memory-safety concern.
+    match unsafe { dialog.Show(owner) } {
         Ok(()) => {}
         Err(error) if is_user_cancelled(&error) => return Ok(None),
         Err(error) => return Err(to_service_error("IFileOpenDialog::Show", &error)),
@@ -134,6 +156,7 @@ fn show_open(
 #[cfg(windows)]
 fn show_save(
     request: &framework_core::FileDialogRequest,
+    owner: Option<windows::Win32::Foundation::HWND>,
 ) -> Result<Option<String>, framework_core::ServiceError> {
     use windows::Win32::System::Com::CLSCTX_INPROC_SERVER;
     use windows::Win32::UI::Shell::{FOS_OVERWRITEPROMPT, FileSaveDialog, IFileSaveDialog};
@@ -152,10 +175,9 @@ fn show_save(
         .map_err(|error| to_service_error("IFileSaveDialog::cast to IFileDialog", &error))?;
     configure_common_options(&file_dialog, request, FOS_OVERWRITEPROMPT)?;
 
-    // SAFETY: `dialog` is a live `IFileSaveDialog` just created and
-    // configured above; a null owner (`None`) is a documented-valid
-    // argument (see this module's doc comment on the P3.15 gap).
-    match unsafe { dialog.Show(None) } {
+    // SAFETY: see `show_open`'s identical comment on its `dialog.Show`
+    // call — the same reasoning applies verbatim to this owner handle.
+    match unsafe { dialog.Show(owner) } {
         Ok(()) => {}
         Err(error) if is_user_cancelled(&error) => return Ok(None),
         Err(error) => return Err(to_service_error("IFileSaveDialog::Show", &error)),
@@ -171,6 +193,7 @@ fn show_save(
 #[cfg(windows)]
 fn show_pick_folder(
     request: &framework_core::FileDialogRequest,
+    owner: Option<windows::Win32::Foundation::HWND>,
 ) -> Result<Option<String>, framework_core::ServiceError> {
     use windows::Win32::System::Com::CLSCTX_INPROC_SERVER;
     use windows::Win32::UI::Shell::{
@@ -193,10 +216,9 @@ fn show_pick_folder(
         .map_err(|error| to_service_error("IFileOpenDialog::cast to IFileDialog", &error))?;
     configure_common_options(&file_dialog, request, FOS_PICKFOLDERS)?;
 
-    // SAFETY: `dialog` is a live `IFileOpenDialog` just created and
-    // configured above; a null owner (`None`) is a documented-valid
-    // argument (see this module's doc comment on the P3.15 gap).
-    match unsafe { dialog.Show(None) } {
+    // SAFETY: see `show_open`'s identical comment on its `dialog.Show`
+    // call — the same reasoning applies verbatim to this owner handle.
+    match unsafe { dialog.Show(owner) } {
         Ok(()) => {}
         Err(error) if is_user_cancelled(&error) => return Ok(None),
         Err(error) => return Err(to_service_error("IFileOpenDialog::Show", &error)),

@@ -69,6 +69,7 @@ pub struct TaskHandle {
 }
 
 impl TaskHandle {
+    /// Returns the task's identity.
     #[must_use]
     pub fn id(&self) -> TaskId {
         self.id
@@ -89,6 +90,7 @@ impl TaskHandle {
         (self.settled)(self.id);
     }
 
+    /// Returns whether [`Self::cancel`] has been called.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
@@ -173,6 +175,8 @@ impl TaskScope {
         }
     }
 
+    /// Returns the number of tasks currently tracked by this scope
+    /// (spawned but not yet completed, cancelled, or drained).
     #[must_use]
     pub fn task_count(&self) -> usize {
         self.inner.tasks.lock().len()
@@ -249,6 +253,9 @@ impl Scheduler {
         }
     }
 
+    /// Registers a callback the scheduler invokes whenever a task
+    /// completes, so a platform backend can wake its event loop rather than
+    /// polling [`Self::drain`].
     pub fn set_waker(&self, waker: Arc<dyn Fn() + Send + Sync>) {
         *self.inner.waker.lock() = Some(waker);
     }

@@ -41,19 +41,15 @@
 //!
 //! # Documentation coverage
 //!
-//! Every public struct, enum, trait, and associated type now carries a doc
-//! comment (standards audit P2.23). `#![warn(missing_docs)]` was evaluated
-//! as a follow-on to enforce this permanently, but a first pass surfaced
-//! roughly 380 further warnings — almost entirely individual simple
-//! getters, enum variants, and struct fields on types that are *already*
-//! documented at the type level (e.g. `Rect.x`, `WindowPresentation::
-//! Minimized`) — that a purely mechanical "add a one-line comment repeating
-//! the field name" pass would satisfy without adding real information. That
-//! is a legitimate, bounded follow-up (tracked in `BUILD_STATUS.md`), not
-//! something to half-enable here: turning the lint on without finishing it
-//! would make `-D warnings` builds (this crate's own CI) fail on a list
-//! whose length has nothing to do with the P0/P1 correctness work this pass
-//! prioritized finishing first.
+//! Every public item — including individual struct fields and enum
+//! variants, not just the types that contain them — carries a doc comment,
+//! enforced permanently by `#![deny(missing_docs)]` below (standards audit
+//! P2.23, completed in full: an earlier pass documented every type but left
+//! the lint itself un-enabled, deferring roughly 380 field/variant-level
+//! warnings as a "legitimate, bounded follow-up"; that follow-up is done,
+//! and the lint is now `deny` rather than `warn` so it cannot silently
+//! regress).
+#![deny(missing_docs)]
 pub mod application;
 pub mod capability;
 pub mod component;

@@ -16,18 +16,25 @@ use crate::style::VisualStyle;
 /// The framework's declarative UI tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
+    /// A static, non-interactive text label.
     Label(Label),
+    /// An activatable push button.
     Button(Button),
+    /// An editable single-line text field.
     TextInput(TextInput),
+    /// A container that lays its children out vertically.
     Column(Column),
+    /// A container that lays its children out horizontally.
     Row(Row),
 }
 
 impl Node {
+    /// Creates a [`Label`] node with the default layout.
     pub fn label(key: impl AsRef<str>, text: impl Into<String>) -> Self {
         Self::Label(Label::new(NodeId::from_key(key.as_ref()), text, LayoutStyle::default()))
     }
 
+    /// Creates a [`Label`] node with an explicit layout.
     pub fn label_with_layout(
         key: impl AsRef<str>,
         text: impl Into<String>,
@@ -36,10 +43,12 @@ impl Node {
         Self::Label(Label::new(NodeId::from_key(key.as_ref()), text, layout))
     }
 
+    /// Creates a [`Button`] node with the default layout.
     pub fn button(key: impl AsRef<str>, text: impl Into<String>) -> Self {
         Self::Button(Button::new(NodeId::from_key(key.as_ref()), text, LayoutStyle::default()))
     }
 
+    /// Creates a [`Button`] node with an explicit layout.
     pub fn button_with_layout(
         key: impl AsRef<str>,
         text: impl Into<String>,
@@ -48,6 +57,7 @@ impl Node {
         Self::Button(Button::new(NodeId::from_key(key.as_ref()), text, layout))
     }
 
+    /// Creates a [`TextInput`] node with the default layout.
     pub fn text_input(key: impl AsRef<str>, value: impl Into<String>) -> Self {
         Self::TextInput(TextInput::new(
             NodeId::from_key(key.as_ref()),
@@ -56,6 +66,7 @@ impl Node {
         ))
     }
 
+    /// Creates a [`TextInput`] node with an explicit layout.
     pub fn text_input_with_layout(
         key: impl AsRef<str>,
         value: impl Into<String>,
@@ -64,6 +75,7 @@ impl Node {
         Self::TextInput(TextInput::new(NodeId::from_key(key.as_ref()), value, layout))
     }
 
+    /// Creates a [`Column`] node with the default layout and column style.
     pub fn column(key: impl AsRef<str>, children: impl IntoIterator<Item = Node>) -> Self {
         Self::Column(Column::new(
             NodeId::from_key(key.as_ref()),
@@ -73,6 +85,7 @@ impl Node {
         ))
     }
 
+    /// Creates a [`Column`] node with an explicit layout and column style.
     pub fn column_with_layout(
         key: impl AsRef<str>,
         children: impl IntoIterator<Item = Node>,
@@ -87,6 +100,7 @@ impl Node {
         ))
     }
 
+    /// Creates a [`Row`] node with the default layout and row style.
     pub fn row(key: impl AsRef<str>, children: impl IntoIterator<Item = Node>) -> Self {
         Self::Row(Row::new(
             NodeId::from_key(key.as_ref()),
@@ -96,6 +110,7 @@ impl Node {
         ))
     }
 
+    /// Creates a [`Row`] node with an explicit layout and row style.
     pub fn row_with_layout(
         key: impl AsRef<str>,
         children: impl IntoIterator<Item = Node>,
@@ -110,6 +125,7 @@ impl Node {
         ))
     }
 
+    /// Returns `self` with its accessibility metadata replaced.
     #[must_use]
     pub fn with_accessibility(self, accessibility: AccessibilityInfo) -> Self {
         match self {
@@ -164,6 +180,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's visual style override.
     #[must_use]
     pub fn visual_style(&self) -> &VisualStyle {
         match self {
@@ -205,6 +222,7 @@ impl Node {
         }
     }
 
+    /// Returns whether this node is disabled.
     #[must_use]
     pub fn is_disabled(&self) -> bool {
         match self {
@@ -216,6 +234,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's accessibility metadata.
     #[must_use]
     pub fn accessibility(&self) -> &AccessibilityInfo {
         match self {
@@ -227,6 +246,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's identity.
     #[must_use]
     pub fn id(&self) -> NodeId {
         match self {
@@ -238,6 +258,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's kind.
     #[must_use]
     pub fn kind(&self) -> NodeKind {
         match self {
@@ -249,6 +270,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's layout style.
     #[must_use]
     pub fn layout(&self) -> LayoutStyle {
         match self {
@@ -260,6 +282,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's column style, if it is a [`Column`].
     #[must_use]
     pub fn column_style(&self) -> Option<ColumnStyle> {
         match self {
@@ -268,6 +291,7 @@ impl Node {
         }
     }
 
+    /// Returns this node's row style, if it is a [`Row`].
     #[must_use]
     pub fn row_style(&self) -> Option<RowStyle> {
         match self {
@@ -276,10 +300,14 @@ impl Node {
         }
     }
 
+    /// Walks this node and every descendant depth-first, calling `visitor`
+    /// with each node, its parent's id (`None` for the root), and its index
+    /// among its siblings.
     pub fn visit(&self, visitor: &mut impl FnMut(&Node, Option<NodeId>, usize)) {
         self.visit_with_parent(None, 0, visitor);
     }
 
+    /// Returns whether `target` identifies this node or any descendant.
     #[must_use]
     pub fn contains_id(&self, target: NodeId) -> bool {
         let mut found = false;
@@ -346,10 +374,15 @@ impl Node {
 /// A UI node's realization kind, independent of any single node instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeKind {
+    /// See [`Node::Label`].
     Label,
+    /// See [`Node::Button`].
     Button,
+    /// See [`Node::TextInput`].
     TextInput,
+    /// See [`Node::Column`].
     Column,
+    /// See [`Node::Row`].
     Row,
 }
 
@@ -385,14 +418,17 @@ macro_rules! leaf_node {
                 }
             }
 
+            /// Returns this node's identity.
             pub fn id(&self) -> NodeId {
                 self.id
             }
 
+            /// Returns this node's layout style.
             pub fn layout(&self) -> LayoutStyle {
                 self.layout
             }
 
+            /// Returns this node's accessibility metadata.
             pub fn accessibility(&self) -> &AccessibilityInfo {
                 &self.accessibility
             }
@@ -405,6 +441,7 @@ leaf_node!(Button, text: String, text);
 leaf_node!(TextInput, value: String, value);
 
 impl Label {
+    /// Returns the label's text.
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
@@ -412,6 +449,7 @@ impl Label {
 }
 
 impl Button {
+    /// Returns the button's text.
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
@@ -419,6 +457,7 @@ impl Button {
 }
 
 impl TextInput {
+    /// Returns the text field's current value.
     #[must_use]
     pub fn value(&self) -> &str {
         &self.value
@@ -455,10 +494,12 @@ macro_rules! container_node {
                 }
             }
 
+            /// Returns this node's identity.
             pub fn id(&self) -> NodeId {
                 self.id
             }
 
+            /// Returns this container's children.
             pub fn children(&self) -> &[Node] {
                 &self.children
             }
@@ -473,14 +514,17 @@ macro_rules! container_node {
                 &mut self.children
             }
 
+            /// Returns this container's layout-specific style.
             pub fn style(&self) -> $style {
                 self.style
             }
 
+            /// Returns this node's layout style.
             pub fn layout(&self) -> LayoutStyle {
                 self.layout
             }
 
+            /// Returns this node's accessibility metadata.
             pub fn accessibility(&self) -> &AccessibilityInfo {
                 &self.accessibility
             }

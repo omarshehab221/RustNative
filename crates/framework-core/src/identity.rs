@@ -154,6 +154,7 @@ impl ComponentId {
     /// belt-and-braces, not load-bearing.
     pub const ROOT: Self = Self(0x6a09_e667_f3bc_c909);
 
+    /// Returns the identity's raw numeric value.
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
@@ -188,6 +189,7 @@ impl WindowId {
     /// constructor.
     pub const PRIMARY: Self = Self(0);
 
+    /// Returns the identity's raw numeric value.
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0

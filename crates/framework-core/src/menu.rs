@@ -68,6 +68,7 @@ impl MenuItem {
         }
     }
 
+    /// Sets whether the item is enabled (selectable).
     #[must_use]
     pub const fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
@@ -83,30 +84,37 @@ impl MenuItem {
         self
     }
 
+    /// Returns the item's identity.
     #[must_use]
     pub fn id(&self) -> NodeId {
         self.id
     }
+    /// Returns the item's display label.
     #[must_use]
     pub fn label(&self) -> &str {
         &self.label
     }
+    /// Returns whether the item is enabled.
     #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
+    /// Returns the item's checked state, if it is a checkable item.
     #[must_use]
     pub fn is_checked(&self) -> Option<bool> {
         self.checked
     }
+    /// Returns whether the item is a non-actionable visual separator.
     #[must_use]
     pub fn is_separator(&self) -> bool {
         self.separator
     }
+    /// Returns whether the item is a submenu (has children).
     #[must_use]
     pub fn is_submenu(&self) -> bool {
         !self.children.is_empty()
     }
+    /// Returns the item's children, if it is a submenu.
     #[must_use]
     pub fn children(&self) -> &[MenuItem] {
         &self.children
@@ -120,10 +128,12 @@ pub struct MenuBar {
 }
 
 impl MenuBar {
+    /// Creates a menu bar from its top-level items.
     pub fn new(items: impl IntoIterator<Item = MenuItem>) -> Self {
         Self { items: items.into_iter().collect() }
     }
 
+    /// Returns the menu bar's top-level items.
     #[must_use]
     pub fn items(&self) -> &[MenuItem] {
         &self.items

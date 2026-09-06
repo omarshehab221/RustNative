@@ -104,8 +104,21 @@ if [[ ! -f "$LIBRARY_SRC/Cargo.lock" ]]; then
     cp -r "$WORK_DIR/rust-src-repo/library" "$LIBRARY_SRC"
 
     echo "== Fetching library/backtrace submodule at its pinned commit =="
-    BACKTRACE_COMMIT="$(git -C "$WORK_DIR/rust-src-repo" ls-tree HEAD library | \
+    # NOTE: the trailing slash on `library/` is load-bearing. Without it,
+    # `git ls-tree <tree> library` matches the single tree entry named
+    # `library` itself (printing one line describing that directory, not
+    # its contents), so the `awk` below would silently find no match and
+    # `BACKTRACE_COMMIT` would be empty — which is exactly what happened
+    # the first time this script was run in a fresh environment `git
+    # checkout`'s tag had never been fetched into before. The empty-string
+    # pathspec error `git clone --branch "$BACKTRACE_COMMIT" ...` then
+    # raises downstream is a *symptom* of this, not the root cause.
+    BACKTRACE_COMMIT="$(git -C "$WORK_DIR/rust-src-repo" ls-tree HEAD library/ | \
         awk '/backtrace/ {print $3}')"
+    if [[ -z "$BACKTRACE_COMMIT" ]]; then
+        echo "error: could not resolve library/backtrace's pinned submodule commit" >&2
+        exit 1
+    fi
     git clone --filter=blob:none --quiet \
         https://github.com/rust-lang/backtrace-rs.git "$WORK_DIR/backtrace-rs"
     git -C "$WORK_DIR/backtrace-rs" checkout --quiet "$BACKTRACE_COMMIT"

@@ -14,6 +14,8 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
+use crate::WindowId;
+
 /// An error returned by a platform service implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceError {
@@ -21,6 +23,7 @@ pub struct ServiceError {
 }
 
 impl ServiceError {
+    /// Creates a service error carrying `message`.
     pub fn new(message: impl Into<String>) -> Self {
         Self { message: message.into() }
     }
@@ -40,17 +43,26 @@ impl Error for ServiceError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Method {
+    /// `GET`.
     Get,
+    /// `POST`.
     Post,
+    /// `PUT`.
     Put,
+    /// `DELETE`.
     Delete,
+    /// `PATCH`.
     Patch,
+    /// `HEAD`.
     Head,
+    /// `OPTIONS`.
     Options,
+    /// A verb this enum does not name explicitly, carried verbatim.
     Other(String),
 }
 
 impl Method {
+    /// Returns the method's canonical uppercase HTTP verb string.
     #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
@@ -91,38 +103,49 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
+    /// Creates a `GET` request to `url` with no headers or body.
     pub fn get(url: impl Into<String>) -> Self {
         Self { method: Method::Get, url: url.into(), headers: Vec::new(), body: Vec::new() }
     }
 
+    /// Creates a request using `method` to `url` with no headers or body.
     pub fn new(method: Method, url: impl Into<String>) -> Self {
         Self { method, url: url.into(), headers: Vec::new(), body: Vec::new() }
     }
 
+    /// Appends one header.
     #[must_use]
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
     }
 
+    /// Sets the request body.
     #[must_use]
     pub fn body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
         self
     }
 
+    /// Returns the request's method.
     #[must_use]
     pub const fn method(&self) -> &Method {
         &self.method
     }
+
+    /// Returns the request's target URL.
     #[must_use]
     pub fn url(&self) -> &str {
         &self.url
     }
+
+    /// Returns the request's headers, in the order they were added.
     #[must_use]
     pub fn headers(&self) -> &[(String, String)] {
         &self.headers
     }
+
+    /// Returns the request's raw body bytes.
     #[must_use]
     pub fn body_bytes(&self) -> &[u8] {
         &self.body
@@ -138,19 +161,25 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    /// Creates a response from its status code, headers, and body.
     #[must_use]
     pub const fn new(status: u16, headers: Vec<(String, String)>, body: Vec<u8>) -> Self {
         Self { status, headers, body }
     }
 
+    /// Returns the response's HTTP status code.
     #[must_use]
     pub const fn status(&self) -> u16 {
         self.status
     }
+
+    /// Returns the response's headers.
     #[must_use]
     pub fn headers(&self) -> &[(String, String)] {
         &self.headers
     }
+
+    /// Returns the response's raw body bytes.
     #[must_use]
     pub fn body_bytes(&self) -> &[u8] {
         &self.body
@@ -175,21 +204,28 @@ impl HttpResponse {
 /// needs to store as `Arc<dyn _>`.)
 #[async_trait::async_trait]
 pub trait HttpService: Send + Sync {
+    /// Executes `request` and returns the response, or a [`ServiceError`]
+    /// if the request could not be completed.
     async fn execute(&self, request: HttpRequest) -> Result<HttpResponse, ServiceError>;
 }
 
 /// Persistent key-value storage.
 #[async_trait::async_trait]
 pub trait StorageService: Send + Sync {
+    /// Returns the value stored under `key`, or `None` if it has none.
     async fn get(&self, key: String) -> Result<Option<Vec<u8>>, ServiceError>;
+    /// Stores `value` under `key`, replacing any existing value.
     async fn set(&self, key: String, value: Vec<u8>) -> Result<(), ServiceError>;
+    /// Removes the value stored under `key`, if any.
     async fn remove(&self, key: String) -> Result<(), ServiceError>;
 }
 
 /// The system clipboard, restricted to plain text.
 #[async_trait::async_trait]
 pub trait ClipboardService: Send + Sync {
+    /// Returns the clipboard's current plain-text content, if any.
     async fn read_text(&self) -> Result<Option<String>, ServiceError>;
+    /// Replaces the clipboard's content with `value`.
     async fn write_text(&self, value: String) -> Result<(), ServiceError>;
 }
 
@@ -214,11 +250,30 @@ pub struct FileDialogRequest {
     /// Named filter groups, each a display label paired with the file
     /// extensions it matches (e.g. `("Images", vec!["png", "jpg"])`).
     pub filters: Vec<(String, Vec<String>)>,
+    /// The window this dialog is logically modal to, if any.
+    ///
+    /// Closes the standards audit's Phase 3 roadmap item 15: earlier
+    /// versions of this type had no way to carry a window identity through
+    /// to a platform backend at all, so every backend's dialog was shown
+    /// with no owner regardless of which window the request logically
+    /// belonged to (no taskbar grouping under the right window, no
+    /// automatic re-enable-on-close relationship, and the dialog could
+    /// surface behind its logical parent). A backend that supports window
+    /// ownership (`framework-windows`'s `IFileDialog::Show`, for example)
+    /// resolves this to its native window handle at dialog-creation time;
+    /// a backend without a concept of window ownership, or asked to use a
+    /// window id it does not recognize, may simply ignore it and show an
+    /// unowned dialog rather than treating it as an error — an owner is an
+    /// enhancement to the dialog's presentation, not a correctness
+    /// requirement the dialog cannot function without.
+    pub owner: Option<WindowId>,
 }
 
 /// A native open/save/pick-folder file dialog.
 #[async_trait::async_trait]
 pub trait FileDialogService: Send + Sync {
+    /// Shows the dialog `request` describes and returns the chosen path, or
+    /// `None` if the person cancelled.
     async fn show(&self, request: FileDialogRequest) -> Result<Option<String>, ServiceError>;
 }
 
@@ -226,7 +281,9 @@ pub trait FileDialogService: Send + Sync {
 /// notifications.
 #[async_trait::async_trait]
 pub trait SystemService: Send + Sync {
+    /// Opens `url` with the system's default handler.
     async fn open_url(&self, url: String) -> Result<(), ServiceError>;
+    /// Posts a system notification with `title` and `body`.
     async fn notify(&self, title: String, body: String) -> Result<(), ServiceError>;
 }
 
@@ -266,47 +323,66 @@ impl fmt::Debug for Services {
 }
 
 impl Services {
+    /// Returns `self` with the HTTP service set.
     #[must_use]
     pub fn with_http(mut self, service: Arc<dyn HttpService>) -> Self {
         self.http = Some(service);
         self
     }
+
+    /// Returns `self` with the storage service set.
     #[must_use]
     pub fn with_storage(mut self, service: Arc<dyn StorageService>) -> Self {
         self.storage = Some(service);
         self
     }
+
+    /// Returns `self` with the clipboard service set.
     #[must_use]
     pub fn with_clipboard(mut self, service: Arc<dyn ClipboardService>) -> Self {
         self.clipboard = Some(service);
         self
     }
+
+    /// Returns `self` with the file-dialog service set.
     #[must_use]
     pub fn with_file_dialogs(mut self, service: Arc<dyn FileDialogService>) -> Self {
         self.file_dialogs = Some(service);
         self
     }
+
+    /// Returns `self` with the system service set.
     #[must_use]
     pub fn with_system(mut self, service: Arc<dyn SystemService>) -> Self {
         self.system = Some(service);
         self
     }
+
+    /// Returns the configured HTTP service, if any.
     #[must_use]
     pub fn http(&self) -> Option<&Arc<dyn HttpService>> {
         self.http.as_ref()
     }
+
+    /// Returns the configured storage service, if any.
     #[must_use]
     pub fn storage(&self) -> Option<&Arc<dyn StorageService>> {
         self.storage.as_ref()
     }
+
+    /// Returns the configured clipboard service, if any.
     #[must_use]
     pub fn clipboard(&self) -> Option<&Arc<dyn ClipboardService>> {
         self.clipboard.as_ref()
     }
+
+    /// Returns the configured file-dialog service, if any.
     #[must_use]
     pub fn file_dialogs(&self) -> Option<&Arc<dyn FileDialogService>> {
         self.file_dialogs.as_ref()
     }
+
+    /// Returns the configured system service, if any.
     #[must_use]
     pub fn system(&self) -> Option<&Arc<dyn SystemService>> {
         self.system.as_ref()
