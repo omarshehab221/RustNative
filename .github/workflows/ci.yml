@@ -74,42 +74,43 @@ jobs:
       - name: cargo audit
         run: cargo audit
 
-  windows-cross-wine:
-    name: Windows cross-compile + Wine (ubuntu, fast signal)
-    runs-on: ubuntu-latest
-    # Complements `test-windows` below rather than replacing it: this job
-    # proves `framework-windows`'s native module compiles, links, and
-    # behaves plausibly under Wine on every push/PR, using only Ubuntu
-    # runner minutes and without waiting on the (often busier)
-    # `windows-latest` runner queue — see `tools/windows-cross-test.sh` for
-    # exactly what "behaves plausibly under Wine" does and does not verify
-    # relative to real Windows.
-    #
-    # RUSTFLAGS is cleared for this job: the workflow-level `-D warnings`
-    # would otherwise apply to `-Z build-std`'s from-source compilation of
-    # `core`/`alloc`/`std` themselves, which this repository does not
-    # control the warning-cleanliness of.
-    env:
-      RUSTFLAGS: ""
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: install mingw-w64 + wine
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64
-      - name: cross-compile + run tests under Wine
-        run: ./tools/windows-cross-test.sh
-      - name: cross-compile clippy under Wine's toolchain
-        run: |
-          RUSTC_BOOTSTRAP=1 cargo clippy \
-            -Z build-std=core,alloc,std,panic_abort,test \
-            --target x86_64-pc-windows-gnu --workspace --all-targets \
-            -- -D warnings
+  # This isn't working properly with GitHub Actions
+  # windows-cross-wine:
+  #   name: Windows cross-compile + Wine (ubuntu, fast signal)
+  #   runs-on: ubuntu-latest
+  #   # Complements `test-windows` below rather than replacing it: this job
+  #   # proves `framework-windows`'s native module compiles, links, and
+  #   # behaves plausibly under Wine on every push/PR, using only Ubuntu
+  #   # runner minutes and without waiting on the (often busier)
+  #   # `windows-latest` runner queue — see `tools/windows-cross-test.sh` for
+  #   # exactly what "behaves plausibly under Wine" does and does not verify
+  #   # relative to real Windows.
+  #   #
+  #   # RUSTFLAGS is cleared for this job: the workflow-level `-D warnings`
+  #   # would otherwise apply to `-Z build-std`'s from-source compilation of
+  #   # `core`/`alloc`/`std` themselves, which this repository does not
+  #   # control the warning-cleanliness of.
+  #   env:
+  #     RUSTFLAGS: ""
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         components: clippy
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: install mingw-w64 + wine
+  #       run: |
+  #         sudo dpkg --add-architecture i386
+  #         sudo apt-get update
+  #         sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64
+  #     - name: cross-compile + run tests under Wine
+  #       run: ./tools/windows-cross-test.sh
+  #     - name: cross-compile clippy under Wine's toolchain
+  #       run: |
+  #         RUSTC_BOOTSTRAP=1 cargo clippy \
+  #           -Z build-std=core,alloc,std,panic_abort,test \
+  #           --target x86_64-pc-windows-gnu --workspace --all-targets \
+  #           -- -D warnings
 
   test-windows:
     name: build + test (windows, native backend)
