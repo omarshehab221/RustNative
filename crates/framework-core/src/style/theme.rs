@@ -263,6 +263,29 @@ impl ComponentStyle {
 /// Encapsulated with accessors (no direct external field access exists in
 /// either this crate or `framework-windows`, which only ever calls
 /// [`Theme::resolve`] — see the standards audit's P2.24 finding).
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{Color, ControlState, NodeKind, StyleOverride, Theme, VisualStyle};
+///
+/// let theme = Theme::default();
+///
+/// // Resolution merges the application's override onto the theme's own
+/// // default for this node kind and state.
+/// let authored = StyleOverride::new(VisualStyle::new().foreground(Color::rgb(0, 0, 0)));
+/// let resolved = theme.resolve(NodeKind::Button, ControlState::Normal, &authored);
+///
+/// // The override wins where it says something...
+/// assert_eq!(resolved.properties().foreground_override(), Some(Color::rgb(0, 0, 0)));
+/// // ...and the theme shows through where it does not.
+/// assert_eq!(
+///     resolved.properties().background_override(),
+///     theme.button().normal.background_override(),
+/// );
+/// // The resolved style remembers which state produced it.
+/// assert_eq!(resolved.state(), ControlState::Normal);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
     typography: Typography,

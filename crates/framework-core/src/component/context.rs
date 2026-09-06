@@ -109,6 +109,82 @@ impl<M: 'static> Callback<M> {
 /// Render-time capabilities available to one component: composing children,
 /// spawning tasks, requesting a re-render dependency (`effect`), sending
 /// messages to a parent, and reaching platform services.
+///
+/// # Example
+///
+/// A component that composes a child and does asynchronous work. Both go
+/// through the context: children so the framework can own their state
+/// across renders, and tasks so they are cancelled when this component is
+/// unmounted.
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use framework_core::{Component, ComponentContext, ComponentTree, Event, Node};
+///
+/// # #[derive(Clone, PartialEq, Default)]
+/// # struct Unit;
+/// # struct Child { props: Unit }
+/// # impl Component for Child {
+/// #     type Props = Unit;
+/// #     type Message = ();
+/// #     fn new(props: Self::Props) -> Self { Self { props } }
+/// #     fn props(&self) -> &Self::Props { &self.props }
+/// #     fn set_props(&mut self, props: Self::Props) { self.props = props; }
+/// #     fn view(&self) -> Node { Node::label("child-label", "child") }
+/// #     fn update(&mut self, _event: Event) {}
+/// # }
+/// struct Parent {
+///     loaded: bool,
+/// }
+///
+/// impl Component for Parent {
+///     type Props = ();
+///     type Message = &'static str;
+///
+///     fn new((): Self::Props) -> Self {
+///         Self { loaded: false }
+///     }
+///     fn props(&self) -> &Self::Props {
+///         &()
+///     }
+///     fn set_props(&mut self, (): Self::Props) {}
+///
+///     fn view(&self) -> Node {
+///         Node::label("status", if self.loaded { "loaded" } else { "loading" })
+///     }
+///     fn update(&mut self, _event: Event) {}
+///
+///     // A task's output *is* the message, delivered here once the
+///     // scheduler wakes the platform's event loop.
+///     fn message(&mut self, _message: Self::Message) {
+///         self.loaded = true;
+///     }
+///
+///     fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+///         // An effect runs after this render commits, and re-runs only
+///         // when its dependencies change — `()` here means "once".
+///         context.effect("load-once", (), |effects| {
+///             effects.spawn(async { "loaded" });
+///             Box::new(|| { /* cleanup runs before the effect re-runs */ })
+///         });
+///
+///         Node::column(
+///             "root",
+///             [
+///                 self.view(),
+///                 // The child's state is owned by the framework and
+///                 // survives this component re-rendering.
+///                 context.child::<Child>("child"),
+///             ],
+///         )
+///     }
+/// }
+///
+/// let mut tree = ComponentTree::new(Parent::new(()));
+/// let Node::Column(root) = tree.view() else { panic!("the root is a column") };
+/// assert_eq!(root.children().len(), 2);
+/// ```
 pub struct ComponentContext<'a, M: Send + 'static> {
     pub(super) tree: &'a mut ComponentTree,
     pub(super) parent: ComponentId,

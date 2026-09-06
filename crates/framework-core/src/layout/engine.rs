@@ -87,6 +87,44 @@ pub struct LayoutResult {
 
 /// Computes absolute-within-parent geometry for a [`TreeSnapshot`]; see
 /// the module-level documentation for the full contract.
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{
+///     Constraints, LayoutEngine, LayoutStyle, Node, NodeId, Size, SizeMode, TreeSnapshot,
+/// };
+///
+/// let tree = Node::column(
+///     "root",
+///     [
+///         Node::label_with_layout(
+///             "header",
+///             "Header",
+///             LayoutStyle::new().height(SizeMode::Fixed(40)),
+///         ),
+///         Node::label_with_layout(
+///             "body",
+///             "Body",
+///             LayoutStyle::new()
+///                 .width(SizeMode::Fill)
+///                 .constraints(Constraints::new().with_min_width(120)),
+///         ),
+///     ],
+/// );
+///
+/// let snapshot = TreeSnapshot::from_node(&tree)?;
+/// let rects = LayoutEngine::new().layout(&snapshot, Size::new(320, 240));
+///
+/// let header = rects[&NodeId::from_key("header")];
+/// assert_eq!(header.height, 40, "a fixed height is honored exactly");
+///
+/// // A declared minimum is honored even where it would not fit, which is
+/// // what makes a scrollable container possible.
+/// let narrow = LayoutEngine::new().layout(&snapshot, Size::new(20, 240));
+/// assert!(narrow[&NodeId::from_key("body")].width >= 120);
+/// # Ok::<(), framework_core::TreeError>(())
+/// ```
 #[derive(Debug, Default)]
 pub struct LayoutEngine;
 

@@ -31,6 +31,63 @@ use crate::node::Node;
 /// A component owns its state and describes how state becomes UI. Platform
 /// backends only need to know how to feed framework events into this
 /// contract.
+///
+/// # Example
+///
+/// A counter. [`Self::view`] describes the UI as a function of state, and
+/// [`Self::update`] is the only place that state changes — the framework
+/// re-renders and reconciles afterwards.
+///
+/// ```
+/// use framework_core::{Component, ComponentTree, Event, Node, NodeId};
+///
+/// struct Counter {
+///     count: u32,
+/// }
+///
+/// impl Component for Counter {
+///     // Nothing is passed in from a parent, and nothing is emitted to one.
+///     type Props = ();
+///     type Message = ();
+///
+///     fn new((): Self::Props) -> Self {
+///         Self { count: 0 }
+///     }
+///     fn props(&self) -> &Self::Props {
+///         &()
+///     }
+///     fn set_props(&mut self, (): Self::Props) {}
+///
+///     fn view(&self) -> Node {
+///         Node::column(
+///             "root",
+///             [
+///                 Node::label("count", format!("Count: {}", self.count)),
+///                 Node::button("increment", "Increment"),
+///             ],
+///         )
+///     }
+///
+///     fn update(&mut self, event: Event) {
+///         if let Event::Click { target } = event {
+///             if target == NodeId::from_key("increment") {
+///                 self.count += 1;
+///             }
+///         }
+///     }
+/// }
+///
+/// // A `ComponentTree` is what a platform backend drives. Constructing one
+/// // performs the first render, so a view is available immediately.
+/// let mut tree = ComponentTree::new(Counter::new(()));
+/// assert!(matches!(tree.view(), Node::Column(_)));
+///
+/// // Dispatching an event updates state and re-renders.
+/// tree.dispatch(Event::Click { target: NodeId::from_key("increment") });
+/// let Node::Column(root) = tree.view() else { panic!("the root is a column") };
+/// let Node::Label(label) = &root.children()[0] else { panic!("first child is the label") };
+/// assert_eq!(label.text(), "Count: 1");
+/// ```
 pub trait Component: 'static {
     /// Parent-provided, externally comparable inputs to this component.
     type Props: Clone + PartialEq + 'static;

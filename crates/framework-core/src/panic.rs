@@ -42,6 +42,29 @@ use crate::identity::WindowId;
 
 /// How an application responds to a component panic caught at a platform
 /// boundary.
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{PanicAction, PanicPolicy, PanicReport, WindowId};
+///
+/// let report = PanicReport {
+///     message: "index out of bounds".to_owned(),
+///     window: WindowId::PRIMARY,
+/// };
+///
+/// // The default ends the application, whatever else is open.
+/// assert_eq!(PanicPolicy::default(), PanicPolicy::Terminate);
+/// assert_eq!(PanicPolicy::Terminate.resolve(&report, true), PanicAction::Terminate);
+///
+/// // `CloseWindow` bounds the damage to one window...
+/// assert_eq!(
+///     PanicPolicy::CloseWindow.resolve(&report, true),
+///     PanicAction::CloseWindow(WindowId::PRIMARY),
+/// );
+/// // ...but will not close the last one and leave a loop with nothing to show.
+/// assert_eq!(PanicPolicy::CloseWindow.resolve(&report, false), PanicAction::Terminate);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum PanicPolicy {

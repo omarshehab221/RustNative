@@ -301,6 +301,31 @@ pub trait SystemService: Send + Sync {
 /// concept with no call site choosing between them (standards audit P2.26).
 /// Removed rather than adopted, since the macro form is what every impl
 /// (including `framework-windows`'s) already commits to.
+///
+/// # Example
+///
+/// An application registers concrete implementations once; components only
+/// ever see the portable trait, so nothing in a component tree needs to
+/// know which backend is running.
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use framework_core::{MemoryClipboard, MemoryStorage, Services};
+///
+/// // `MemoryStorage`/`MemoryClipboard` are the deterministic in-memory
+/// // implementations this crate ships for tests and headless use; a real
+/// // application registers its platform's instead (for Windows, e.g.
+/// // `framework_windows::WindowsClipboard`).
+/// let services = Services::default()
+///     .with_storage(Arc::new(MemoryStorage::default()))
+///     .with_clipboard(Arc::new(MemoryClipboard::default()));
+///
+/// assert!(services.storage().is_some());
+/// // A service the host did not register is absent rather than a stub that
+/// // silently does nothing, so a component can detect and adapt.
+/// assert!(services.http().is_none());
+/// ```
 #[derive(Clone, Default)]
 pub struct Services {
     http: Option<Arc<dyn HttpService>>,

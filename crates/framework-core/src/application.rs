@@ -31,6 +31,55 @@ struct WindowEntry {
 
 /// Owns every open window's component tree and routes events, task
 /// completions, and deferred window-open/close requests between them.
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{
+///     Application, Component, Event, Node, PanicPolicy, Size, Window, WindowId,
+/// };
+/// # struct Counter { count: u32 }
+/// # impl Component for Counter {
+/// #     type Props = ();
+/// #     type Message = ();
+/// #     fn new((): Self::Props) -> Self { Self { count: 0 } }
+/// #     fn props(&self) -> &Self::Props { &() }
+/// #     fn set_props(&mut self, (): Self::Props) {}
+/// #     fn view(&self) -> Node { Node::button("increment", "Increment") }
+/// #     fn update(&mut self, event: Event) {
+/// #         if let Event::Click { .. } = event { self.count += 1; }
+/// #     }
+/// # }
+///
+/// let mut application = Application::new(
+///     Counter::new(()),
+///     Window::new("Counter", Size::new(400, 300)),
+/// );
+///
+/// // A component panic would otherwise end the application; this one would
+/// // rather lose a single window.
+/// application.set_panic_policy(PanicPolicy::CloseWindow);
+///
+/// // Secondary windows get their own component tree and their own scheduler.
+/// let second = application.open_window(
+///     Counter::new(()),
+///     Window::new("Another Counter", Size::new(300, 200)),
+///     None,
+/// );
+/// assert_eq!(application.window_ids(), vec![WindowId::PRIMARY, second]);
+///
+/// // Events are routed per window; each tree keeps its own state.
+/// application.dispatch_to_window(second, Event::Click {
+///     target: framework_core::NodeId::from_key("increment"),
+/// });
+///
+/// application.close_window(second);
+/// assert_eq!(application.window_ids(), vec![WindowId::PRIMARY]);
+/// ```
+///
+/// A platform backend takes it from here: `WindowsPlatform::run(&mut application)`
+/// creates the native windows, runs the message loop, and feeds real input
+/// back through `dispatch_to_window`.
 pub struct Application {
     windows: HashMap<WindowId, WindowEntry>,
     primary_window: WindowId,

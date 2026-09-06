@@ -9,6 +9,83 @@
 //! portable: `tokio` (an OS-abstracted async runtime, not a UI binding),
 //! `parking_lot`, and `async-trait`.
 //!
+//! # Getting started
+//!
+//! A component owns state and describes UI as a function of it; an
+//! `Application` owns one or more windows' component trees; a platform
+//! backend drives the whole thing. Only the last step is platform-specific.
+//!
+//! ```
+//! use framework_core::{Application, Component, Event, Node, NodeId, Size, Window};
+//!
+//! struct Greeter {
+//!     greeted: bool,
+//! }
+//!
+//! impl Component for Greeter {
+//!     type Props = ();
+//!     type Message = ();
+//!
+//!     fn new((): Self::Props) -> Self {
+//!         Self { greeted: false }
+//!     }
+//!     fn props(&self) -> &Self::Props {
+//!         &()
+//!     }
+//!     fn set_props(&mut self, (): Self::Props) {}
+//!
+//!     fn view(&self) -> Node {
+//!         Node::column(
+//!             "root",
+//!             [
+//!                 Node::label("greeting", if self.greeted { "Hello!" } else { "..." }),
+//!                 Node::button("greet", "Greet"),
+//!             ],
+//!         )
+//!     }
+//!
+//!     fn update(&mut self, event: Event) {
+//!         if matches!(event, Event::Click { target } if target == NodeId::from_key("greet")) {
+//!             self.greeted = true;
+//!         }
+//!     }
+//! }
+//!
+//! let mut application =
+//!     Application::new(Greeter::new(()), Window::new("Greeter", Size::new(320, 200)));
+//!
+//! // A backend would deliver this from a real click; here it stands in for
+//! // one, which is also how a headless test drives a component.
+//! application.dispatch(Event::Click { target: NodeId::from_key("greet") });
+//!
+//! let Node::Column(root) = application.view() else { panic!("the root is a column") };
+//! let Node::Label(label) = &root.children()[0] else { panic!("first child is the label") };
+//! assert_eq!(label.text(), "Hello!");
+//! ```
+//!
+//! On Windows, the last line of `main` hands it to the backend:
+//!
+//! ```no_run
+//! # use framework_core::{Application, Component, Event, Node, Platform, Size, Window};
+//! # struct Greeter;
+//! # impl Component for Greeter {
+//! #     type Props = ();
+//! #     type Message = ();
+//! #     fn new((): Self::Props) -> Self { Self }
+//! #     fn props(&self) -> &Self::Props { &() }
+//! #     fn set_props(&mut self, (): Self::Props) {}
+//! #     fn view(&self) -> Node { Node::label("greeting", "Hello") }
+//! #     fn update(&mut self, _event: Event) {}
+//! # }
+//! # fn run<P: Platform>(platform: &mut P) -> Result<(), P::Error> {
+//! let mut application =
+//!     Application::new(Greeter::new(()), Window::new("Greeter", Size::new(320, 200)));
+//! // e.g. `framework_windows::WindowsPlatform::new().run(&mut application)?;`
+//! platform.run(&mut application)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! # Module map
 //!
 //! | Module | Owns |

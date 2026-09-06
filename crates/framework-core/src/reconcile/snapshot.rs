@@ -105,6 +105,37 @@ impl TreeNode {
 }
 
 /// An immutable, indexed snapshot of one rendered [`Node`] tree.
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{Node, NodeId, TreeDiff, TreeOp, TreeSnapshot};
+///
+/// let before = TreeSnapshot::from_node(&Node::column(
+///     "root",
+///     [Node::label("a", "first"), Node::label("b", "second")],
+/// ))?;
+/// let after = TreeSnapshot::from_node(&Node::column(
+///     "root",
+///     [Node::label("a", "changed"), Node::label("c", "new")],
+/// ))?;
+///
+/// // Structure is indexed at construction, so this is a lookup, not a scan.
+/// assert_eq!(before.children_of(NodeId::from_key("root")).count(), 2);
+///
+/// // A diff says exactly what a backend must do, in a dependency-safe
+/// // order: removals deepest-first, then insertions shallowest-first.
+/// let diff = TreeDiff::between(&before, &after);
+/// assert!(diff.operations().iter().any(|op| {
+///     matches!(op, TreeOp::Remove(node) if node.id == NodeId::from_key("b"))
+/// }));
+/// assert!(diff.operations().iter().any(|op| {
+///     matches!(op, TreeOp::Insert(node) if node.id == NodeId::from_key("c"))
+/// }));
+/// // A text change moves geometry, so layout must run again.
+/// assert!(diff.invalidates_layout());
+/// # Ok::<(), framework_core::TreeError>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TreeSnapshot {
     nodes: HashMap<NodeId, TreeNode>,

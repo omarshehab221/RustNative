@@ -33,6 +33,7 @@ looks for it again.
 | **P2.33** | A caught component panic had one hard-coded response: terminate. |
 | **P2.40** | The `pedantic`/`cargo` groups were on, but none of the individually chosen restriction lints the audit also asks for. |
 | Phase 7 | Benchmarks measured one tree size each rather than the 10/100/1k/10k sweep the audit asks for; four of the named properties had no property test; there was no long-running task stress test. |
+| Phase 5 #26 | "Add examples to major public APIs" — `cargo test` reported zero doc-tests, so there were none at all. There are now 16, on the crate roots and on `Component`, `Application`, `ComponentContext`, `Node`, `TreeSnapshot`, `LayoutEngine`, `Theme`, `Services`, `MenuBar`, `ManualExecutor`, and `PanicPolicy`. |
 
 All of the above are now closed. See the commit history from
 `Close P0.2, P1.14, P1.16, P1.21, P2.30, P2.31 from Audit.md` onward for the
@@ -82,7 +83,7 @@ sleep, which failed as soon as a stress test ran alongside them.
 ```text
 cargo fmt --all -- --check                                        clean
 cargo clippy --workspace --all-targets --all-features -D warnings clean
-cargo test --workspace                                            148 passing
+cargo test --workspace                                            164 passing
 cargo doc --workspace --no-deps                                   clean
 ```
 

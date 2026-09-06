@@ -30,6 +30,22 @@ pub enum Node {
 
 impl Node {
     /// Creates a [`Label`] node with the default layout.
+    /// Creates a static text node.
+    ///
+    /// `key` is the node's identity. It only has to be unique among the
+    /// nodes one component renders — see [`crate::identity`] for why keys
+    /// are scoped that way rather than globally.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use framework_core::{AccessibilityRole, Node};
+    ///
+    /// let label = Node::label("total", "Total: 42");
+    /// // A label describes itself: static text, and not a keyboard stop.
+    /// assert_eq!(label.accessibility().role(), AccessibilityRole::Label);
+    /// assert!(!label.accessibility().is_focusable());
+    /// ```
     pub fn label(key: impl AsRef<str>, text: impl Into<String>) -> Self {
         Self::Label(Label::new(NodeId::from_key(key.as_ref()), text, LayoutStyle::default()))
     }
@@ -44,6 +60,36 @@ impl Node {
     }
 
     /// Creates a [`Button`] node with the default layout.
+    /// Creates an activatable button.
+    ///
+    /// Buttons default to being keyboard-focusable and to
+    /// [`AccessibilityRole::Button`]; use [`Self::with_accessibility`] where
+    /// that is wrong, or where the announced name should differ from the
+    /// visible caption.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use framework_core::{AccessibilityInfo, AccessibilityRole, Node};
+    ///
+    /// let submit = Node::button("submit", "Submit");
+    /// assert!(submit.accessibility().is_focusable());
+    ///
+    /// // A decorative button, out of the tab order:
+    /// let decorative = Node::button("chevron", ">")
+    ///     .with_accessibility(AccessibilityInfo::new(AccessibilityRole::None));
+    /// assert!(!decorative.accessibility().is_focusable());
+    ///
+    /// // Or one whose caption is an icon and whose announced name is not:
+    /// let icon = Node::button("delete", "\u{1F5D1}").with_accessibility(
+    ///     AccessibilityInfo::new(AccessibilityRole::Button)
+    ///         .name("Delete this item")
+    ///         .focusable(true),
+    /// );
+    /// assert_eq!(icon.accessibility().name_hint(), Some("Delete this item"));
+    /// ```
+    ///
+    /// [`AccessibilityRole::Button`]: crate::AccessibilityRole::Button
     pub fn button(key: impl AsRef<str>, text: impl Into<String>) -> Self {
         Self::Button(Button::new(NodeId::from_key(key.as_ref()), text, LayoutStyle::default()))
     }

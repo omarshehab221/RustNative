@@ -16,6 +16,52 @@
 //! - `native`: the Win32 window backend proper (tree reconciliation,
 //!   layout, the message loop, and the window procedures).
 //!
+//! # Getting started
+//!
+//! ```no_run
+//! use framework_core::{Application, Component, Event, Node, Platform, Size, Window};
+//! use framework_windows::WindowsPlatform;
+//!
+//! # struct Greeter;
+//! # impl Component for Greeter {
+//! #     type Props = ();
+//! #     type Message = ();
+//! #     fn new((): Self::Props) -> Self { Self }
+//! #     fn props(&self) -> &Self::Props { &() }
+//! #     fn set_props(&mut self, (): Self::Props) {}
+//! #     fn view(&self) -> Node { Node::label("greeting", "Hello") }
+//! #     fn update(&mut self, _event: Event) {}
+//! # }
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let mut application =
+//!         Application::new(Greeter::new(()), Window::new("Greeter", Size::new(320, 200)));
+//!
+//!     // Blocks until the last window closes. A failure here carries the
+//!     // window and node it concerns — see [`Error`] and [`NativeContext`].
+//!     WindowsPlatform::new().run(&mut application)?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! Register this backend's OS services so components can reach them through
+//! the portable contracts in `framework_core::Services`:
+//!
+//! ```
+//! use std::sync::Arc;
+//!
+//! use framework_core::Services;
+//! # #[cfg(windows)]
+//! use framework_windows::{WindowsClipboard, WindowsFileDialogs, WindowsSystem};
+//!
+//! # #[cfg(windows)]
+//! let services = Services::default()
+//!     .with_clipboard(Arc::new(WindowsClipboard))
+//!     .with_file_dialogs(Arc::new(WindowsFileDialogs))
+//!     .with_system(Arc::new(WindowsSystem));
+//! # #[cfg(windows)]
+//! assert!(services.clipboard().is_some());
+//! ```
+//!
 //! # Documentation coverage
 //!
 //! Every public item — fields and enum variants included — carries a doc

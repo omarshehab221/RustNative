@@ -412,8 +412,8 @@ compiles and runs `framework-windows`'s `native` module: it is
 
 `framework-core` is covered by unit tests, integration tests, `proptest`
 property tests (identity, reconciliation, layout constraints, scroll ranges,
-removal ordering), and `criterion` benchmarks including scaling sweeps at
-10/100/1k/10k nodes.
+removal ordering), runnable doc examples on every major public API, and
+`criterion` benchmarks including scaling sweeps at 10/100/1k/10k nodes.
 
 `framework-windows` is covered against **real** Win32: `native::integration`
 creates genuine top-level windows and drives them through the production

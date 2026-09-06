@@ -240,6 +240,39 @@ impl Default for ManualInner {
 /// that spawns many short-lived tasks does not retain them forever — the
 /// same bounded-registry property [`super::TaskScope`] itself provides for
 /// production use (P1.5).
+///
+/// # Example
+///
+/// Testing time-dependent behavior without racing a real clock:
+///
+/// ```
+/// use std::sync::Arc;
+/// use std::sync::atomic::{AtomicBool, Ordering};
+/// use std::time::Duration;
+///
+/// use framework_core::{Executor, ManualExecutor, Scheduler};
+///
+/// let executor = ManualExecutor::new();
+/// let scheduler = Scheduler::with_executor(Arc::new(executor.clone()));
+///
+/// let fired = Arc::new(AtomicBool::new(false));
+/// let flag = Arc::clone(&fired);
+/// let delay = scheduler.sleep(Duration::from_secs(30));
+/// executor.spawn(Box::pin(async move {
+///     delay.await;
+///     flag.store(true, Ordering::SeqCst);
+/// }));
+///
+/// // Nothing runs until asked to.
+/// executor.run_until_stalled();
+/// assert!(!fired.load(Ordering::SeqCst), "the delay has not elapsed yet");
+///
+/// // Time only moves when the test moves it, so this is deterministic
+/// // rather than a 30-second wait or a hopeful sleep.
+/// executor.advance(Duration::from_secs(30));
+/// executor.run_until_stalled();
+/// assert!(fired.load(Ordering::SeqCst));
+/// ```
 #[derive(Clone, Default)]
 pub struct ManualExecutor {
     inner: Arc<ManualInner>,

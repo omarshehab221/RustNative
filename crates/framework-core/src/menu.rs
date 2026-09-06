@@ -122,6 +122,39 @@ impl MenuItem {
 }
 
 /// A portable, declarative native menu bar attached to a `Window`.
+///
+/// A selection arrives as [`Event::MenuAction`] naming the item's own
+/// identity. Menus are window chrome rather than part of the node tree, so
+/// the event routes to the window's root component rather than to a node.
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{Event, MenuBar, MenuItem, NodeId, Size, Window, WindowId};
+///
+/// let menu = MenuBar::new([MenuItem::submenu(
+///     "file",
+///     "File",
+///     [
+///         MenuItem::action("file.open", "Open..."),
+///         MenuItem::separator(),
+///         MenuItem::action("file.quit", "Quit"),
+///     ],
+/// )]);
+/// let window = Window::new("Editor", Size::new(800, 600)).with_menu(menu);
+/// assert!(window.menu().is_some());
+///
+/// // A component matches on the item identity it declared:
+/// let event = Event::MenuAction {
+///     window: WindowId::PRIMARY,
+///     item: NodeId::from_key("file.quit"),
+/// };
+/// if let Event::MenuAction { item, .. } = event {
+///     assert_eq!(item, NodeId::from_key("file.quit"));
+/// }
+/// ```
+///
+/// [`Event::MenuAction`]: crate::Event::MenuAction
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MenuBar {
     items: Vec<MenuItem>,
