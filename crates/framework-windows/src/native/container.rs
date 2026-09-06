@@ -38,7 +38,7 @@ where
     match std::panic::catch_unwind(f) {
         Ok(result) => result,
         Err(payload) => {
-            let message = panic_payload_message(&payload);
+            let message = panic_payload_message(payload.as_ref());
             poison_runtime_and_quit(RuntimeSlot::get(root_window(hwnd)), message);
             0
         }

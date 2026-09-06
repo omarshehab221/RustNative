@@ -5,7 +5,11 @@
 mod app;
 mod container;
 pub(crate) mod context;
+#[cfg(test)]
+mod harness;
 mod input;
+#[cfg(test)]
+mod integration;
 mod measure;
 mod menu;
 mod message_loop;

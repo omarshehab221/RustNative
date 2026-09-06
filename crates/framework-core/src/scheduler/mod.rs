@@ -256,8 +256,37 @@ impl Scheduler {
     /// Registers a callback the scheduler invokes whenever a task
     /// completes, so a platform backend can wake its event loop rather than
     /// polling [`Self::drain`].
+    ///
+    /// If any task has *already* completed by the time the waker is
+    /// installed, it is invoked once immediately. That is not an
+    /// optimization — it closes a real gap. A component's very first render
+    /// happens while its `Application` is being constructed, which is
+    /// strictly before a backend can install a waker (the backend needs an
+    /// `Application` to run), so a task spawned from that first render can
+    /// finish inside the window where no waker exists. Without this catch-up
+    /// its result would sit in the queue with nothing scheduled to collect
+    /// it: delivered late, on the next unrelated input, or — for a screen
+    /// that is waiting on exactly that task and has no other input — never.
+    ///
+    /// A spurious wake is harmless (the backend pumps tasks and finds
+    /// nothing), so this errs toward waking.
     pub fn set_waker(&self, waker: Arc<dyn Fn() + Send + Sync>) {
+        // The completion queue is sampled *before* publishing the waker, and
+        // the wake is fired *after*, with neither lock held. Any completion
+        // racing this either lands before the sample (so the catch-up wake
+        // covers it) or after the publish (so it fires the waker itself);
+        // the overlap costs at most one extra wake, never a missed one.
+        let already_completed = !self.inner.completed.lock().is_empty();
         *self.inner.waker.lock() = Some(waker);
+        if already_completed {
+            // Re-read rather than keeping a clone: the waker is stored
+            // behind the lock, so reading it back is what proves the catch-up
+            // wake uses the same callback a real completion would.
+            let installed = self.inner.waker.lock().clone();
+            if let Some(installed) = installed {
+                installed();
+            }
+        }
     }
 
     /// Spawns `future` on this scheduler's executor. The task runs to
@@ -366,6 +395,57 @@ mod tests {
         // becomes observable) a moment to run.
         std::thread::sleep(StdDuration::from_millis(20));
         assert_eq!(scope.task_count(), 0);
+    }
+
+    /// A task that finishes before any waker exists must still wake the
+    /// backend once one is installed.
+    ///
+    /// This is not hypothetical timing trivia: a component's first render
+    /// runs inside `Application::new`, and a platform backend can only
+    /// install its waker afterwards, so every task spawned from a first
+    /// render races exactly this window. The native integration test
+    /// `native_task_wakeup` is what surfaced it — under load, the gap
+    /// between constructing the application and starting the message loop
+    /// grew wide enough for the task to land inside it, and the result was
+    /// never collected.
+    #[test]
+    fn a_waker_installed_after_a_task_already_completed_still_fires() {
+        let scheduler = Scheduler::new();
+        let target = ComponentId::next(&mut 1);
+        let handle = scheduler.spawn::<u32, _>(target, async { 7 });
+
+        let deadline = std::time::Instant::now() + StdDuration::from_secs(5);
+        while !handle.is_finished() && std::time::Instant::now() < deadline {
+            std::thread::sleep(StdDuration::from_millis(1));
+        }
+        assert!(handle.is_finished(), "the task must have completed before the waker is set");
+        // The completion callback runs just after `is_finished` becomes
+        // observable; let it enqueue before installing the waker.
+        std::thread::sleep(StdDuration::from_millis(50));
+
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&wakes);
+        scheduler.set_waker(Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }));
+
+        assert_eq!(
+            wakes.load(Ordering::SeqCst),
+            1,
+            "installing a waker while a completion is already queued must wake immediately,              or that result is never collected"
+        );
+        assert_eq!(scheduler.drain().len(), 1, "and the queued result must still be there");
+    }
+
+    #[test]
+    fn installing_a_waker_with_nothing_pending_does_not_fire_it() {
+        let scheduler = Scheduler::new();
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&wakes);
+        scheduler.set_waker(Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }));
+        assert_eq!(wakes.load(Ordering::SeqCst), 0);
     }
 
     #[test]

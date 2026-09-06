@@ -19,12 +19,20 @@ pub(crate) fn run_application(application: &mut Application) -> Result<(), Error
     // after `run_message_loop` has returned. That is exactly point 1 of
     // `native::context`'s module documentation, which `WindowRegistry::new`
     // requires its caller to establish.
-    let mut registry = unsafe { WindowRegistry::new(application) };
+    //
+    // The `Box` is load-bearing, not a convenience. Each `Runtime` the
+    // registry creates holds a `HostRef<WindowRegistry>` pointing at the
+    // registry's address (so it can reconcile the window set after a
+    // dispatch), and those references are captured during `sync`. Behind a
+    // `Box`, the registry's address is fixed at allocation and stays valid
+    // however the owning handle is later moved — the invariant becomes
+    // structural rather than a fact about this one function's body.
+    let mut registry = Box::new(unsafe { WindowRegistry::new(application) });
     registry.sync()?;
 
     run_message_loop()?;
 
-    for runtime in registry.runtimes.into_values() {
+    for runtime in registry.runtimes.drain().map(|(_, runtime)| runtime) {
         if let Some(error) = runtime.error {
             return Err(error);
         }

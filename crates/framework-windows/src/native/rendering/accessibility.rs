@@ -186,6 +186,25 @@ impl AccessibilityBridge {
     }
 }
 
+/// Whether `hwnd` currently participates in Win32's keyboard tab order.
+///
+/// The read side of [`set_tab_stop`], exposed so the native integration
+/// tests can assert the projection landed even in an environment that will
+/// not grant the test process real keyboard focus. Nothing in the backend
+/// itself needs to read the bit back — `set_tab_stop` is idempotent — hence
+/// the `cfg(test)` gate rather than a permanent accessor.
+#[cfg(test)]
+pub(crate) fn has_tab_stop(hwnd: HWND) -> bool {
+    // SAFETY: `hwnd` is a live HWND owned by this backend's registry;
+    // `GWL_STYLE` is a documented, always-valid index for any window.
+    let current = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
+    // `WS_TABSTOP` is a small, fixed Win32 style-bit constant well below
+    // `isize::MAX`.
+    #[allow(clippy::cast_possible_wrap)]
+    let tabstop_bit = WS_TABSTOP as isize;
+    current & tabstop_bit != 0
+}
+
 /// Adds or removes `WS_TABSTOP` on `hwnd`, leaving every other style bit
 /// untouched.
 ///

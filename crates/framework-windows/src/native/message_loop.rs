@@ -14,7 +14,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, EN_CHANGE, GetCursorPos, GetMessageW, MSG, PostQuitMessage, RegisterClassW,
     TranslateMessage, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
     WM_CTLCOLORSTATIC, WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_SIZE, WNDCLASSW, WindowFromPoint,
+    WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_QUIT, WM_SIZE, WNDCLASSW, WindowFromPoint,
 };
 
 use super::container::container_proc;
@@ -32,19 +32,19 @@ use super::{
 use crate::Error;
 use crate::native::util::window_text;
 
-/// Whether a message this loop pre-processed still needs Win32's ordinary
-/// `TranslateMessage`/`DispatchMessageW` treatment afterwards.
+/// Whether the loop should keep going after a message, or stop because
+/// `WM_QUIT` was posted.
 ///
-/// A few messages are fully consumed before dispatch — Tab is turned into
-/// focus traversal rather than reaching a control, and a wheel event over a
-/// scrollable container becomes a viewport transform — and forwarding those
-/// on would let the native control act on them a second time.
+/// `run_message_loop` learns this from `GetMessageW`'s return value, while
+/// the test harness (`native::harness`) learns it from `PeekMessageW`
+/// returning `WM_QUIT` as an ordinary message — which is exactly why
+/// [`handle_message`] reports it rather than deciding for itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MessageFlow {
-    /// Hand the message to Win32 as usual.
-    Dispatch,
-    /// The pre-dispatch step fully handled it; skip native dispatch.
-    Consumed,
+pub(crate) enum LoopStep {
+    /// Keep pumping.
+    Continue,
+    /// `WM_QUIT` was seen; unwind the loop.
+    Quit,
 }
 
 pub(crate) fn run_message_loop() -> Result<(), Error> {
@@ -66,51 +66,84 @@ pub(crate) fn run_message_loop() -> Result<(), Error> {
             break;
         }
 
-        if message.message == WM_FRAMEWORK_SCHEDULE {
-            // The only thing that ever posts this custom message is the
-            // waker `create_window_once` installs, targeting that same
-            // window's own top-level hwnd — so this resolves the handle
-            // directly rather than walking to an ancestor. A `None` result
-            // means the window has since been destroyed and the wake is
-            // moot.
-            with_runtime(message.hwnd, Runtime::pump_tasks).transpose()?;
-            continue;
+        if handle_message(&message)? == LoopStep::Quit {
+            break;
         }
-
-        // Win32 addresses each message to whichever window it concerns —
-        // frequently a native control or a nested container, not the
-        // top-level window that owns the `Runtime`. Resolve the root once
-        // and reuse it for both the pre-dispatch pass and the focus sync
-        // after dispatch.
-        let root = root_window(message.hwnd);
-        let flow = with_runtime(root, |runtime| pre_dispatch(runtime, &message))
-            .unwrap_or(MessageFlow::Dispatch);
-        if flow == MessageFlow::Consumed {
-            continue;
-        }
-
-        // SAFETY: `message` was just populated by `GetMessageW` above,
-        // which succeeded (the `-1`/`0` failure and quit cases both
-        // `return`/`break` before reaching here); both calls only read
-        // it for the duration of this statement.
-        //
-        // `TranslateMessage` reports whether the message *was* translated
-        // (into a `WM_CHAR`), not whether it succeeded, and
-        // `DispatchMessageW` returns the target `WNDPROC`'s own `LRESULT`
-        // — neither is a status code this loop can act on.
-        unsafe {
-            ignored_by_contract(TranslateMessage(&raw const message));
-            informational(DispatchMessageW(&raw const message));
-        }
-
-        // Native focus can have moved during dispatch (a click on a
-        // control, a `SetFocus` from application code) without the
-        // framework hearing about it, so reconcile after every message
-        // rather than only after the ones that obviously change focus.
-        with_runtime(root, sync_focus);
     }
 
     Ok(())
+}
+
+/// Everything the message loop does with one message: framework-level
+/// pre-processing, native dispatch, and the post-dispatch focus
+/// reconciliation.
+///
+/// This is a function rather than the body of `run_message_loop` so that
+/// the native integration harness pumps messages through the *same* code
+/// the application does. A harness with its own parallel dispatch would
+/// test itself rather than the backend — which is the trap the standards
+/// audit's P1.17 finding warns about ("rather than pretending compile-time
+/// tests cover native behavior").
+pub(crate) fn handle_message(message: &MSG) -> Result<LoopStep, Error> {
+    if message.message == WM_QUIT {
+        return Ok(LoopStep::Quit);
+    }
+
+    if message.message == WM_FRAMEWORK_SCHEDULE {
+        // The only thing that ever posts this custom message is the waker
+        // `create_window_once` installs, targeting that same window's own
+        // top-level hwnd — so this resolves the handle directly rather than
+        // walking to an ancestor. A `None` result means the window has
+        // since been destroyed and the wake is moot.
+        with_runtime(message.hwnd, Runtime::pump_tasks).transpose()?;
+        return Ok(LoopStep::Continue);
+    }
+
+    // Win32 addresses each message to whichever window it concerns —
+    // frequently a native control or a nested container, not the top-level
+    // window that owns the `Runtime`. Resolve the root once and reuse it
+    // for both the pre-dispatch pass and the focus sync after dispatch.
+    let root = root_window(message.hwnd);
+    let flow = with_runtime(root, |runtime| pre_dispatch(runtime, message))
+        .unwrap_or(MessageFlow::Dispatch);
+    if flow == MessageFlow::Consumed {
+        return Ok(LoopStep::Continue);
+    }
+
+    // SAFETY: `message` points at a `MSG` the caller just obtained from
+    // `GetMessageW`/`PeekMessageW`; both calls only read it for the
+    // duration of this statement.
+    //
+    // `TranslateMessage` reports whether the message *was* translated
+    // (into a `WM_CHAR`), not whether it succeeded, and `DispatchMessageW`
+    // returns the target `WNDPROC`'s own `LRESULT` — neither is a status
+    // code this loop can act on.
+    unsafe {
+        ignored_by_contract(TranslateMessage(message));
+        informational(DispatchMessageW(message));
+    }
+
+    // Native focus can have moved during dispatch (a click on a control, a
+    // `SetFocus` from application code) without the framework hearing about
+    // it, so reconcile after every message rather than only after the ones
+    // that obviously change focus.
+    with_runtime(root, sync_focus);
+    Ok(LoopStep::Continue)
+}
+
+/// Whether a message this loop pre-processed still needs Win32's ordinary
+/// `TranslateMessage`/`DispatchMessageW` treatment afterwards.
+///
+/// A few messages are fully consumed before dispatch — Tab is turned into
+/// focus traversal rather than reaching a control, and a wheel event over a
+/// scrollable container becomes a viewport transform — and forwarding those
+/// on would let the native control act on them a second time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MessageFlow {
+    /// Hand the message to Win32 as usual.
+    Dispatch,
+    /// The pre-dispatch step fully handled it; skip native dispatch.
+    Consumed,
 }
 
 /// Framework-level handling that must happen *before* Win32 dispatches a
@@ -318,7 +351,7 @@ where
     match std::panic::catch_unwind(f) {
         Ok(result) => result,
         Err(payload) => {
-            let message = panic_payload_message(&payload);
+            let message = panic_payload_message(payload.as_ref());
             // `RuntimeSlot::get` on every top-level window this crate
             // creates returns either null (WM_NCCREATE has not run yet)
             // or a live `*mut Runtime` set exactly once in WM_NCCREATE
@@ -353,6 +386,18 @@ pub(crate) fn poison_runtime_and_quit(runtime_ptr: *mut Runtime, message: String
     unsafe { PostQuitMessage(1) };
 }
 
+/// Extracts a human-readable message from a caught panic's payload.
+///
+/// The parameter is the *unboxed* payload, and both callers must pass
+/// `payload.as_ref()` rather than `&payload`. That is not a style
+/// preference: `Box<dyn Any + Send>` is itself `Sized`, `Send`, and
+/// `'static`, so it satisfies `Any` too — `&payload` coerces the **box** to
+/// `&dyn Any` instead of dereferencing to the value inside it, and every
+/// `downcast_ref` then misses. This code had exactly that bug, and it was
+/// invisible until the native integration tests provoked a real component
+/// panic and read the message back: every caught panic reported
+/// "component panicked with a non-string payload", discarding the one piece
+/// of diagnostic information a caught panic carries.
 pub(crate) fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(message) = payload.downcast_ref::<&str>() {
         (*message).to_string()

@@ -68,7 +68,15 @@ pub(crate) fn focus_next(runtime: &mut Runtime, backwards: bool) {
         return;
     }
 
-    let current = runtime.focused.and_then(|id| focusable.iter().position(|node| node.id == id));
+    // Start from where focus *actually* is, not from the last value the
+    // framework recorded. `runtime.focused` is refreshed by `sync_focus`
+    // after a dispatched message, so the two normally agree — but native
+    // focus can also move without one (application code calling `SetFocus`,
+    // or the window manager activating the window), and traversing from a
+    // stale position makes the first Tab appear to do nothing.
+    let current = focused_node(runtime)
+        .or(runtime.focused)
+        .and_then(|id| focusable.iter().position(|node| node.id == id));
     let next_index = match current {
         Some(index) if backwards => {
             if index == 0 {
