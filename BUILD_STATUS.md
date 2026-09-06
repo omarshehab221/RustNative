@@ -39,6 +39,56 @@ All of the above are now closed. See the commit history from
 `Close P0.2, P1.14, P1.16, P1.21, P2.30, P2.31 from Audit.md` onward for the
 per-finding detail.
 
+### Traceability
+
+Every finding, where it is addressed, and what would fail if it regressed.
+This table exists because the previous pass's completion claim could not be
+checked: "closed" was an assertion with nothing behind it. Each row below
+names a file and a test, so the claim is falsifiable.
+
+| Finding | Addressed in | Verified by |
+|---|---|---|
+| **P0.1** identity | `core/identity.rs` (interning table) | `distinct_keys_never_collide` (proptest) |
+| **P0.2** raw-pointer model | `windows/native/context.rs`, `native/user_data.rs` | `native::context::tests`, `native_window_creation_reentrancy` |
+| **P0.3** dialog COM threading | `windows/services/mod.rs` (`run_sta`) | dedicated STA thread + paired `CoUninitialize` |
+| **P1.4** notifications | `windows/services/notifications.rs` | persistent message-only host, `NIM_MODIFY` |
+| **P1.5** task retention | `core/scheduler/mod.rs` (`TaskScope`) | `a_long_lived_scope_does_not_accumulate_handles_across_many_task_generations` |
+| **P1.6** cancellation semantics | `core/scheduler/mod.rs` docs | `cancelled_tasks_never_deliver_a_result_even_under_concurrent_completion` |
+| **P1.7** injectable executor | `core/scheduler/executor.rs` (`Executor`) | `dedicated_executor_is_independent_of_the_shared_one` |
+| **P1.8** effect dependencies | `core/component/effects.rs` (`EffectDependencies`) | `dependencies_use_partial_eq_not_hashing` |
+| **P1.9** stale event routing | `core/component/tree.rs` (`dispatch`) | `dispatch_to_unknown_target_is_not_delivered_to_root`, `native_message_after_object_removal_is_rejected` |
+| **P1.10** structured render errors | `core/component/error.rs` (`RenderError`) | `component::tree::tests` |
+| **P1.11** tree topology indexing | `core/reconcile/snapshot.rs` (children/depth indexes) | `children_of_and_ordered_nodes_use_the_precomputed_index`, `scaling/*` benches |
+| **P1.12** layout invalidation | `core/reconcile/diff.rs` (`is_layout_relevant_change`) | `tree_diff_emits_update_when_only_visual_style_changes` |
+| **P1.13** menu id aliasing | `windows/native/menu.rs` (`checked_add`) | `building_a_menu_assigns_one_command_id_per_selectable_item` |
+| **P1.14** menu RAII | `windows/native/menu.rs` (`OwnedMenu`) | `a_failure_partway_through_building_does_not_leak_the_partial_menu` |
+| **P1.15** modern file dialogs | `windows/services/dialogs.rs` (`IFileOpenDialog`) | owner-window resolution via `native::window_handles` |
+| **P1.16** accessibility | `windows/native/rendering/accessibility.rs`, `core/node.rs` defaults | `rendering::accessibility::tests`, `native_focus_traversal` |
+| **P1.17** native tests | `windows/native/harness.rs`, `native/integration.rs` | 19 scenarios against real windows |
+| **P1.18** deterministic scheduler | `core/scheduler/executor.rs` (`ManualExecutor`) | `manual_executor_sleep_only_resolves_after_advancing_past_its_deadline` |
+| **P1.19** layout overflow | `core/layout/{engine,measure}.rs` (saturating) | `measurement_never_panics_on_pathologically_large_input`, `layout_geometry_is_always_non_negative` |
+| **P1.20** identity wraparound | `core/identity.rs`, `core/scheduler/mod.rs` (`checked_add`) | documented exhaustion panics, `#[allow]` with reason |
+| **P1.21** responsibility boundaries | `core/` module split, `windows/native/rendering/` split | every module's own tests compile against a narrow surface |
+| **P2.22** monolith split | `core/` and `windows/` module maps | — |
+| **P2.23** documented public API | `#![deny(missing_docs)]` in both crate roots | the lint; `RUSTDOCFLAGS: -D warnings` in CI |
+| **P2.24** field exposure | `VisualStyle`/`Theme`/`WindowState`/`TreeDiff` accessors | — |
+| **P2.25** snapshot mutability | `core/reconcile/snapshot.rs` (documented exception) | — |
+| **P2.26** `ServiceFuture` | removed; rationale in `core/services/mod.rs` | — |
+| **P2.27** `async-trait` isolation | confined to `services/` in both crates | `grep async_trait` finds nothing outside `services/` |
+| **P2.28** style phases | `core/style/phase.rs` (`StyleOverride`/`ResolvedStyle`) | `an_unthemed_snapshot_leaves_the_resolved_style_at_its_resting_default` |
+| **P2.29** reverse HWND lookup | `windows/native/registry.rs` (`by_hwnd`) | `id_for_hwnd_is_a_real_reverse_lookup` |
+| **P2.30** erase-background brush | `windows/native/rendering/styling.rs` (cache) | `the_background_brush_cache_survives_repeated_erases_without_exhausting_gdi` |
+| **P2.31** Win32 result handling | `windows/native/win32.rs` | applied at every call site; `best_effort` asserts in debug |
+| **P2.32** error context | `windows/error.rs` (`NativeContext`, `Win32Category`) | `display_names_the_window_and_node_but_never_the_raw_handle` |
+| **P2.33** panic policy | `core/panic.rs`, honored in `native/message_loop.rs` | three `native_panic_policy_*` tests |
+| **P2.34** property tests | `core/tests/property_tests.rs` | 8 properties |
+| **P2.35** benchmarks | `core/benches/core_benchmarks.rs` | 11 benchmarks incl. 10/100/1k/10k sweeps |
+| **P2.36** docs match reality | `README.md`, this file | — |
+| **P2.37** toolchain components | `rust-toolchain.toml` | `cargo-audit` installed in CI, not as a rustup component |
+| **P2.38** MSRV + stable | `.github/workflows/ci.yml` | `cargo +1.85 check` passes locally too |
+| **P2.39** CI | `.github/workflows/ci.yml` | fmt, clippy, test, doc, deny, audit, MSRV, Windows |
+| **P2.40** lint policy | `Cargo.toml` `[workspace.lints]`, `clippy.toml` | `clippy -D warnings` clean with restriction lints on |
+
 ### Bugs the new tests found
 
 The point of P1.17 was never the test count. Within minutes of the native
