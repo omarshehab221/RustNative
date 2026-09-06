@@ -130,9 +130,10 @@ fn is_layout_relevant_change(previous: &TreeNode, next: &TreeNode) -> bool {
 }
 
 fn typography_changed(previous: &TreeNode, next: &TreeNode) -> bool {
-    previous.visual_style.typography_override() != next.visual_style.typography_override()
-        || previous.style_override.typography_override()
-            != next.style_override.typography_override()
+    previous.visual_style.properties().typography_override()
+        != next.visual_style.properties().typography_override()
+        || previous.style_override.properties().typography_override()
+            != next.style_override.properties().typography_override()
 }
 
 #[cfg(test)]

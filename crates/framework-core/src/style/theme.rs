@@ -7,6 +7,7 @@
 //! `crate::reconcile::TreeSnapshot::from_node_with_theme`, which calls it for
 //! every node before a snapshot ever reaches a backend.
 
+use super::phase::{ResolvedStyle, StyleOverride};
 use crate::layout::EdgeInsets;
 use crate::node::NodeKind;
 
@@ -459,14 +460,19 @@ impl Theme {
     }
 
     /// Resolves the fully-merged style for one node: this theme's default
-    /// for `kind`/`state`, with `override_style` layered on top.
+    /// for `kind`/`state`, with the application's own override layered on
+    /// top.
+    ///
+    /// This is the only thing in this crate that produces a
+    /// [`ResolvedStyle`], which is what makes that type's existence mean
+    /// something: holding one is proof that theme resolution happened.
     #[must_use]
     pub fn resolve(
         &self,
         kind: NodeKind,
         state: ControlState,
-        override_style: &VisualStyle,
-    ) -> VisualStyle {
+        override_style: &StyleOverride,
+    ) -> ResolvedStyle {
         let base = match kind {
             NodeKind::Label => &self.label,
             NodeKind::Button => &self.button,
@@ -474,7 +480,7 @@ impl Theme {
             NodeKind::Column | NodeKind::Row => &self.container,
         }
         .resolve(state);
-        base.merge(override_style)
+        ResolvedStyle::new(base.merge(override_style.properties()), state)
     }
 }
 
@@ -485,12 +491,16 @@ mod tests {
     #[test]
     fn theme_merges_node_overrides_and_state_styles() {
         let theme = Theme::default();
-        let override_style = VisualStyle::new().foreground(Color::rgb(1, 2, 3));
+        let override_style = StyleOverride::new(VisualStyle::new().foreground(Color::rgb(1, 2, 3)));
         let resolved = theme.resolve(NodeKind::Button, ControlState::Normal, &override_style);
-        assert_eq!(resolved.foreground_override(), Some(Color::rgb(1, 2, 3)));
+        assert_eq!(resolved.properties().foreground_override(), Some(Color::rgb(1, 2, 3)));
         // The override didn't specify a background, so the theme's own
         // button default should still show through.
-        assert_eq!(resolved.background_override(), theme.button().normal.background_override());
+        assert_eq!(
+            resolved.properties().background_override(),
+            theme.button().normal.background_override()
+        );
+        assert_eq!(resolved.state(), ControlState::Normal);
     }
 
     #[test]

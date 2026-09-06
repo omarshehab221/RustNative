@@ -14,7 +14,9 @@ use crate::event::AccessibilityInfo;
 use crate::identity::NodeId;
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
 use crate::node::{Node, TreeError};
-use crate::style::{ControlState, Theme, VisualStyle};
+#[cfg(test)]
+use crate::style::VisualStyle;
+use crate::style::{ControlState, ResolvedStyle, StyleOverride, Theme};
 
 /// A resolved, backend-facing view of one node.
 ///
@@ -49,13 +51,18 @@ pub struct TreeNode {
     pub row_style: Option<RowStyle>,
     /// The node's accessibility metadata.
     pub accessibility: AccessibilityInfo,
-    /// The node's unresolved visual override, exactly as the application
-    /// authored it. Kept alongside the theme-resolved `visual_style` below
-    /// so a platform backend can re-resolve a single node's style against a
+    /// The unresolved visual override, exactly as the application authored
+    /// it. Kept alongside the theme-resolved `visual_style` below so a
+    /// platform backend can re-resolve a single node's style against a
     /// live-only interaction state (hover/press/focus) without losing the
-    /// application's own customization — see [`Self::visual_style`]'s doc
-    /// comment for the two fields' respective roles.
-    pub style_override: VisualStyle,
+    /// application's own customization.
+    ///
+    /// The two are distinct *types*, not two fields of the same type, so
+    /// that reaching for the wrong one is a compile error rather than a
+    /// control painted with every themed property missing — see
+    /// [`crate::style::StyleOverride`] and the standards audit's P2.28
+    /// finding.
+    pub style_override: StyleOverride,
     /// The fully theme-resolved style: [`Self::style_override`] merged onto
     /// the active [`Theme`]'s default for this node's kind, in this node's
     /// `Normal`/`Disabled` state (see
@@ -63,7 +70,7 @@ pub struct TreeNode {
     /// field for an ordinary render; it re-derives a fresh value from
     /// `style_override` only when synchronizing a transient interaction
     /// state (hover/press/focus) that a declarative rerender never observes.
-    pub visual_style: VisualStyle,
+    pub visual_style: ResolvedStyle,
     /// Whether the node is disabled.
     pub disabled: bool,
 }
@@ -87,8 +94,11 @@ impl TreeNode {
             column_style: node.column_style(),
             row_style: node.row_style(),
             accessibility: node.accessibility().clone(),
-            style_override: node.visual_style().clone(),
-            visual_style: node.visual_style().clone(),
+            style_override: StyleOverride::new(node.visual_style().clone()),
+            // Left at its resting default until `from_node_with_theme`
+            // resolves it; `from_node` deliberately produces a snapshot with
+            // no theme applied (see its own doc comment).
+            visual_style: ResolvedStyle::default(),
             disabled: node.is_disabled(),
         }
     }
@@ -150,7 +160,13 @@ impl TreeSnapshot {
         let mut snapshot = Self::from_node(root)?;
         for node in snapshot.nodes.values_mut() {
             let state = if node.disabled { ControlState::Disabled } else { ControlState::Normal };
-            node.visual_style = theme.resolve(node.kind, state, &node.visual_style);
+            // Resolved from `style_override`, never from `visual_style`.
+            // An earlier revision read the latter — harmless only because
+            // `from_node` initialized both fields to the same value, so
+            // resolution happened to see the application's override anyway.
+            // Splitting the two phases into distinct types (P2.28) is what
+            // turned that latent confusion into a compile error.
+            node.visual_style = theme.resolve(node.kind, state, &node.style_override);
         }
         Ok(snapshot)
     }
@@ -246,14 +262,22 @@ mod tests {
         let go = snapshot.get(NodeId::from_key("go")).unwrap();
         let stop = snapshot.get(NodeId::from_key("stop")).unwrap();
         assert_eq!(
-            go.visual_style.foreground_override(),
+            go.visual_style.properties().foreground_override(),
             theme.button().normal.foreground_override()
         );
         assert_eq!(
-            stop.visual_style.foreground_override(),
+            stop.visual_style.properties().foreground_override(),
             Some(crate::style::Color::rgb(9, 9, 9))
         );
-        assert_ne!(stop.visual_style.foreground_override(), go.visual_style.foreground_override());
+        assert_ne!(
+            stop.visual_style.properties().foreground_override(),
+            go.visual_style.properties().foreground_override()
+        );
+        // The resolved style also records *which* state it was resolved
+        // for, which is what lets a backend tell an ordinary render apart
+        // from a transient interaction repaint.
+        assert_eq!(go.visual_style.state(), ControlState::Normal);
+        assert_eq!(stop.visual_style.state(), ControlState::Disabled);
     }
 
     #[test]
@@ -263,7 +287,22 @@ mod tests {
         let node = Node::button("go", "Go").with_style(override_style.clone());
         let snapshot = TreeSnapshot::from_node_with_theme(&node, &theme).unwrap();
         let go = snapshot.get(NodeId::from_key("go")).unwrap();
-        assert_eq!(go.style_override, override_style);
+        assert_eq!(go.style_override.properties(), &override_style);
+    }
+
+    #[test]
+    fn an_unthemed_snapshot_leaves_the_resolved_style_at_its_resting_default() {
+        // `from_node` performs no theme resolution, so its `visual_style`
+        // must be an honest "not resolved yet" rather than a copy of the
+        // application's override masquerading as a resolved value — which
+        // is what it used to be, and what let `from_node_with_theme` read
+        // the wrong field for a while without anyone noticing (P2.28).
+        let override_style = VisualStyle::new().foreground(crate::style::Color::rgb(9, 9, 9));
+        let node = Node::button("go", "Go").with_style(override_style.clone());
+        let snapshot = TreeSnapshot::from_node(&node).unwrap();
+        let go = snapshot.get(NodeId::from_key("go")).unwrap();
+        assert_eq!(go.style_override.properties(), &override_style);
+        assert_eq!(go.visual_style, ResolvedStyle::default());
     }
 
     #[test]

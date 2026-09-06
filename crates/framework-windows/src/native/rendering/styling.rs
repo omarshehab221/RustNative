@@ -15,7 +15,11 @@
 
 use std::collections::HashMap;
 
-use framework_core::{Color, ControlState, NodeId, Theme, Typography, VisualStyle};
+#[cfg(test)]
+use framework_core::VisualStyle;
+use framework_core::{
+    Color, ControlState, NodeId, ResolvedStyle, StyleOverride, Theme, Typography,
+};
 use windows_sys::Win32::Foundation::{COLORREF, HWND};
 use windows_sys::Win32::Graphics::Gdi::{
     CLIP_DEFAULT_PRECIS, COLOR_WINDOW, COLOR_WINDOWTEXT, CreateFontIndirectW, CreateSolidBrush,
@@ -40,13 +44,17 @@ pub(crate) struct ControlStyle {
 }
 
 impl ControlStyle {
-    /// Realizes a node's already theme-resolved style (see
-    /// `TreeSnapshot::from_node_with_theme`) as GDI resources. Any
-    /// component missing from the resolved style — which should only
-    /// happen for a snapshot that skipped theme resolution — falls back
-    /// to the corresponding system color so a control is never left
-    /// unpainted.
-    pub(crate) fn resolve(style: &VisualStyle) -> Self {
+    /// Realizes a node's already theme-resolved style as GDI resources.
+    ///
+    /// Taking a [`ResolvedStyle`] rather than a bare `VisualStyle` is the
+    /// point: holding one is proof that theme resolution happened, so this
+    /// function cannot be handed a raw application override by mistake and
+    /// paint a control with every themed property missing (standards audit
+    /// P2.28). Any component still unset after resolution — which only
+    /// happens for a snapshot that skipped theming entirely — falls back to
+    /// the corresponding system color, so a control is never left unpainted.
+    pub(crate) fn resolve(resolved: &ResolvedStyle) -> Self {
+        let style = resolved.properties();
         // SAFETY: `GetSysColor` takes a documented system-color index
         // constant and no pointer arguments; it cannot fail (an
         // unrecognized index simply returns black).
@@ -162,7 +170,7 @@ impl StyleCache {
         &mut self,
         id: NodeId,
         kind: framework_core::NodeKind,
-        style_override: &VisualStyle,
+        style_override: &StyleOverride,
         disabled: bool,
     ) -> &ControlStyle {
         let state = if disabled {
@@ -308,9 +316,13 @@ mod tests {
         // or timing ambiguity, since a null pointer isn't a stale read.
         const ITERATIONS: u32 = 12_000;
         for i in 0..ITERATIONS {
-            let style = VisualStyle::default()
-                .background(Color::rgb(10, 20, 30))
-                .typography(Typography { family: "Segoe UI".to_owned(), size: 14, weight: 700 });
+            let style =
+                ResolvedStyle::new(
+                    VisualStyle::default().background(Color::rgb(10, 20, 30)).typography(
+                        Typography { family: "Segoe UI".to_owned(), size: 14, weight: 700 },
+                    ),
+                    ControlState::Normal,
+                );
             let resolved = ControlStyle::resolve(&style);
             assert!(
                 !resolved.background_brush.is_null(),
@@ -328,7 +340,7 @@ mod tests {
 
     #[test]
     fn control_style_resolve_falls_back_to_system_colors_when_unset() {
-        let style = VisualStyle::default();
+        let style = ResolvedStyle::new(VisualStyle::default(), ControlState::Normal);
         let resolved = ControlStyle::resolve(&style);
         // No typography override was set, so no font handle should have
         // been created — the renderer falls back to the control's

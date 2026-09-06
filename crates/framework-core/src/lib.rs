@@ -94,5 +94,8 @@ pub use services::{
     HttpResponse, HttpService, MemoryClipboard, MemoryStorage, Method, ServiceError, Services,
     StorageService, SystemService,
 };
-pub use style::{Color, ComponentStyle, ControlState, Theme, Typography, VisualStyle};
+pub use style::{
+    Color, ComponentStyle, ControlState, ResolvedStyle, StyleOverride, Theme, Typography,
+    VisualStyle,
+};
 pub use window::{Window, WindowPresentation, WindowState};
