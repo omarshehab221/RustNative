@@ -1,9 +1,9 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use framework_core::{
-    Alignment, Application, Callback, ColumnStyle, Component, ComponentContext, EdgeInsets, Event,
-    LayoutStyle, MenuBar, MenuItem, Node, NodeId, Overflow, Platform, RowStyle, Size, SizeMode,
-    TaskHandle, Window,
+    AccessibilityInfo, AccessibilityRole, Alignment, Application, Callback, ColumnStyle, Component,
+    ComponentContext, EdgeInsets, Event, LayoutStyle, MenuBar, MenuItem, Node, NodeId, Overflow,
+    PanicPolicy, Platform, RowStyle, Size, SizeMode, TaskHandle, Window,
 };
 use framework_windows::WindowsPlatform;
 
@@ -99,6 +99,25 @@ impl Component for CounterPanel {
                             "async-task",
                             if self.async_task.is_some() { "Cancel Async" } else { "Run Async" },
                             LayoutStyle::new().width(SizeMode::Auto).height(SizeMode::Fixed(36)),
+                        )
+                        // Demonstrates the accessibility bridge. This
+                        // button's visible label changes as the task runs,
+                        // so its *announced* name is pinned to something
+                        // stable and unambiguous instead — realized on
+                        // Windows through `IAccPropServices`, which
+                        // overrides the accessible name of the standard
+                        // control without replacing the control.
+                        //
+                        // Every node already carries a sensible default
+                        // (a button is `Role::Button` and focusable); this
+                        // is the case where the default is not enough.
+                        .with_accessibility(
+                            AccessibilityInfo::new(AccessibilityRole::Button)
+                                .name("Run or cancel the background task")
+                                .description(
+                                    "Starts a two-second task, or cancels it if one is running",
+                                )
+                                .focusable(true),
                         ),
                         Node::label_with_layout(
                             "async-status",
@@ -459,6 +478,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         AppShell::new(),
         Window::new("Rust Native UI", Size::new(640, 360)).with_menu(menu),
     );
+    // A component panic is caught at the Win32 callback boundary regardless
+    // (unwinding across `extern "system"` is undefined behavior, so that
+    // part is not a policy). What *is* a policy is what happens next, and
+    // the framework defaults to ending the application because that is the
+    // only response that cannot keep running on state a panic already
+    // disproved.
+    //
+    // This example opts into closing just the offending window instead,
+    // which is the right trade for a multi-window app where the other
+    // windows hold independent state — see `framework_core::panic` for the
+    // full reasoning.
+    application.set_panic_policy(PanicPolicy::CloseWindow);
     application.open_window(
         AuxiliaryWindow,
         Window::new("Rust Native UI — Auxiliary", Size::new(320, 160)),
