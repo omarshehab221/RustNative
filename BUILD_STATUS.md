@@ -83,7 +83,7 @@ sleep, which failed as soon as a stress test ran alongside them.
 ```text
 cargo fmt --all -- --check                                        clean
 cargo clippy --workspace --all-targets --all-features -D warnings clean
-cargo test --workspace                                            164 passing
+cargo test --workspace                                            168 passing
 cargo doc --workspace --no-deps                                   clean
 ```
 
