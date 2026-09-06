@@ -36,6 +36,22 @@ windows-sys.workspace = true
 windows = { version = ">=0.60, <=0.62", default-features = false, features = [
     "Win32_Foundation",
     "Win32_System_Com",
+    # `Win32_System_Variant` and `Win32_UI_Accessibility` are the second
+    # place this crate needs real COM interfaces rather than flat bindings:
+    # `native::rendering::accessibility` uses `IAccPropServices` (Microsoft's
+    # Dynamic Annotation API) to give a standard control an accessible name,
+    # description, or role that differs from what the control reports on its
+    # own — the mechanism that closes the standards audit's P1.16 finding
+    # without writing a full UI Automation provider. `windows-sys` has no
+    # COM interface definitions at all, so as with the file dialogs above,
+    # a `windows-sys`-only implementation would mean hand-deriving the
+    # interface's GUID and vtable layout with no compiler help.
+    # `Win32_System_Ole` is not used directly; it is the feature the
+    # `windows` crate gates `VARIANT` (and therefore
+    # `IAccPropServices::SetHwndProp`) behind.
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+    "Win32_UI_Accessibility",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
 ] }

@@ -13,7 +13,13 @@ pub(crate) fn run_application(application: &mut Application) -> Result<(), Error
     let instance = module_instance();
     register_window_classes(instance)?;
 
-    let mut registry = WindowRegistry::new(std::ptr::from_mut::<Application>(application));
+    // SAFETY: `application` is borrowed for the whole of this function,
+    // and `registry` — along with every `Runtime` it creates, each of which
+    // captures a copy of the same borrow — is dropped at the end of it,
+    // after `run_message_loop` has returned. That is exactly point 1 of
+    // `native::context`'s module documentation, which `WindowRegistry::new`
+    // requires its caller to establish.
+    let mut registry = unsafe { WindowRegistry::new(application) };
     registry.sync()?;
 
     run_message_loop()?;

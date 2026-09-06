@@ -83,14 +83,22 @@ fn probe(label: &str, handle: HGDIOBJ) {
 fn main() {
     // SAFETY: takes no arguments and cannot fail.
     let pid = unsafe { GetCurrentProcessId() };
-    println!("PID: {pid} — check Task Manager/Process Explorer's GDI-objects column for this PID now.");
+    println!(
+        "PID: {pid} — check Task Manager/Process Explorer's GDI-objects column for this PID now."
+    );
     println!();
 
     // SAFETY: plain COLORREF value, no pointer arguments.
     let brush = unsafe { CreateSolidBrush(0x001E_140A as COLORREF) as HGDIOBJ };
     probe("brush (known-good baseline)", brush);
-    probe("font: Segoe UI, size 10, weight 700 (the failing case)", create_font("Segoe UI", 10, 700));
-    probe("font: Segoe UI, size 10, weight 400 (regular, not bold)", create_font("Segoe UI", 10, 400));
+    probe(
+        "font: Segoe UI, size 10, weight 700 (the failing case)",
+        create_font("Segoe UI", 10, 700),
+    );
+    probe(
+        "font: Segoe UI, size 10, weight 400 (regular, not bold)",
+        create_font("Segoe UI", 10, 400),
+    );
     probe("font: Arial, size 10, weight 700 (different family)", create_font("Arial", 10, 700));
     probe("font: Segoe UI, size 24, weight 700 (different size)", create_font("Segoe UI", 24, 700));
 

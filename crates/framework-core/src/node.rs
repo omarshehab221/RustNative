@@ -394,7 +394,13 @@ pub enum NodeKind {
 /// kind-specific payload field(s) (`text`/`value`/`children`) as a plain,
 /// explicit struct field instead.
 macro_rules! leaf_node {
-    ($name:ident, $payload_field:ident : $payload:ty, $payload_param:ident) => {
+    (
+        $name:ident,
+        $payload_field:ident : $payload:ty,
+        $payload_param:ident,
+        role = $role:ident,
+        focusable = $focusable:literal
+    ) => {
         /// A leaf UI node (see [`Node`]).
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct $name {
@@ -412,7 +418,28 @@ macro_rules! leaf_node {
                     id,
                     $payload_field: $payload_param.into(),
                     layout,
-                    accessibility: AccessibilityInfo::new(crate::event::AccessibilityRole::None),
+                    // A node's accessibility metadata starts out
+                    // describing what the node *is*, rather than empty.
+                    //
+                    // Every leaf kind used to default to
+                    // `AccessibilityRole::None` and `focusable: false`,
+                    // which made the portable semantic model convey nothing
+                    // unless an application filled it in by hand for every
+                    // single node — and since a backend can only realize
+                    // what the model says, that is the root of the standards
+                    // audit's P1.16 finding that accessibility "is not
+                    // actually fully realized". A button is an activatable
+                    // control and a keyboard stop; a label is static text
+                    // and is not; a text field is both editable and a
+                    // keyboard stop. Those are properties of the node kind,
+                    // known here, so they are the defaults here.
+                    //
+                    // `with_accessibility` still replaces the whole value,
+                    // so an application that wants a decorative button
+                    // outside the tab order, or a label with an overridden
+                    // announced name, says so explicitly.
+                    accessibility: AccessibilityInfo::new(crate::event::AccessibilityRole::$role)
+                        .focusable($focusable),
                     visual_style: VisualStyle::default(),
                     disabled: false,
                 }
@@ -436,9 +463,9 @@ macro_rules! leaf_node {
     };
 }
 
-leaf_node!(Label, text: String, text);
-leaf_node!(Button, text: String, text);
-leaf_node!(TextInput, value: String, value);
+leaf_node!(Label, text: String, text, role = Label, focusable = false);
+leaf_node!(Button, text: String, text, role = Button, focusable = true);
+leaf_node!(TextInput, value: String, value, role = TextInput, focusable = true);
 
 impl Label {
     /// Returns the label's text.
@@ -563,11 +590,46 @@ mod tests {
     #[test]
     fn button_defaults_to_focusable_accessible_control() {
         let button = Node::button("go", "Go");
-        // A raw `Node::button` has no accessibility configured yet; the
-        // theme/backend layer is what makes it focusable by default. This
-        // test just documents the starting state so a future change to it
-        // is deliberate.
-        assert_eq!(button.accessibility().role(), crate::event::AccessibilityRole::None);
+        assert_eq!(button.accessibility().role(), crate::event::AccessibilityRole::Button);
+        assert!(
+            button.accessibility().is_focusable(),
+            "a button is a keyboard stop unless an application says otherwise"
+        );
+    }
+
+    #[test]
+    fn every_node_kind_defaults_to_the_role_that_describes_it() {
+        use crate::event::AccessibilityRole;
+        assert_eq!(Node::label("l", "x").accessibility().role(), AccessibilityRole::Label);
+        assert_eq!(Node::button("b", "x").accessibility().role(), AccessibilityRole::Button);
+        assert_eq!(Node::text_input("t", "x").accessibility().role(), AccessibilityRole::TextInput);
+        assert_eq!(
+            Node::column("c", [] as [Node; 0]).accessibility().role(),
+            AccessibilityRole::Group
+        );
+        assert_eq!(
+            Node::row("r", [] as [Node; 0]).accessibility().role(),
+            AccessibilityRole::Group
+        );
+    }
+
+    #[test]
+    fn only_interactive_node_kinds_default_to_being_keyboard_stops() {
+        assert!(!Node::label("l", "x").accessibility().is_focusable());
+        assert!(Node::button("b", "x").accessibility().is_focusable());
+        assert!(Node::text_input("t", "x").accessibility().is_focusable());
+        assert!(!Node::column("c", [] as [Node; 0]).accessibility().is_focusable());
+    }
+
+    #[test]
+    fn with_accessibility_still_fully_replaces_the_default() {
+        let decorative = Node::button("b", "x").with_accessibility(
+            AccessibilityInfo::new(crate::event::AccessibilityRole::None).focusable(false),
+        );
+        assert!(
+            !decorative.accessibility().is_focusable(),
+            "an application must be able to take a button out of the tab order"
+        );
     }
 
     #[test]

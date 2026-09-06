@@ -66,12 +66,23 @@ pub(crate) fn build_native_menu(menu: &MenuBar) -> Result<BuiltMenu, Error> {
     if handle.is_null() {
         return Err(Error::windows_api("CreateMenu"));
     }
+    // Take ownership *before* the first fallible call below, not after the
+    // loop succeeds. An earlier revision constructed the `OwnedMenu` only
+    // in the success path, so a failure inside `append_menu_item` — an
+    // out-of-resources `CreatePopupMenu`, a failed `AppendMenuW`, or
+    // `Error::MenuCommandExhausted` — returned through `?` while `handle`
+    // was still a bare `HMENU` owned by nothing, leaking the whole
+    // partially built menu tree. That is precisely the failure mode the
+    // standards audit's P1.14 finding calls out ("on intermediate failure,
+    // the code returns an error without a clear ownership guard"), and it
+    // is why ownership is established here rather than at the end.
+    let owned = OwnedMenu::new(handle);
     let mut commands = HashMap::new();
     let mut next_command_id: u16 = 1;
     for item in menu.items() {
         append_menu_item(handle, item, &mut commands, &mut next_command_id)?;
     }
-    Ok(BuiltMenu { menu: OwnedMenu::new(handle), commands })
+    Ok(BuiltMenu { menu: owned, commands })
 }
 
 fn append_menu_item(

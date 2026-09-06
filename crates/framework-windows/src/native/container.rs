@@ -1,16 +1,19 @@
 //! The window procedure for `Column`/`Row` container windows: forwards
 //! control notifications up to the owning top-level window and paints its
-//! own cached background color.
+//! own background.
 
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows_sys::Win32::Graphics::Gdi::{CreateSolidBrush, DeleteObject, FillRect, HDC, HGDIOBJ};
+use windows_sys::Win32::Graphics::Gdi::{FillRect, HDC};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, GA_ROOT, GetAncestor, GetClientRect, SendMessageW, WM_COMMAND, WM_CTLCOLORBTN,
-    WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_ERASEBKGND,
+    DefWindowProcW, GetClientRect, SendMessageW, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
+    WM_CTLCOLORSTATIC, WM_ERASEBKGND,
 };
 
+use super::context::root_window;
 use super::message_loop::{panic_payload_message, poison_runtime_and_quit};
-use super::user_data::{BackgroundColorSlot, RuntimeSlot};
+use super::rendering::styling::background_brush_for;
+use super::user_data::RuntimeSlot;
+use super::win32::best_effort;
 
 pub(crate) unsafe extern "system" fn container_proc(
     hwnd: HWND,
@@ -36,85 +39,84 @@ where
         Ok(result) => result,
         Err(payload) => {
             let message = panic_payload_message(&payload);
-            // SAFETY: `hwnd` is the HWND Win32 just invoked this
-            // callback with; `GetAncestor` with `GA_ROOT` accepts any
-            // window handle and returns null (checked below) if there
-            // is no such ancestor.
-            let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
-            let runtime_ptr =
-                if root.is_null() { std::ptr::null_mut() } else { RuntimeSlot::get(root) };
-            poison_runtime_and_quit(runtime_ptr, message);
+            poison_runtime_and_quit(RuntimeSlot::get(root_window(hwnd)), message);
             0
         }
     }
 }
 
 fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly what Win32
+    // just delivered this callback with; `DefWindowProcW`'s documented
+    // default handling is valid for any window message.
+    let default = || unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
+
     match message {
         WM_COMMAND | WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
             // These are all sent to a control's *immediate* parent. A
-            // container is frequently just one link in a chain of
-            // nested containers, so forward up to the top-level window,
-            // whose `window_proc` owns the `Runtime` these need.
-            // SAFETY: `hwnd` is the HWND Win32 just invoked this
-            // callback with; `GetAncestor` with `GA_ROOT` accepts any
-            // window handle and returns null (checked below) if there
-            // is no such ancestor.
-            let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+            // container is frequently just one link in a chain of nested
+            // containers, so forward up to the top-level window, whose
+            // `window_proc` owns the `Runtime` these need.
+            let root = root_window(hwnd);
             if root.is_null() {
-                // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly
-                // what Win32 just delivered this callback with;
-                // `DefWindowProcW`'s documented default handling is
-                // valid for any window message.
-                unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
-            } else {
-                // SAFETY: `root` was just checked non-null and, per
-                // `GetAncestor`'s contract, is a live top-level HWND;
-                // `message`/`wparam`/`lparam` are forwarded unchanged
-                // from what Win32 delivered to this callback, which
-                // `window_proc`'s handlers for these same message
-                // values already expect in that shape.
-                unsafe { SendMessageW(root, message, wparam, lparam) }
+                return default();
             }
+            // SAFETY: `root` was just checked non-null and, per
+            // `GetAncestor`'s contract, is a live top-level HWND;
+            // `message`/`wparam`/`lparam` are forwarded unchanged from what
+            // Win32 delivered to this callback, which `window_proc`'s
+            // handlers for these same message values already expect in that
+            // shape.
+            unsafe { SendMessageW(root, message, wparam, lparam) }
         }
         WM_ERASEBKGND => {
-            // A container paints its own background directly: its
-            // resolved background color is cached on its own
-            // `GWLP_USERDATA` by `Renderer::apply_control_style`, since
-            // (unlike the messages above) this one is sent to the
-            // container itself, not to a parent that could look it up
-            // through a `Runtime`.
-            let colorref = BackgroundColorSlot::get(hwnd);
-            // SAFETY: `CreateSolidBrush` takes a plain `COLORREF` value
-            // and no pointer arguments; a null return (checked below) is
-            // its documented failure signal.
-            let brush = unsafe { CreateSolidBrush(colorref) };
+            // A container paints its own background directly, because —
+            // unlike the messages above — this one is sent to the container
+            // itself, not to a parent that could resolve a `Runtime` and
+            // read the renderer's own style cache.
+            //
+            // The brush comes from the process-wide cache in
+            // `native::styling` rather than being created and destroyed per
+            // message. `WM_ERASEBKGND` arrives on every repaint — during a
+            // drag-resize, many times a second, for every container in the
+            // tree — and an earlier revision called
+            // `CreateSolidBrush`/`DeleteObject` on each one, which is the
+            // standards audit's P2.30 finding ("unnecessary churn exists
+            // because the renderer already maintains style resources").
+            // Caching by color also means repeated erases of the same
+            // container reuse one GDI object instead of cycling through the
+            // process's GDI handle quota.
+            let brush = background_brush_for(hwnd);
             if brush.is_null() {
-                // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly
-                // what Win32 just delivered this callback with;
-                // `DefWindowProcW`'s documented default handling is
-                // valid for any window message.
-                return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
+                // GDI handle exhaustion; let Win32's own class-brush erase
+                // stand rather than filling with an invalid brush.
+                return default();
             }
             let hdc = wparam as HDC;
             let mut client = RECT::default();
             // SAFETY: `hwnd` is a live HWND owned by this callback;
             // `client` is a valid, exclusively borrowed `RECT` for
-            // `GetClientRect` to write into; `hdc` is the `HDC` Win32
-            // passed via `wparam` for this erase-background message,
-            // valid for the duration of this callback; `brush` was just
-            // checked non-null and is freed exactly once, after its
-            // last use, in this same block.
-            unsafe {
-                GetClientRect(hwnd, &raw mut client);
-                FillRect(hdc, &raw const client, brush);
-                DeleteObject(brush as HGDIOBJ);
+            // `GetClientRect` to write into.
+            let measured = unsafe { GetClientRect(hwnd, &raw mut client) } != 0;
+            if !measured {
+                // Nothing to fill if the client rect could not be read;
+                // fall back to the default erase rather than filling a
+                // zero or garbage rectangle.
+                best_effort(measured, "GetClientRect", "the default erase still paints");
+                return default();
             }
+            // SAFETY: `hdc` is the `HDC` Win32 passed via `wparam` for this
+            // erase-background message, valid for the duration of this
+            // callback; `client` was just filled in by the successful
+            // `GetClientRect` above; `brush` is a live, cache-owned
+            // `HBRUSH` this call only reads (see `native::styling` for its
+            // ownership).
+            let filled = unsafe { FillRect(hdc, &raw const client, brush) } != 0;
+            best_effort(filled, "FillRect", "the container is left unpainted for one frame");
+            // Non-zero tells Win32 the background is erased and it must not
+            // erase it again with the class brush.
             1
         }
-        // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly what
-        // Win32 just delivered this callback with; `DefWindowProcW`'s
-        // documented default handling is valid for any window message.
-        _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
+        _ => default(),
     }
 }

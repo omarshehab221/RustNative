@@ -11,21 +11,32 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_OVERLAPPEDWINDOW,
 };
 
+use super::context::HostRef;
 use super::menu::build_native_menu;
-use super::renderer::Renderer;
+use super::rendering::Renderer;
 use super::util::{module_instance, wide};
+use super::win32::{best_effort, ignored_by_contract, must_succeed};
 use super::{EnableWindow, WINDOW_CLASS_NAME, WM_FRAMEWORK_SCHEDULE};
 use crate::Error;
 
+/// One top-level window's native state, plus the two upward references it
+/// needs to drive the framework: the `Application` whose view it renders,
+/// and the `WindowRegistry` it asks to reconcile the window set after every
+/// dispatch.
+///
+/// Both upward references are [`HostRef`]s rather than bare `*mut`s, and
+/// every dereference of either goes through `HostRef::with` — see
+/// `native::context`'s module documentation for the lifetime argument that
+/// makes those sound, stated there once instead of at each use.
 pub(crate) struct Runtime {
-    pub(crate) application: *mut Application,
+    application: HostRef<Application>,
     pub(crate) window_id: WindowId,
     pub(crate) modal_parent: HWND,
     pub(crate) renderer: Renderer,
     pub(crate) window: HWND,
     pub(crate) focused: Option<NodeId>,
     pub(crate) error: Option<Error>,
-    registry: *mut WindowRegistry,
+    registry: Option<HostRef<WindowRegistry>>,
     pub(crate) menu_commands: HashMap<u16, NodeId>,
     pub(crate) hovered: Option<NodeId>,
     pub(crate) pressed: Option<NodeId>,
@@ -33,25 +44,67 @@ pub(crate) struct Runtime {
 }
 
 impl Runtime {
+    /// Runs `f` against the `Application` this window renders.
+    ///
+    /// Every use of the application from a `Runtime` funnels through here
+    /// so the borrow is narrow by construction: `f` reads or mutates what it
+    /// needs and returns, rather than holding a reference across a nested
+    /// Win32 dispatch that could resolve the same `Application` again.
+    pub(crate) fn with_application<R>(&self, f: impl FnOnce(&mut Application) -> R) -> R {
+        // SAFETY: `self.application` was built from the `&mut Application`
+        // `WindowsPlatform::run` holds for the whole message loop (point 1
+        // of `native::context`'s module docs). No other borrow is live:
+        // this method never calls itself, and each call site keeps `f`
+        // free of further application access — see that module's contract
+        // on `HostRef::with`.
+        unsafe { self.application.with(f) }
+    }
+
     pub(crate) fn render(&mut self) -> Result<(), Error> {
-        // SAFETY: `application` points to the mutable Application borrowed by
-        // `WindowsPlatform::run` and remains valid for this event loop.
-        let application = unsafe { &*self.application };
-        let Some(tree) = application.view_for(self.window_id) else {
+        let Some((tree, theme)) = self.with_application(|application| {
+            application.view_for(self.window_id).map(|tree| (tree, application.theme().clone()))
+        }) else {
             return Ok(());
         };
-        self.renderer.render(&tree, self.window, application.theme())
+        self.renderer.render(&tree, self.window, &theme)
     }
 
     pub(crate) fn relayout(&mut self) {
         self.renderer.relayout(self.window);
     }
 
+    /// [`Runtime::dispatch`], with this backend's uniform failure handling:
+    /// a native error is recorded on the runtime and the message loop is
+    /// asked to quit, and the return value says whether the caller should
+    /// keep going.
+    ///
+    /// Every `WNDPROC` arm that dispatches an event needs exactly this, and
+    /// each used to spell it out — an `if let Err`, an assignment to
+    /// `runtime.error`, and its own `unsafe { PostQuitMessage(1) }` with its
+    /// own SAFETY comment. Nine copies of a shutdown path is nine chances
+    /// for one of them to drift, so it lives here once instead.
+    ///
+    /// The error is *stored* rather than returned because a `WNDPROC` cannot
+    /// propagate one: it must return an `LRESULT` to Win32. `run_application`
+    /// collects `Runtime::error` after the loop exits and surfaces it as the
+    /// failure of `Platform::run`.
+    pub(crate) fn dispatch_or_quit(&mut self, event: Event) -> bool {
+        match self.dispatch(event) {
+            Ok(()) => true,
+            Err(error) => {
+                self.error = Some(error);
+                // SAFETY: `PostQuitMessage` takes a plain exit-code integer
+                // and no pointer arguments; it only queues `WM_QUIT` so the
+                // loop unwinds through its ordinary exit path.
+                unsafe { windows_sys::Win32::UI::WindowsAndMessaging::PostQuitMessage(1) };
+                false
+            }
+        }
+    }
+
     pub(crate) fn dispatch(&mut self, event: Event) -> Result<(), Error> {
-        // SAFETY: see `render`; the event loop has exclusive access to the
-        // application while it is running.
-        let application = unsafe { &mut *self.application };
-        let handled = application.dispatch_to_window(self.window_id, event);
+        let handled = self
+            .with_application(|application| application.dispatch_to_window(self.window_id, event));
 
         // ComponentTree::dispatch updates component state and rebuilds the
         // framework tree. Reconcile that new tree back into native controls
@@ -67,10 +120,7 @@ impl Runtime {
     }
 
     pub(crate) fn pump_tasks(&mut self) -> Result<(), Error> {
-        // SAFETY: the runtime owns the application for the duration of the
-        // native event loop.
-        let application = unsafe { &mut *self.application };
-        if application.pump_tasks_for(self.window_id) {
+        if self.with_application(|application| application.pump_tasks_for(self.window_id)) {
             self.render()?;
         }
         self.sync_windows()
@@ -79,12 +129,20 @@ impl Runtime {
     /// Picks up any window opened or closed since the last sync. See
     /// `WindowRegistry::sync` for how each side is realized.
     fn sync_windows(&mut self) -> Result<(), Error> {
-        if self.registry.is_null() {
+        let Some(registry) = self.registry else {
             return Ok(());
-        }
-        // SAFETY: `registry` outlives every `Runtime` it owns; see
-        // `run_application`.
-        unsafe { &mut *self.registry }.sync()
+        };
+        // SAFETY: `registry` was built from the `&mut WindowRegistry`
+        // `run_application` owns for the whole message loop (point 2 of
+        // `native::context`'s module docs), so it outlives every `Runtime`
+        // holding a copy. `WindowRegistry::sync` is the only thing reached
+        // through this reference, and it cannot re-enter `sync_windows` on
+        // the same registry in a way that observes a half-updated one: the
+        // window creation it performs registers each new `Runtime` before
+        // running any code that could dispatch (see `create_window_once`),
+        // and the `creating` guard stops a nested `sync` from re-creating a
+        // window mid-creation.
+        unsafe { registry.with(WindowRegistry::sync) }
     }
 }
 
@@ -103,7 +161,7 @@ impl Runtime {
 /// later, unnested turn of the message loop. Every `Runtime` — destroyed
 /// or not — is finally dropped when `run_application` returns.
 pub(crate) struct WindowRegistry {
-    application: *mut Application,
+    application: HostRef<Application>,
     pub(crate) runtimes: HashMap<WindowId, Box<Runtime>>,
     // Reentrancy guard, belt-and-braces alongside registering in
     // `runtimes` as early as possible in `create_window`: covers the
@@ -115,15 +173,37 @@ pub(crate) struct WindowRegistry {
 }
 
 impl WindowRegistry {
-    pub(crate) fn new(application: *mut Application) -> Self {
-        Self { application, runtimes: HashMap::new(), creating: std::collections::HashSet::new() }
+    /// Borrows the `Application` for the whole message loop.
+    ///
+    /// # Safety
+    ///
+    /// `application` must outlive this registry, every `Runtime` it
+    /// creates, and the message loop those run under — point 1 of
+    /// `native::context`'s module documentation, which
+    /// `native::app::run_application` upholds by construction.
+    pub(crate) unsafe fn new(application: &mut Application) -> Self {
+        Self {
+            // SAFETY: forwarded from this function's own contract, just
+            // above.
+            application: unsafe { HostRef::new(application) },
+            runtimes: HashMap::new(),
+            creating: std::collections::HashSet::new(),
+        }
+    }
+
+    /// Runs `f` against the borrowed `Application`. See
+    /// [`Runtime::with_application`], which this mirrors for the registry's
+    /// own copy of the same reference.
+    fn with_application<R>(&self, f: impl FnOnce(&mut Application) -> R) -> R {
+        // SAFETY: `self.application` is the same borrow every `Runtime`
+        // this registry creates also holds, established by `new`'s
+        // contract. Access is narrow and non-reentrant for the same reason
+        // documented on `Runtime::with_application`.
+        unsafe { self.application.with(f) }
     }
 
     pub(crate) fn sync(&mut self) -> Result<(), Error> {
-        // SAFETY: `application` is the same pointer every `Runtime` here
-        // already dereferences to dispatch events.
-        let application = unsafe { &*self.application };
-        let desired = application.window_ids();
+        let desired = self.with_application(|application| application.window_ids());
 
         for (id, runtime) in &mut self.runtimes {
             if runtime.destroyed || desired.contains(id) {
@@ -136,9 +216,15 @@ impl WindowRegistry {
             // `Runtime` for as long as it remains in `self.runtimes`
             // (see the type-level doc comment above); `PostMessageW`
             // takes no pointer arguments beyond the HWND itself.
-            unsafe {
-                PostMessageW(runtime.window, WM_CLOSE, 0, 0);
-            }
+            let posted = unsafe { PostMessageW(runtime.window, WM_CLOSE, 0, 0) } != 0;
+            // Best effort rather than fatal: the only documented reason
+            // this fails for a live window is the target thread's message
+            // queue being full, and the window is already marked
+            // `destroyed`, so the next `sync` simply skips it. Refusing to
+            // open the *other* windows in `desired` below because one
+            // close request could not be queued would be a worse outcome
+            // than a window that lingers a moment longer.
+            best_effort(posted, "PostMessageW(WM_CLOSE)", "the window is already marked closed");
         }
 
         for id in desired {
@@ -165,21 +251,36 @@ impl WindowRegistry {
     }
 
     fn create_window_once(&mut self, id: WindowId) -> Result<(), Error> {
-        // SAFETY: see `sync`.
-        let application = unsafe { &*self.application };
-        let Some(definition) = application.window_for(id) else {
+        let Some((title, size, menu, modal_parent)) = self.with_application(|application| {
+            application.window_for(id).map(|definition| {
+                (
+                    wide(definition.title()),
+                    definition.size(),
+                    definition.menu().cloned(),
+                    application
+                        .window_state(id)
+                        .and_then(framework_core::WindowState::modal_parent),
+                )
+            })
+        }) else {
             return Ok(());
         };
-        let title = wide(definition.title());
-        let size = definition.size();
-        let menu = definition.menu().cloned();
-        let owner = application
-            .window_state(id)
-            .and_then(framework_core::WindowState::modal_parent)
+        // Resolved after the application borrow ends rather than inside it:
+        // the owner HWND comes from `self.runtimes`, and reading `self`
+        // inside a closure that already borrows `self.application` would
+        // need a second borrow of `self` for no benefit.
+        let owner = modal_parent
             .and_then(|parent_id| self.runtimes.get(&parent_id))
             .map_or(std::ptr::null_mut(), |runtime| runtime.window);
 
-        let registry_ptr: *mut WindowRegistry = self;
+        // SAFETY: `self` is borrowed mutably for this call and lives in
+        // `run_application`'s stack frame for the whole message loop (point
+        // 2 of `native::context`'s module docs), so it outlives every
+        // `Runtime` this creates. `self` is not used through the original
+        // borrow while a `Runtime` might dereference this copy: the only
+        // access path is `Runtime::sync_windows`, whose own SAFETY comment
+        // documents why that call cannot observe a half-updated registry.
+        let registry = unsafe { HostRef::new(self) };
         let mut runtime = Box::new(Runtime {
             application: self.application,
             window_id: id,
@@ -188,7 +289,7 @@ impl WindowRegistry {
             window: std::ptr::null_mut(),
             focused: None,
             error: None,
-            registry: registry_ptr,
+            registry: Some(registry),
             menu_commands: HashMap::new(),
             hovered: None,
             pressed: None,
@@ -266,9 +367,12 @@ impl WindowRegistry {
             // live top-level HWND; `built.handle()` is a live `HMENU` just
             // constructed by `build_native_menu`, not yet attached to
             // any window.
-            if unsafe { SetMenu(hwnd, built.handle()) } == 0 {
-                return Err(Error::windows_api("SetMenu"));
-            }
+            let attached = unsafe { SetMenu(hwnd, built.handle()) } != 0;
+            // Must succeed: on failure `built` is dropped here, and its
+            // `OwnedMenu` guard destroys the menu, so returning leaves no
+            // leak — but continuing would leave a window whose menu items
+            // are in `menu_commands` yet unreachable from any native menu.
+            must_succeed(attached, "SetMenu")?;
             let (_, commands) = built.into_attached();
             runtime.menu_commands = commands;
         }
@@ -281,24 +385,35 @@ impl WindowRegistry {
         // documented-safe, non-crashing input, never reused by Windows
         // for an unrelated live window within a single process's
         // lifetime in a way that would matter here).
-        application.scheduler_for(id).expect("framework window must own a scheduler").set_waker(
-            std::sync::Arc::new(move || unsafe {
-                PostMessageW(wake_target as HWND, WM_FRAMEWORK_SCHEDULE, 0, 0);
-            }),
-        );
+        let waker = std::sync::Arc::new(move || {
+            // SAFETY: as documented immediately above.
+            //
+            // A failed post means the window's message queue is full or the
+            // window is gone; either way the wake is best effort, and the
+            // next real message pumps the same tasks.
+            let _ = unsafe { PostMessageW(wake_target as HWND, WM_FRAMEWORK_SCHEDULE, 0, 0) };
+        });
+        runtime.with_application(|application| {
+            application
+                .scheduler_for(id)
+                .expect("framework window must own a scheduler")
+                .set_waker(waker);
+        });
 
         runtime.render()?;
         // SAFETY: `hwnd` was checked non-null above and is a live,
         // just-created top-level HWND.
-        unsafe {
-            ShowWindow(hwnd, SW_SHOW);
-        }
+        //
+        // `ShowWindow` returns whether the window was *previously* visible,
+        // not whether the call worked, so there is no status here to check.
+        ignored_by_contract(unsafe { ShowWindow(hwnd, SW_SHOW) });
         if !owner.is_null() {
             // SAFETY: `owner` was just checked non-null and is a live
             // HWND from this registry's own `runtimes`.
-            unsafe {
-                EnableWindow(owner, 0);
-            }
+            //
+            // Like `ShowWindow`, `EnableWindow` reports the window's
+            // previous state rather than success.
+            ignored_by_contract(unsafe { EnableWindow(owner, 0) });
         }
 
         Ok(())

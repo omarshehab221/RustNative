@@ -11,25 +11,41 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BN_CLICKED, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW, DestroyWindow,
-    DispatchMessageW, EN_CHANGE, GA_ROOT, GetAncestor, GetCursorPos, GetMessageW, MSG,
-    PostQuitMessage, RegisterClassW, TranslateMessage, WM_CHAR, WM_CLOSE, WM_COMMAND,
-    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_SIZE, WNDCLASSW,
-    WindowFromPoint,
+    DispatchMessageW, EN_CHANGE, GetCursorPos, GetMessageW, MSG, PostQuitMessage, RegisterClassW,
+    TranslateMessage, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
+    WM_CTLCOLORSTATIC, WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_SIZE, WNDCLASSW, WindowFromPoint,
 };
 
 use super::container::container_proc;
+use super::context::{root_window, with_runtime};
 use super::input::{
     focus_next, focused_node, key_code, modifiers, set_hovered, set_pressed, sync_focus,
 };
 use super::registry::NativeObject;
 use super::runtime::Runtime;
 use super::user_data::RuntimeSlot;
+use super::win32::{best_effort, ignored_by_contract, informational};
 use super::{
     CONTAINER_CLASS_NAME, EnableWindow, WINDOW_CLASS_NAME, WM_FRAMEWORK_SCHEDULE, WM_MOUSELEAVE,
 };
 use crate::Error;
 use crate::native::util::window_text;
+
+/// Whether a message this loop pre-processed still needs Win32's ordinary
+/// `TranslateMessage`/`DispatchMessageW` treatment afterwards.
+///
+/// A few messages are fully consumed before dispatch — Tab is turned into
+/// focus traversal rather than reaching a control, and a wheel event over a
+/// scrollable container becomes a viewport transform — and forwarding those
+/// on would let the native control act on them a second time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MessageFlow {
+    /// Hand the message to Win32 as usual.
+    Dispatch,
+    /// The pre-dispatch step fully handled it; skip native dispatch.
+    Consumed,
+}
 
 pub(crate) fn run_message_loop() -> Result<(), Error> {
     let mut message = MSG::default();
@@ -51,174 +67,193 @@ pub(crate) fn run_message_loop() -> Result<(), Error> {
         }
 
         if message.message == WM_FRAMEWORK_SCHEDULE {
-            // `RuntimeSlot::get` returns a valid `*mut Runtime` (checked
-            // non-null below) exactly when `message.hwnd` is a top-level
-            // window whose `WM_NCCREATE` has already run and stored it
-            // there (see `create_window_once`) — the only way this custom
-            // message is ever posted is via the waker set up in that same
-            // function, targeting that same hwnd.
-            let runtime_ptr = RuntimeSlot::get(message.hwnd);
-            if !runtime_ptr.is_null() {
-                // SAFETY: `runtime_ptr` was just checked non-null and,
-                // per the reasoning above, is a live `*mut Runtime`; the
-                // message loop has exclusive access to every `Runtime`
-                // between dispatches.
-                unsafe { &mut *runtime_ptr }.pump_tasks()?;
-            }
+            // The only thing that ever posts this custom message is the
+            // waker `create_window_once` installs, targeting that same
+            // window's own top-level hwnd — so this resolves the handle
+            // directly rather than walking to an ancestor. A `None` result
+            // means the window has since been destroyed and the wake is
+            // moot.
+            with_runtime(message.hwnd, Runtime::pump_tasks).transpose()?;
             continue;
         }
 
-        // `GetAncestor` with `GA_ROOT` accepts any window handle and
-        // returns null (handled by `RuntimeSlot::get`, itself always
-        // safe on a null hwnd) if there is no such ancestor.
-        // SAFETY: `message.hwnd` is the HWND Win32 just delivered this
-        // message for.
-        let root = unsafe { GetAncestor(message.hwnd, GA_ROOT) };
-        let runtime_ptr = RuntimeSlot::get(root);
-        if !runtime_ptr.is_null() {
-            // SAFETY: `runtime_ptr` was just checked non-null and, per
-            // the reasoning above, is a live `*mut Runtime`; the message
-            // loop has exclusive access to every `Runtime` between
-            // dispatches.
-            let runtime = unsafe { &mut *runtime_ptr };
-            match message.message {
-                WM_MOUSEMOVE => {
-                    let hovered = runtime.renderer.registry.id_for_hwnd(message.hwnd);
-                    set_hovered(runtime, hovered);
-                    if hovered.is_some() {
-                        // `TRACKMOUSEEVENT` is a small, fixed-layout
-                        // Win32 struct; its size can never approach
-                        // `u32::MAX`, so this cannot actually truncate.
-                        #[allow(clippy::cast_possible_truncation)]
-                        let cb_size = std::mem::size_of::<TRACKMOUSEEVENT>() as u32;
-                        let mut tracking = TRACKMOUSEEVENT {
-                            cbSize: cb_size,
-                            dwFlags: TME_LEAVE,
-                            hwndTrack: message.hwnd,
-                            dwHoverTime: 0,
-                        };
-                        // SAFETY: `tracking` is a fully initialized,
-                        // exclusively borrowed `TRACKMOUSEEVENT`;
-                        // `hwndTrack` is `message.hwnd`, the live HWND
-                        // Win32 just delivered `WM_MOUSEMOVE` for.
-                        unsafe {
-                            TrackMouseEvent(&raw mut tracking);
-                        }
-                    }
-                }
-                WM_MOUSELEAVE => set_hovered(runtime, None),
-                WM_LBUTTONDOWN => {
-                    let pressed = runtime.renderer.registry.id_for_hwnd(message.hwnd);
-                    set_pressed(runtime, pressed);
-                }
-                WM_LBUTTONUP => set_pressed(runtime, None),
-                _ => {}
-            }
-            if message.message == WM_MOUSEWHEEL {
-                let mut point = POINT { x: 0, y: 0 };
-                // SAFETY: `point` is a valid, exclusively borrowed
-                // `POINT` for `GetCursorPos` to write into.
-                unsafe {
-                    GetCursorPos(&raw mut point);
-                }
-                // SAFETY: `WindowFromPoint` takes a plain `POINT` value,
-                // no pointer arguments; a null return is its documented
-                // "no window at that point" signal, which
-                // `scrollable_ancestor` already treats as "not found"
-                // via its own null check on the same handle it walks.
-                let hovered = unsafe { WindowFromPoint(point) };
-                if let Some(id) = runtime.renderer.scrollable_ancestor(hovered) {
-                    // The high word of `wParam` carries the wheel delta
-                    // as a signed 16-bit value (`WHEEL_DELTA` units) per
-                    // `WM_MOUSEWHEEL`'s documented layout; reinterpreting
-                    // that exact `u16` as `i16` is the intentional,
-                    // documented bit pattern this message defines, not a
-                    // truncating or wrapping value change.
-                    #[allow(clippy::cast_possible_wrap)]
-                    let delta = super::util::hiword(message.wParam) as i16;
-                    runtime.renderer.scroll_container(
-                        id,
-                        0,
-                        -(i32::from(delta) / 3).clamp(-120, 120),
-                    );
-                    continue;
-                }
-            }
-
-            if message.message == WM_KEYDOWN {
-                // `wParam` for `WM_KEYDOWN` documents its virtual-key
-                // code as fitting in the low byte; the truncation this
-                // cast could in principle perform never actually happens
-                // for any value Win32 delivers here.
-                #[allow(clippy::cast_possible_truncation)]
-                let key = key_code(message.wParam as u32);
-                if key == framework_core::KeyCode::Tab {
-                    focus_next(runtime, modifiers().shift);
-                    sync_focus(runtime);
-                    continue;
-                }
-                if let Err(error) = runtime.dispatch(Event::KeyDown {
-                    target: focused_node(runtime),
-                    key,
-                    modifiers: modifiers(),
-                }) {
-                    runtime.error = Some(error);
-                    // SAFETY: `PostQuitMessage` takes a plain exit-code
-                    // integer and no pointer arguments.
-                    unsafe {
-                        PostQuitMessage(1);
-                    }
-                    continue;
-                }
-            } else if message.message == WM_CHAR {
-                let target = focused_node(runtime);
-                let native_text_input = target
-                    .and_then(|id| runtime.renderer.registry.get(id))
-                    .is_some_and(|object| matches!(object, NativeObject::TextInput(_)));
-                if !native_text_input {
-                    // `wParam` for `WM_CHAR` documents its UTF-16 code
-                    // unit as occupying the low word; this narrowing
-                    // cannot lose information for any value Win32
-                    // delivers here.
-                    #[allow(clippy::cast_possible_truncation)]
-                    let wparam_char = message.wParam as u32;
-                    if let Some(character) = char::from_u32(wparam_char) {
-                        if !character.is_control() {
-                            if let Err(error) = runtime
-                                .dispatch(Event::TextInput { target, text: character.to_string() })
-                            {
-                                runtime.error = Some(error);
-                                // SAFETY: same as above — no pointer
-                                // arguments.
-                                unsafe {
-                                    PostQuitMessage(1);
-                                }
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
+        // Win32 addresses each message to whichever window it concerns —
+        // frequently a native control or a nested container, not the
+        // top-level window that owns the `Runtime`. Resolve the root once
+        // and reuse it for both the pre-dispatch pass and the focus sync
+        // after dispatch.
+        let root = root_window(message.hwnd);
+        let flow = with_runtime(root, |runtime| pre_dispatch(runtime, &message))
+            .unwrap_or(MessageFlow::Dispatch);
+        if flow == MessageFlow::Consumed {
+            continue;
         }
 
         // SAFETY: `message` was just populated by `GetMessageW` above,
         // which succeeded (the `-1`/`0` failure and quit cases both
         // `return`/`break` before reaching here); both calls only read
         // it for the duration of this statement.
+        //
+        // `TranslateMessage` reports whether the message *was* translated
+        // (into a `WM_CHAR`), not whether it succeeded, and
+        // `DispatchMessageW` returns the target `WNDPROC`'s own `LRESULT`
+        // — neither is a status code this loop can act on.
         unsafe {
-            TranslateMessage(&raw const message);
-            DispatchMessageW(&raw const message);
+            ignored_by_contract(TranslateMessage(&raw const message));
+            informational(DispatchMessageW(&raw const message));
         }
-        if !runtime_ptr.is_null() {
-            // SAFETY: `runtime_ptr` was checked non-null and, per the
-            // reasoning above, is a live `*mut Runtime`; the message
-            // loop has exclusive access to every `Runtime` between
-            // dispatches.
-            sync_focus(unsafe { &mut *runtime_ptr });
-        }
+
+        // Native focus can have moved during dispatch (a click on a
+        // control, a `SetFocus` from application code) without the
+        // framework hearing about it, so reconcile after every message
+        // rather than only after the ones that obviously change focus.
+        with_runtime(root, sync_focus);
     }
 
     Ok(())
+}
+
+/// Framework-level handling that must happen *before* Win32 dispatches a
+/// message to the target window's own procedure.
+///
+/// This exists as a separate pass, rather than as more arms inside
+/// `window_proc`, because everything here concerns messages Win32 delivers
+/// to a **child** window — a native control or a container — whose window
+/// procedure is either the system's own (for `STATIC`/`BUTTON`/`EDIT`) or
+/// `container_proc`. Neither can see the owning `Runtime` at the moment the
+/// message arrives; the loop can, because it has just resolved the root.
+fn pre_dispatch(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
+    match message.message {
+        WM_MOUSEMOVE => {
+            let hovered = runtime.renderer.registry.id_for_hwnd(message.hwnd);
+            set_hovered(runtime, hovered);
+            if hovered.is_some() {
+                track_mouse_leave(message.hwnd);
+            }
+        }
+        WM_MOUSELEAVE => set_hovered(runtime, None),
+        WM_LBUTTONDOWN => {
+            let pressed = runtime.renderer.registry.id_for_hwnd(message.hwnd);
+            set_pressed(runtime, pressed);
+        }
+        WM_LBUTTONUP => set_pressed(runtime, None),
+        _ => {}
+    }
+
+    match message.message {
+        WM_MOUSEWHEEL => wheel_scroll(runtime, message),
+        WM_KEYDOWN => key_down(runtime, message),
+        WM_CHAR => {
+            character(runtime, message);
+            MessageFlow::Dispatch
+        }
+        _ => MessageFlow::Dispatch,
+    }
+}
+
+/// Asks Win32 to send one `WM_MOUSELEAVE` when the pointer next leaves
+/// `hwnd`, which is the only way to learn that a control stopped being
+/// hovered — there is no "mouse exited" message otherwise.
+fn track_mouse_leave(hwnd: HWND) {
+    // `TRACKMOUSEEVENT` is a small, fixed-layout Win32 struct; its size
+    // can never approach `u32::MAX`, so this cannot actually truncate.
+    #[allow(clippy::cast_possible_truncation)]
+    let cb_size = std::mem::size_of::<TRACKMOUSEEVENT>() as u32;
+    let mut tracking =
+        TRACKMOUSEEVENT { cbSize: cb_size, dwFlags: TME_LEAVE, hwndTrack: hwnd, dwHoverTime: 0 };
+    // SAFETY: `tracking` is a fully initialized, exclusively borrowed
+    // `TRACKMOUSEEVENT`; `hwndTrack` is the live HWND Win32 just delivered
+    // `WM_MOUSEMOVE` for.
+    let tracked = unsafe { TrackMouseEvent(&raw mut tracking) } != 0;
+    // Best effort: without the leave notification the control simply keeps
+    // its hover styling until the pointer enters a different tracked
+    // control, which is a cosmetic degradation, not an incorrect UI.
+    best_effort(tracked, "TrackMouseEvent(TME_LEAVE)", "hover styling is cosmetic");
+}
+
+/// Translates a wheel event into a scroll of whichever scrollable container
+/// is under the pointer, if any.
+fn wheel_scroll(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
+    let mut point = POINT { x: 0, y: 0 };
+    // SAFETY: `point` is a valid, exclusively borrowed `POINT` for
+    // `GetCursorPos` to write into.
+    let located = unsafe { GetCursorPos(&raw mut point) } != 0;
+    if !located {
+        // The documented failure here is the calling thread lacking access
+        // to the input desktop, in which case there is no pointer position
+        // to scroll relative to at all.
+        best_effort(located, "GetCursorPos", "there is no pointer position to scroll under");
+        return MessageFlow::Dispatch;
+    }
+    // SAFETY: `WindowFromPoint` takes a plain `POINT` value, no pointer
+    // arguments; a null return is its documented "no window at that point"
+    // signal, which `scrollable_ancestor` already treats as "not found"
+    // via its own null check on the same handle it walks.
+    let hovered = unsafe { WindowFromPoint(point) };
+    let Some(id) = runtime.renderer.scrollable_ancestor(hovered) else {
+        return MessageFlow::Dispatch;
+    };
+
+    // The high word of `wParam` carries the wheel delta as a signed 16-bit
+    // value (`WHEEL_DELTA` units) per `WM_MOUSEWHEEL`'s documented layout;
+    // reinterpreting that exact `u16` as `i16` is the intentional,
+    // documented bit pattern this message defines, not a truncating or
+    // wrapping value change.
+    #[allow(clippy::cast_possible_wrap)]
+    let delta = super::util::hiword(message.wParam) as i16;
+    runtime.renderer.scroll_container(id, 0, -(i32::from(delta) / 3).clamp(-120, 120));
+    // A scroll is a viewport transform this framework owns; letting the
+    // native control also act on the same wheel event would double-scroll.
+    MessageFlow::Consumed
+}
+
+/// Turns a key press into either framework focus traversal (Tab) or a
+/// `KeyDown` event for the focused component.
+fn key_down(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
+    // `wParam` for `WM_KEYDOWN` documents its virtual-key code as fitting
+    // in the low byte; the truncation this cast could in principle perform
+    // never actually happens for any value Win32 delivers here.
+    #[allow(clippy::cast_possible_truncation)]
+    let key = key_code(message.wParam as u32);
+    if key == framework_core::KeyCode::Tab {
+        focus_next(runtime, modifiers().shift);
+        sync_focus(runtime);
+        // Tab is framework-level focus traversal; forwarding it would let
+        // Win32's own dialog-manager-style handling move focus a second
+        // time.
+        return MessageFlow::Consumed;
+    }
+    runtime.dispatch_or_quit(Event::KeyDown {
+        target: focused_node(runtime),
+        key,
+        modifiers: modifiers(),
+    });
+    MessageFlow::Dispatch
+}
+
+/// Delivers committed text to the focused component, for every focus target
+/// except a native `EDIT`, which produces its own `EN_CHANGE` notification
+/// and would otherwise report the same keystroke twice.
+fn character(runtime: &mut Runtime, message: &MSG) {
+    let target = focused_node(runtime);
+    let native_text_input = target
+        .and_then(|id| runtime.renderer.registry.get(id))
+        .is_some_and(|object| matches!(object, NativeObject::TextInput(_)));
+    if native_text_input {
+        return;
+    }
+    // `wParam` for `WM_CHAR` documents its UTF-16 code unit as occupying
+    // the low word; this narrowing cannot lose information for any value
+    // Win32 delivers here.
+    #[allow(clippy::cast_possible_truncation)]
+    let wparam_char = message.wParam as u32;
+    let Some(character) = char::from_u32(wparam_char) else {
+        return;
+    };
+    if character.is_control() {
+        return;
+    }
+    runtime.dispatch_or_quit(Event::TextInput { target, text: character.to_string() });
 }
 
 pub(crate) fn register_window_classes(instance: HINSTANCE) -> Result<(), Error> {
@@ -338,6 +373,14 @@ unsafe extern "system" fn window_proc(
 }
 
 fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // Delegating to the default window procedure, which every arm below
+    // that declines to handle a message falls back to.
+    //
+    // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly what Win32
+    // just delivered this callback with; `DefWindowProcW`'s documented
+    // default handling is valid for any window message.
+    let default = || unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
+
     match message {
         WM_NCCREATE => {
             let create = lparam as *const CREATESTRUCTW;
@@ -359,169 +402,65 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             // SAFETY: `hwnd` was just created by Win32 and is being
             // delivered its first message (`WM_NCCREATE` is always
             // first); storing this pointer here is exactly what
-            // establishes the invariant every other `RuntimeSlot::get`
-            // call in this file and in `wndproc_boundary` relies on.
+            // establishes the invariant every `native::context`
+            // resolution in this crate relies on.
             unsafe {
                 RuntimeSlot::set(hwnd, runtime_ptr);
             }
             1
         }
         WM_COMMAND => {
-            let notification_code = u32::from(super::util::hiword(wparam));
-            let control = lparam as HWND;
-            // Either null (before WM_NCCREATE above has run for this
-            // hwnd) or the live `*mut Runtime` WM_NCCREATE stored, per
-            // the invariant documented there.
-            let runtime_ptr = RuntimeSlot::get(hwnd);
-
-            if !runtime_ptr.is_null() {
-                // SAFETY: non-null per the invariant above; the message
-                // loop is single-threaded and non-reentrant.
-                let runtime = unsafe { &mut *runtime_ptr };
-                if !control.is_null() {
-                    if let Some(id) = runtime.renderer.registry.id_for_hwnd(control) {
-                        if notification_code == BN_CLICKED {
-                            if let Err(error) = runtime.dispatch(Event::Click { target: id }) {
-                                runtime.error = Some(error);
-                                // SAFETY: `PostQuitMessage` takes no
-                                // pointer arguments.
-                                unsafe { PostQuitMessage(1) };
-                            }
-                        } else if notification_code == EN_CHANGE {
-                            if runtime.renderer.suppress_text_change.remove(&id) {
-                                return 0;
-                            }
-
-                            let is_text_input =
-                                runtime.renderer.registry.get(id).is_some_and(|object| {
-                                    matches!(object, NativeObject::TextInput(_))
-                                });
-                            if is_text_input {
-                                let value = window_text(control);
-                                if let Err(error) =
-                                    runtime.dispatch(Event::TextChanged { target: id, value })
-                                {
-                                    runtime.error = Some(error);
-                                    // SAFETY: `PostQuitMessage` takes no
-                                    // pointer arguments.
-                                    unsafe { PostQuitMessage(1) };
-                                }
-                            }
-                        }
-                    }
-                } else if notification_code == 0 {
+            with_runtime(hwnd, |runtime| {
+                let notification_code = u32::from(super::util::hiword(wparam));
+                let control = lparam as HWND;
+                if control.is_null() {
                     // A native menu command: no control window is
-                    // associated with it (lParam is 0), unlike a
-                    // control notification.
-                    let command_id = super::util::loword(wparam);
-                    if let Some(item) = runtime.menu_commands.get(&command_id).copied() {
-                        if let Err(error) =
-                            runtime.dispatch(Event::MenuAction { window: runtime.window_id, item })
-                        {
-                            runtime.error = Some(error);
-                            // SAFETY: `PostQuitMessage` takes no pointer
-                            // arguments.
-                            unsafe { PostQuitMessage(1) };
-                        }
+                    // associated with it (`lParam` is 0), unlike a control
+                    // notification, and its notification code is 0.
+                    if notification_code == 0 {
+                        menu_command(runtime, super::util::loword(wparam));
                     }
+                } else if let Some(id) = runtime.renderer.registry.id_for_hwnd(control) {
+                    control_notification(runtime, id, notification_code, control);
                 }
-            }
+            });
             0
         }
         WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
-            // Read/dereference invariant — see WM_NCCREATE above.
-            let runtime_ptr = RuntimeSlot::get(hwnd);
-            if runtime_ptr.is_null() {
-                // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly
-                // what Win32 just delivered this callback with;
-                // `DefWindowProcW`'s documented default handling is
-                // valid for any window message.
-                return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
-            }
-            // SAFETY: non-null per the invariant above; the message
-            // loop is single-threaded and non-reentrant.
-            let runtime = unsafe { &*runtime_ptr };
-            let control = lparam as HWND;
-            let hdc = wparam as HDC;
-            let Some(id) = runtime.renderer.registry.id_for_hwnd(control) else {
-                // SAFETY: same as above.
-                return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
-            };
-            let Some(style) = runtime.renderer.styles.get(&id) else {
-                // SAFETY: same as above.
-                return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
-            };
-            // SAFETY: `hdc` is the `HDC` Win32 passed via `wparam` for
-            // this control-color message, valid for the duration of
-            // this callback; `TRANSPARENT` is a documented mode
-            // constant, not a pointer.
-            unsafe {
-                SetTextColor(hdc, style.foreground);
-                SetBkColor(hdc, style.background);
-                // `TRANSPARENT` is a small, fixed Win32 background-mode
-                // constant (value `1`); it can never approach `i32::MAX`.
-                #[allow(clippy::cast_possible_wrap)]
-                let transparent_mode = TRANSPARENT as i32;
-                SetBkMode(hdc, transparent_mode);
-            }
-            style.background_brush as LRESULT
+            with_runtime(hwnd, |runtime| control_color(runtime, wparam, lparam))
+                .flatten()
+                .unwrap_or_else(default)
         }
         WM_SIZE => {
-            // Read/dereference invariant — see WM_NCCREATE above.
-            let runtime_ptr = RuntimeSlot::get(hwnd);
-            if !runtime_ptr.is_null() {
-                // SAFETY: non-null per the invariant above; the message
-                // loop is single-threaded and non-reentrant.
-                let runtime = unsafe { &mut *runtime_ptr };
+            with_runtime(hwnd, |runtime| {
                 let size = framework_core::Size::new(
                     u32::from(super::util::loword_signed(lparam)),
                     u32::from(super::util::hiword_signed(lparam)),
                 );
-                if let Err(error) =
-                    runtime.dispatch(Event::WindowResized { window: runtime.window_id, size })
-                {
-                    runtime.error = Some(error);
-                    // SAFETY: `PostQuitMessage` takes no pointer
-                    // arguments.
-                    unsafe {
-                        PostQuitMessage(1);
-                    }
-                } else {
-                    // `wParam` for `WM_SIZE` documents its resize-type
-                    // flag (`SIZE_MINIMIZED` = 1, `SIZE_MAXIMIZED` = 2,
-                    // ...) as a small constant that always fits in
-                    // `u32`; a value large enough to truncate here would
-                    // itself already indicate something has gone
-                    // fundamentally wrong upstream, not a case this
-                    // truncation could meaningfully guard against.
-                    #[allow(clippy::cast_possible_truncation)]
-                    let presentation = match wparam as u32 {
-                        1 => framework_core::WindowPresentation::Minimized,
-                        2 => framework_core::WindowPresentation::Maximized,
-                        _ => framework_core::WindowPresentation::Normal,
-                    };
-                    if let Err(error) = runtime.dispatch(Event::WindowStateChanged {
-                        window: runtime.window_id,
-                        state: presentation,
-                    }) {
-                        runtime.error = Some(error);
-                        // SAFETY: same as above.
-                        unsafe {
-                            PostQuitMessage(1);
-                        }
-                    }
+                let window = runtime.window_id;
+                if !runtime.dispatch_or_quit(Event::WindowResized { window, size }) {
+                    return;
+                }
+                // `wParam` for `WM_SIZE` documents its resize-type flag
+                // (`SIZE_MINIMIZED` = 1, `SIZE_MAXIMIZED` = 2, ...) as a
+                // small constant that always fits in `u32`; a value large
+                // enough to truncate here would itself already indicate
+                // something has gone fundamentally wrong upstream, not a
+                // case this truncation could meaningfully guard against.
+                #[allow(clippy::cast_possible_truncation)]
+                let state = match wparam as u32 {
+                    1 => framework_core::WindowPresentation::Minimized,
+                    2 => framework_core::WindowPresentation::Maximized,
+                    _ => framework_core::WindowPresentation::Normal,
+                };
+                if runtime.dispatch_or_quit(Event::WindowStateChanged { window, state }) {
                     runtime.relayout();
                 }
-            }
+            });
             0
         }
         WM_MOVE => {
-            // Read/dereference invariant — see WM_NCCREATE above.
-            let runtime_ptr = RuntimeSlot::get(hwnd);
-            if !runtime_ptr.is_null() {
-                // SAFETY: non-null per the invariant above; the message
-                // loop is single-threaded and non-reentrant.
-                let runtime = unsafe { &mut *runtime_ptr };
+            with_runtime(hwnd, |runtime| {
                 // `WM_MOVE`'s `lParam` packs the window's signed x/y
                 // position (negative on a multi-monitor setup with a
                 // monitor to the left of/above the primary one) as two
@@ -533,58 +472,47 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                     i32::from(super::util::loword_signed(lparam) as i16),
                     i32::from(super::util::hiword_signed(lparam) as i16),
                 );
-                if let Err(error) =
-                    runtime.dispatch(Event::WindowMoved { window: runtime.window_id, position })
-                {
-                    runtime.error = Some(error);
-                    // SAFETY: `PostQuitMessage` takes no pointer
-                    // arguments.
-                    unsafe {
-                        PostQuitMessage(1);
-                    }
-                }
-            }
+                let window = runtime.window_id;
+                runtime.dispatch_or_quit(Event::WindowMoved { window, position });
+            });
             0
         }
         WM_CLOSE => {
-            // Read/dereference invariant — see WM_NCCREATE above.
-            let runtime_ptr = RuntimeSlot::get(hwnd);
-            if !runtime_ptr.is_null() {
-                // SAFETY: non-null per the invariant above; the message
-                // loop is single-threaded and non-reentrant.
-                let runtime = unsafe { &mut *runtime_ptr };
-                if let Err(error) =
-                    runtime.dispatch(Event::WindowCloseRequested { window: runtime.window_id })
-                {
-                    runtime.error = Some(error);
-                    // SAFETY: `PostQuitMessage` takes no pointer
-                    // arguments.
-                    unsafe {
-                        PostQuitMessage(1);
-                    }
-                    return 0;
+            let destroy = with_runtime(hwnd, |runtime| {
+                let window = runtime.window_id;
+                if !runtime.dispatch_or_quit(Event::WindowCloseRequested { window }) {
+                    // The dispatch already recorded the error and posted
+                    // `WM_QUIT`; tearing the window down on top of that
+                    // would run destruction during an error unwind.
+                    return false;
                 }
-                if runtime.window_id != framework_core::WindowId::PRIMARY {
-                    // SAFETY: `runtime.application` points to the
-                    // mutable `Application` borrowed by
-                    // `WindowsPlatform::run` and remains valid for this
-                    // event loop (see `Runtime::render`); the event loop
-                    // has exclusive access while it is running.
-                    unsafe { &mut *runtime.application }.close_window(runtime.window_id);
+                // The primary window's close is the application's own exit
+                // path, handled by `WM_DESTROY` posting `WM_QUIT`; any
+                // other window must additionally be removed from the
+                // application's window set so `WindowRegistry::sync` does
+                // not immediately recreate it.
+                if window != framework_core::WindowId::PRIMARY {
+                    runtime.with_application(|application| application.close_window(window));
                 }
+                true
+            });
+            // A window with no runtime published yet is still a real window
+            // that asked to close, so honor it.
+            if destroy.unwrap_or(true) {
+                // SAFETY: `hwnd` is the HWND Win32 just invoked this
+                // callback with, and is still live.
+                //
+                // Best effort: the documented failure is `hwnd` not being
+                // a window this thread owns, which cannot be true inside
+                // its own `WNDPROC`, and there is nothing left to report a
+                // failure to on a teardown path.
+                let destroyed = unsafe { DestroyWindow(hwnd) } != 0;
+                best_effort(destroyed, "DestroyWindow", "this is the window's own teardown path");
             }
-            // SAFETY: `hwnd` is the HWND Win32 just invoked this
-            // callback with, and is still live.
-            unsafe { DestroyWindow(hwnd) };
             0
         }
         WM_DESTROY => {
-            // Read/dereference invariant — see WM_NCCREATE above.
-            let runtime_ptr = RuntimeSlot::get(hwnd);
-            if !runtime_ptr.is_null() {
-                // SAFETY: non-null per the invariant above; the message
-                // loop is single-threaded and non-reentrant.
-                let runtime = unsafe { &mut *runtime_ptr };
+            with_runtime(hwnd, |runtime| {
                 runtime.destroyed = true;
                 // Stop advertising this window as a dialog-owner candidate
                 // before it actually stops existing — see
@@ -592,24 +520,94 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                 super::window_handles::clear(runtime.window_id);
                 if !runtime.modal_parent.is_null() {
                     // SAFETY: `modal_parent` was just checked non-null
-                    // and, per `create_window_once`, is a live HWND
-                    // from `WindowRegistry::runtimes` that owns this
-                    // window as a modal child.
-                    unsafe {
-                        EnableWindow(runtime.modal_parent, 1);
-                    }
+                    // and, per `create_window_once`, is a live HWND from
+                    // `WindowRegistry::runtimes` that owns this window as
+                    // a modal child.
+                    //
+                    // `EnableWindow` reports the window's *previous*
+                    // disabled state, not whether the call worked.
+                    ignored_by_contract(unsafe { EnableWindow(runtime.modal_parent, 1) });
                 }
                 if runtime.window_id == framework_core::WindowId::PRIMARY {
                     // SAFETY: `PostQuitMessage` takes no pointer
                     // arguments.
                     unsafe { PostQuitMessage(0) };
                 }
-            }
+            });
             0
         }
-        // SAFETY: `hwnd`/`message`/`wparam`/`lparam` are exactly what
-        // Win32 just delivered this callback with; `DefWindowProcW`'s
-        // documented default handling is valid for any window message.
-        _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
+        _ => default(),
     }
+}
+
+/// Routes a native menu selection back to the component tree.
+///
+/// A command id with no entry in `menu_commands` is ignored rather than
+/// treated as an error: Windows itself sends `WM_COMMAND` for system menu
+/// items (Close, Minimize, ...) this crate never registered.
+fn menu_command(runtime: &mut Runtime, command_id: u16) {
+    let Some(item) = runtime.menu_commands.get(&command_id).copied() else {
+        return;
+    };
+    let window = runtime.window_id;
+    runtime.dispatch_or_quit(Event::MenuAction { window, item });
+}
+
+/// Routes a native control's notification (a button click, an edit
+/// control's text change) back to the component that owns the control.
+fn control_notification(
+    runtime: &mut Runtime,
+    id: framework_core::NodeId,
+    notification_code: u32,
+    control: HWND,
+) {
+    if notification_code == BN_CLICKED {
+        runtime.dispatch_or_quit(Event::Click { target: id });
+        return;
+    }
+    if notification_code != EN_CHANGE {
+        return;
+    }
+    // A text change this renderer itself just wrote via `SetWindowTextW`,
+    // not one the person typed — echoing it back as an event would loop.
+    if runtime.renderer.suppress_text_change.remove(&id) {
+        return;
+    }
+    let is_text_input = runtime
+        .renderer
+        .registry
+        .get(id)
+        .is_some_and(|object| matches!(object, NativeObject::TextInput(_)));
+    if !is_text_input {
+        return;
+    }
+    let value = window_text(control);
+    runtime.dispatch_or_quit(Event::TextChanged { target: id, value });
+}
+
+/// Answers a `WM_CTLCOLOR*` message with the resolved foreground/background
+/// of the control it concerns, returning `None` when this crate has no
+/// realized style for that control and Win32's default painting should
+/// stand.
+fn control_color(runtime: &Runtime, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
+    let control = lparam as HWND;
+    let hdc = wparam as HDC;
+    let id = runtime.renderer.registry.id_for_hwnd(control)?;
+    let style = runtime.renderer.styles.get(id)?;
+    // SAFETY: `hdc` is the `HDC` Win32 passed via `wparam` for this
+    // control-color message, valid for the duration of this callback;
+    // `TRANSPARENT` is a documented mode constant, not a pointer.
+    //
+    // All three setters return the *previous* color/mode rather than a
+    // status code.
+    unsafe {
+        informational(SetTextColor(hdc, style.foreground));
+        informational(SetBkColor(hdc, style.background));
+        // `TRANSPARENT` is a small, fixed Win32 background-mode constant
+        // (value `1`); it can never approach `i32::MAX`.
+        #[allow(clippy::cast_possible_wrap)]
+        let transparent_mode = TRANSPARENT as i32;
+        informational(SetBkMode(hdc, transparent_mode));
+    }
+    Some(style.background_brush as LRESULT)
 }

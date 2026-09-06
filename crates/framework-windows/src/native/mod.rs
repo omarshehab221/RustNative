@@ -4,17 +4,19 @@
 
 mod app;
 mod container;
+pub(crate) mod context;
 mod input;
 mod measure;
 mod menu;
 mod message_loop;
 mod registry;
-mod renderer;
+pub(crate) mod rendering;
 mod runtime;
 #[cfg(test)]
 mod test_support;
 mod user_data;
 mod util;
+pub(crate) mod win32;
 pub(crate) mod window_handles;
 
 pub(super) use app::run_application;
