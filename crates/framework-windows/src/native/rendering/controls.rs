@@ -35,6 +35,7 @@ use super::super::registry::{NativeObject, NativeObjectRegistry};
 use super::super::util::{module_instance, wide, window_text};
 use super::super::win32::{best_effort, must_succeed};
 use crate::Error;
+use crate::error::NativeContext;
 
 /// Creates the native object realizing `node` and registers it under
 /// `node.id`.
@@ -144,7 +145,8 @@ pub(crate) fn update_text(registry: &NativeObjectRegistry, node: &TreeNode) -> R
             // the field holds `value`, and a field that silently kept its old
             // content would leave the two permanently disagreeing with no
             // event to reconcile them.
-            must_succeed(written, "SetWindowTextW(EDIT)")?;
+            must_succeed(written, "SetWindowTextW(EDIT)")
+                .map_err(|error| error.or_context(context_of(node, hwnd)))?;
             Ok(true)
         }
     }
@@ -220,7 +222,8 @@ fn create_container(
             null(),
         )
     };
-    must_succeed(!viewport.is_null(), "CreateWindowExW(CONTAINER_VIEWPORT)")?;
+    must_succeed(!viewport.is_null(), "CreateWindowExW(CONTAINER_VIEWPORT)")
+        .map_err(|error| error.or_context(NativeContext::none().with_node(node.id)))?;
 
     // SAFETY: same reasoning as the `viewport` creation above; `viewport`
     // was just checked non-null and is the live parent HWND for this child.
@@ -241,8 +244,12 @@ fn create_container(
         )
     };
     if content.is_null() {
+        let error = Error::windows_api_in(
+            "CreateWindowExW(CONTAINER_CONTENT)",
+            NativeContext::none().with_node(node.id).with_handle(viewport as usize),
+        );
         destroy_orphan(viewport, "CONTAINER_VIEWPORT");
-        return Err(Error::windows_api("CreateWindowExW(CONTAINER_CONTENT)"));
+        return Err(error);
     }
 
     if let Err(error) = registry.insert(node.id, NativeObject::Container { viewport, content }) {
@@ -268,17 +275,25 @@ fn adopt(
     class_name: &'static str,
 ) -> Result<(), Error> {
     if hwnd.is_null() {
-        return Err(Error::windows_api(match class_name {
-            "STATIC" => "CreateWindowExW(STATIC)",
-            "BUTTON" => "CreateWindowExW(BUTTON)",
-            _ => "CreateWindowExW(EDIT)",
-        }));
+        return Err(Error::windows_api_in(
+            match class_name {
+                "STATIC" => "CreateWindowExW(STATIC)",
+                "BUTTON" => "CreateWindowExW(BUTTON)",
+                _ => "CreateWindowExW(EDIT)",
+            },
+            NativeContext::none().with_node(node.id),
+        ));
     }
     if let Err(error) = registry.insert(node.id, wrap(hwnd)) {
         destroy_orphan(hwnd, class_name);
         return Err(error);
     }
     Ok(())
+}
+
+/// The diagnostic context for a failure concerning one realized node.
+fn context_of(node: &TreeNode, hwnd: HWND) -> NativeContext {
+    NativeContext::none().with_node(node.id).with_handle(hwnd as usize)
 }
 
 /// Destroys a window that was created but never adopted by the registry, so

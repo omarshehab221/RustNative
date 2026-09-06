@@ -216,6 +216,12 @@ impl ComponentTree {
     /// second time — so a caller can choose to log this and continue rather
     /// than lose the application to a panic; see [`Self::last_render_error`]
     /// to inspect the most recent outcome without re-triggering a render.
+    #[allow(
+        clippy::expect_used,
+        reason = "the standards audit's P1.20 finding requires an identity allocator to fail loudly on \
+    /// exhaustion rather than silently wrap and reuse a live id; there is no caller that \
+    /// could act on a `Result` here"
+    )]
     pub fn render(&mut self) -> Result<(), RenderError> {
         self.pending_render_errors.clear();
         self.generation =
@@ -251,6 +257,12 @@ impl ComponentTree {
     /// `with_services`, `with_services_and_theme`) performs an initial
     /// render before returning.
     #[must_use]
+    #[allow(
+        clippy::expect_used,
+        reason = "an invariant this runtime itself just established, not a condition an application can \
+    /// trigger — see `crate::component::RenderError` for the line this crate draws between \
+    /// the two"
+    )]
     pub fn view(&self) -> Node {
         self.root_view.clone().expect("component tree must be rendered before its view is read")
     }
@@ -431,6 +443,10 @@ impl ComponentTree {
     /// net reduction, since `ComponentContext::child_with_props` already
     /// produces an owned `String` via `key.into()` before this is reached.
     #[allow(clippy::needless_pass_by_value)]
+    #[allow(
+        clippy::expect_used,
+        reason = "an invariant this runtime itself just \n    /// established, not a condition an application can trigger — see \n    /// `crate::component::RenderError` for the line this crate draws between the two"
+    )]
     pub(crate) fn render_child_with_props<C, F>(
         &mut self,
         parent: ComponentId,
@@ -501,6 +517,12 @@ impl ComponentTree {
         self.render_component(id, generation)
     }
 
+    #[allow(
+        clippy::expect_used,
+        reason = "an invariant this runtime itself just established, not a condition an application can \
+    /// trigger — see `crate::component::RenderError` for the line this crate draws between \
+    /// the two"
+    )]
     fn render_component(&mut self, id: ComponentId, generation: u64) -> Node {
         let mut entry =
             self.components.remove(&id).expect("component tree entry must exist while rendering");

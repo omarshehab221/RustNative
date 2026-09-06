@@ -114,6 +114,10 @@ impl TokioExecutor {
     /// than something every `Scheduler::new()` call site should have to
     /// handle.
     #[must_use]
+    #[allow(
+        clippy::expect_used,
+        reason = "documented in this method's own `# Panics` \n    /// section: a host that cannot start a thread pool has no working executor, and \n    /// returning a `Result` would push that unrecoverable case onto every call site"
+    )]
     pub fn dedicated(worker_threads: usize) -> Self {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(worker_threads.max(1))

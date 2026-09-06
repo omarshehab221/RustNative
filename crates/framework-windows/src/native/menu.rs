@@ -10,6 +10,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use super::util::wide;
 use crate::Error;
+use crate::error::NativeContext;
 
 /// A native menu realized from a portable `MenuBar`, together with the
 /// command-id-to-`NodeId` table `window_proc` uses to translate a
@@ -131,7 +132,12 @@ fn append_menu_item(
         std::mem::forget(submenu_guard);
     } else {
         let command_id = *next_command_id;
-        *next_command_id = next_command_id.checked_add(1).ok_or(Error::MenuCommandExhausted)?;
+        *next_command_id = next_command_id
+            .checked_add(1)
+            // The window is filled in by `create_window_once`, which is the
+            // frame that knows which window's menu this is; see
+            // `Error::or_context`.
+            .ok_or(Error::MenuCommandExhausted { context: NativeContext::none() })?;
         commands.insert(command_id, item.id());
 
         let mut flags = MF_STRING;

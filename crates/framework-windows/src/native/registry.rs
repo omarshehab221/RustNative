@@ -53,7 +53,7 @@ impl NativeObjectRegistry {
 
     pub(crate) fn insert(&mut self, id: NodeId, object: NativeObject) -> Result<(), Error> {
         if self.objects.contains_key(&id) {
-            return Err(Error::DuplicateNodeId(id.get().to_string()));
+            return Err(Error::DuplicateNodeId { node: id });
         }
 
         self.by_hwnd.insert(object.hwnd(), id);
@@ -115,7 +115,7 @@ mod tests {
         let id = node_id(1);
         registry.insert(id, NativeObject::Label(window_a.hwnd)).expect("first insert succeeds");
         let result = registry.insert(id, NativeObject::Label(window_b.hwnd));
-        assert!(matches!(result, Err(Error::DuplicateNodeId(_))));
+        assert!(matches!(result, Err(Error::DuplicateNodeId { .. })));
         // The rejected second insert must not have clobbered the first.
         assert_eq!(registry.get(id).map(NativeObject::hwnd), Some(window_a.hwnd));
     }

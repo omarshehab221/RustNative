@@ -20,3 +20,13 @@ too-many-lines-threshold = 200
 # so it is named as an accepted exception rather than left for
 # `multiple_crate_versions` to flag as if it were an oversight.
 allowed-duplicate-crates = ["syn"]
+
+# `unwrap_used`/`expect_used` (see `[workspace.lints.clippy]` in the root
+# Cargo.toml) are about *library* code panicking inside somebody else's
+# process. A test that unwraps is stating an expectation — the panic is the
+# assertion, and rewriting it as a `match` that calls `panic!` anyway would
+# be strictly worse. Clippy has first-class support for exactly this
+# distinction, so it is used rather than sprinkling `#[allow]` over every
+# test module.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

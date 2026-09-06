@@ -67,3 +67,43 @@ missing_safety_doc = "allow"
 # `scheduler::Scheduler`), which is what the standards audit's own
 # recommended module map asks for — not an accident this lint should flag.
 module_name_repetitions = "allow"
+
+# P2.40's second half: `pedantic`/`cargo` above are lint *groups*, but the
+# audit also asks for individually chosen `restriction` lints — and is
+# explicit that the group must not be enabled wholesale ("Clippy itself
+# explicitly warns against enabling the entire restriction group"). These
+# are the ones that encode a rule this framework actually wants held.
+#
+# Panicking accessors. A framework is library code: it runs inside somebody
+# else's process, and a panic it raises is a crash they cannot catch at a
+# call site they did not write. Both are `warn` rather than `deny` because
+# there is a legitimate, load-bearing exception — an internal invariant the
+# runtime itself just established, where the alternative is threading a
+# `Result` through code that has no way to handle it (see
+# `component::RenderError`'s docs for exactly where this crate draws that
+# line). Every remaining use carries an `#[allow]` with its reason, and
+# tests are exempt below.
+unwrap_used = "warn"
+expect_used = "warn"
+# Unfinished code must never reach a release. Nothing in this workspace
+# uses these, and `deny` is what keeps it that way.
+todo = "deny"
+unimplemented = "deny"
+# Numeric conversions across the FFI boundary are where a silent wrap turns
+# into a wrong window size or a negative dimension. These are already
+# handled deliberately throughout `layout` and `framework-windows` (every
+# cast is preceded by a `.min`/`.max`/`saturating_*` that establishes range,
+# with a named `#[allow]` and a comment); `deny` locks that discipline in.
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+# Integer arithmetic that can silently wrap in release builds. `warn`, not
+# `deny`: the layout engine is exhaustively saturating, but bookkeeping
+# arithmetic on collection lengths and loop counters is not a hazard worth
+# rewriting.
+arithmetic_side_effects = "allow"
+# Indexing that can panic. Slice/map indexing in this workspace is either on
+# a collection the same function just built or guarded by a preceding
+# `contains`/`len` check.
+indexing_slicing = "allow"

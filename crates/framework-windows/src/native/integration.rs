@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use framework_core::{
-    Application, Component, ComponentContext, Event, MenuBar, MenuItem, Node, Size, Window,
-    WindowId,
+    Application, Component, ComponentContext, Event, MenuBar, MenuItem, Node, PanicPolicy, Size,
+    Window, WindowId,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetFocus, IsWindowEnabled, SetFocus, VK_TAB,
@@ -709,7 +709,100 @@ fn native_component_panic_boundary() {
         error.contains("component panicked on purpose"),
         "the recorded error must carry the panic's own message; got {error:?}"
     );
-    assert!(harness.quit_requested(), "a caught panic must ask the message loop to exit");
+    assert!(
+        harness.quit_requested(),
+        "the default policy is Terminate, so a caught panic must ask the loop to exit"
+    );
+}
+
+/// A component that panics in a window whose panic policy is `CloseWindow`
+/// takes only that window down.
+///
+/// This is the policy's whole point (standards audit P2.33): an application
+/// that would rather lose one window than the whole session can now say so,
+/// and the backend has to honor it *without* destroying a `Runtime` that is
+/// borrowed by the very callback that panicked — which is why the close is
+/// routed through the same deferred path a normal close uses.
+#[test]
+fn native_panic_policy_close_window_keeps_the_application_alive() {
+    let log = log();
+    let mut application = Application::new(WindowOpener::new(log), window("survivor"));
+    let exploding = application.open_window(Exploder, window("exploding"), None);
+    application.set_panic_policy(PanicPolicy::CloseWindow);
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    let exploding_hwnd = harness.hwnd(exploding);
+
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    harness.click(exploding, "boom");
+    std::panic::set_hook(previous_hook);
+    harness.pump();
+
+    assert!(!harness.quit_requested(), "CloseWindow must not end the application");
+    assert!(
+        !NativeHarness::window_exists(exploding_hwnd),
+        "the panicking window must actually be destroyed, not merely deactivated"
+    );
+    assert_eq!(
+        harness.live_window_ids(),
+        vec![WindowId::PRIMARY],
+        "every other window must survive a panic in one of them"
+    );
+    assert!(
+        harness.error_for(exploding).is_none(),
+        "under CloseWindow the panic is handled, so it must not also surface as a          Platform::run failure"
+    );
+}
+
+/// `CloseWindow` degrades to terminating when the panicking window is the
+/// only one left, rather than leaving a running event loop with nothing on
+/// screen.
+#[test]
+fn native_panic_policy_close_window_terminates_when_it_is_the_last_window() {
+    let mut application = Application::new(Exploder::new(()), window("only"));
+    application.set_panic_policy(PanicPolicy::CloseWindow);
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    harness.click(WindowId::PRIMARY, "boom");
+    std::panic::set_hook(previous_hook);
+
+    assert!(
+        harness.quit_requested(),
+        "with no other window to fall back to, CloseWindow must terminate instead"
+    );
+    assert!(harness.error_for(WindowId::PRIMARY).is_some());
+}
+
+/// `ReportAndContinue` catches the panic and keeps going: the window stays
+/// open and the loop keeps running.
+///
+/// The panic still must not have unwound across the FFI boundary — that part
+/// is not negotiable regardless of policy — which is what the window still
+/// being alive and responsive afterwards demonstrates.
+#[test]
+fn native_panic_policy_report_and_continue_leaves_the_window_running() {
+    let mut application = Application::new(Exploder::new(()), window("resilient"));
+    application.set_panic_policy(PanicPolicy::ReportAndContinue);
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    let hwnd = harness.hwnd(WindowId::PRIMARY);
+
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    harness.click(WindowId::PRIMARY, "boom");
+    // A second panic must be survivable too — a policy that only tolerates
+    // the first one is not a "continue" policy.
+    harness.click(WindowId::PRIMARY, "boom");
+    std::panic::set_hook(previous_hook);
+
+    assert!(!harness.quit_requested());
+    assert!(harness.error_for(WindowId::PRIMARY).is_none());
+    assert!(NativeHarness::window_exists(hwnd), "the window must still be alive and pumping");
+    assert!(harness.control(WindowId::PRIMARY, "boom").is_some());
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@
 //! | [`scheduler`] | Structured concurrency: [`Scheduler`], [`TaskScope`], the pluggable [`Executor`] backend |
 //! | [`services`] | Platform-independent service contracts (HTTP, storage, clipboard, ...) |
 //! | [`window`]/[`menu`] | Window-domain state and native menu definitions |
+//! | [`mod@panic`] | What an application does when a component panics |
 //! | [`application`] | Multi-window orchestration |
 //! | [`capability`]/[`platform`] | The seam a platform backend implements and declares support through |
 //!
@@ -58,6 +59,7 @@ pub mod identity;
 pub mod layout;
 pub mod menu;
 pub mod node;
+pub mod panic;
 pub mod platform;
 pub mod reconcile;
 pub mod scheduler;
@@ -80,6 +82,7 @@ pub use layout::{
 };
 pub use menu::{MenuBar, MenuItem};
 pub use node::{Button, Column, Label, Node, NodeKind, Row, TextInput, TreeError};
+pub use panic::{PanicAction, PanicPolicy, PanicReport};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};
 pub use scheduler::{

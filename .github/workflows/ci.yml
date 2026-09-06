@@ -22,6 +22,11 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  # `RUSTFLAGS` does not reach rustdoc, so a broken intra-doc link or an
+  # undocumented public item would otherwise pass CI as a warning. Both
+  # crates carry `#![deny(missing_docs)]`; this is what makes the rest of
+  # rustdoc's lints equally binding.
+  RUSTDOCFLAGS: -D warnings
 
 jobs:
   lint:

@@ -17,6 +17,7 @@ use crate::component::{Component, ComponentTree, RenderError, WindowCommand};
 use crate::event::Event;
 use crate::identity::WindowId;
 use crate::node::Node;
+use crate::panic::{PanicAction, PanicPolicy, PanicReport};
 use crate::scheduler::Scheduler;
 use crate::services::Services;
 use crate::style::Theme;
@@ -36,6 +37,7 @@ pub struct Application {
     next_window_id: u64,
     services: Services,
     theme: Theme,
+    panic_policy: PanicPolicy,
 }
 
 impl fmt::Debug for Application {
@@ -80,7 +82,14 @@ impl Application {
         };
         let mut windows = HashMap::new();
         windows.insert(primary_window, entry);
-        let mut application = Self { windows, primary_window, next_window_id: 1, services, theme };
+        let mut application = Self {
+            windows,
+            primary_window,
+            next_window_id: 1,
+            services,
+            theme,
+            panic_policy: PanicPolicy::default(),
+        };
         // A component may request another window from its first render. The
         // root tree is rendered while this Application is being
         // constructed, so drain those requests only after the primary
@@ -140,6 +149,12 @@ impl Application {
     /// secondary windows via `ComponentContext::windows`), so this cannot
     /// happen through the public API today.
     #[must_use]
+    #[allow(
+        clippy::expect_used,
+        reason = "an invariant this runtime itself just established, not a condition an application can \
+    /// trigger — see `crate::component::RenderError` for the line this crate draws between \
+    /// the two"
+    )]
     pub fn view(&self) -> Node {
         self.view_for(self.primary_window).expect("primary window must exist")
     }
@@ -304,6 +319,34 @@ impl Application {
     /// is not open.
     pub fn window_state_mut(&mut self, id: WindowId) -> Option<&mut WindowState> {
         self.windows.get_mut(&id).map(|entry| &mut entry.state)
+    }
+
+    /// Sets what happens when a component panics inside a platform
+    /// callback.
+    ///
+    /// Defaults to [`PanicPolicy::Terminate`]; see [`crate::panic`] for what
+    /// each policy trades away and why this is the host's decision rather
+    /// than the framework's.
+    pub const fn set_panic_policy(&mut self, policy: PanicPolicy) {
+        self.panic_policy = policy;
+    }
+
+    /// The configured component-panic policy.
+    #[must_use]
+    pub const fn panic_policy(&self) -> PanicPolicy {
+        self.panic_policy
+    }
+
+    /// Applies the configured [`PanicPolicy`] to a caught component panic
+    /// and reports what the platform backend should do.
+    ///
+    /// The backend calls this rather than reading the policy directly,
+    /// because resolving `CloseWindow` needs to know whether any other
+    /// window is open — application state the backend does not own.
+    #[must_use]
+    pub fn handle_component_panic(&self, report: &PanicReport) -> PanicAction {
+        let other_windows_remain = self.windows.keys().any(|id| *id != report.window);
+        self.panic_policy.resolve(report, other_windows_remain)
     }
 
     /// Returns the application-wide services.

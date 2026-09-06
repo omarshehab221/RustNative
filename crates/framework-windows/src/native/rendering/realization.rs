@@ -97,7 +97,7 @@ impl Renderer {
         let next =
             TreeSnapshot::from_node_with_theme(root, theme).map_err(|error| match error {
                 framework_core::TreeError::DuplicateNodeId(id) => {
-                    Error::DuplicateNodeId(id.get().to_string())
+                    Error::DuplicateNodeId { node: id }
                 }
             })?;
 

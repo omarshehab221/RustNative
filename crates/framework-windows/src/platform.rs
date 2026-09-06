@@ -6,10 +6,20 @@ use framework_core::{Application, Platform, PlatformCapabilities};
 
 use crate::Error;
 
+/// The Win32 backend an application hands to `framework_core::Application`
+/// to run.
+///
+/// Carries no state: everything a running application needs
+/// (`WindowRegistry`, per-window `Runtime`s, native object registries) is
+/// owned by [`Platform::run`]'s own stack frame for exactly as long as the
+/// message loop runs — see `native::context`'s module documentation for why
+/// that lifetime relationship is what makes the backend's raw-pointer
+/// bookkeeping sound.
 #[derive(Debug, Default)]
 pub struct WindowsPlatform;
 
 impl WindowsPlatform {
+    /// Creates the backend. Equivalent to [`Default::default`].
     #[must_use]
     pub const fn new() -> Self {
         Self

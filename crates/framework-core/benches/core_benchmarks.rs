@@ -8,6 +8,13 @@
 //! absolute number — this crate does not currently gate CI on benchmark
 //! output, matching `criterion`'s own guidance that meaningful thresholds
 //! depend on the machine running them.
+//!
+//! `unwrap`/`expect` are allowed throughout this file for the same reason
+//! `clippy.toml` allows them in tests: a benchmark's setup code asserts its
+//! own preconditions, and a panic there is the assertion. Clippy's
+//! `allow-unwrap-in-tests` does not reach a `benches/` target, which is a
+//! separate crate with no `cfg(test)`, so the exemption is stated here.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
 

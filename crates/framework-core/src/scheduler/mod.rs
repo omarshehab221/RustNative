@@ -41,6 +41,12 @@ impl TaskId {
     /// allocators: silently wrapping and reusing a live task id is exactly
     /// the class of bug the standards audit's P1.20 finding asks every
     /// identity allocator in this crate to design out.
+    #[allow(
+        clippy::expect_used,
+        reason = "the standards audit's P1.20 finding requires an identity allocator to fail loudly on \
+    /// exhaustion rather than silently wrap and reuse a live id; there is no caller that \
+    /// could act on a `Result` here"
+    )]
     fn next(counter: &AtomicU64) -> Self {
         Self(
             counter
@@ -255,7 +261,7 @@ impl Scheduler {
 
     /// Registers a callback the scheduler invokes whenever a task
     /// completes, so a platform backend can wake its event loop rather than
-    /// polling [`Self::drain`].
+    /// polling the completion queue.
     ///
     /// If any task has *already* completed by the time the waker is
     /// installed, it is invoked once immediately. That is not an

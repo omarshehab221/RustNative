@@ -18,6 +18,7 @@ use super::util::{module_instance, wide};
 use super::win32::{best_effort, ignored_by_contract, must_succeed};
 use super::{EnableWindow, WINDOW_CLASS_NAME, WM_FRAMEWORK_SCHEDULE};
 use crate::Error;
+use crate::error::NativeContext;
 
 /// One top-level window's native state, plus the two upward references it
 /// needs to drive the framework: the `Application` whose view it renders,
@@ -128,7 +129,13 @@ impl Runtime {
 
     /// Picks up any window opened or closed since the last sync. See
     /// `WindowRegistry::sync` for how each side is realized.
-    fn sync_windows(&mut self) -> Result<(), Error> {
+    ///
+    /// Normally reached at the tail of `dispatch`/`pump_tasks`. The panic
+    /// boundary calls it directly (see
+    /// `message_loop::poison_runtime_and_quit`) because a panic unwinds
+    /// *past* that tail: the `CloseWindow` policy asks the application to
+    /// close a window, and without a sync nothing would ever act on it.
+    pub(crate) fn sync_windows(&mut self) -> Result<(), Error> {
         let Some(registry) = self.registry else {
             return Ok(());
         };
@@ -250,6 +257,10 @@ impl WindowRegistry {
         result
     }
 
+    #[allow(
+        clippy::expect_used,
+        reason = "both sites read back state this same \n    /// function established a few lines earlier — the runtime it just inserted into \n    /// `self.runtimes`, and the scheduler `Application` creates with every window. \n    /// Neither is reachable from application input, so there is nothing for a `Result` \n    /// to hand back to"
+    )]
     fn create_window_once(&mut self, id: WindowId) -> Result<(), Error> {
         let Some((title, size, menu, modal_parent)) = self.with_application(|application| {
             application.window_for(id).map(|definition| {
@@ -335,7 +346,10 @@ impl WindowRegistry {
             )
         };
         if hwnd.is_null() {
-            return Err(Error::windows_api("CreateWindowExW(top-level)"));
+            return Err(Error::windows_api_in(
+                "CreateWindowExW(top-level)",
+                NativeContext::none().with_window(id),
+            ));
         }
         runtime.window = hwnd;
         // Published before any further native call for the same reason
@@ -362,7 +376,10 @@ impl WindowRegistry {
             self.runtimes.get_mut(&id).expect("just inserted this window's runtime above");
 
         if let Some(menu) = &menu {
-            let built = build_native_menu(menu)?;
+            // The menu builder does not know which window it is building
+            // for, so name it here — see `Error::or_context`.
+            let built = build_native_menu(menu)
+                .map_err(|error| error.or_context(NativeContext::none().with_window(id)))?;
             // SAFETY: `hwnd` was just checked non-null above and is a
             // live top-level HWND; `built.handle()` is a live `HMENU` just
             // constructed by `build_native_menu`, not yet attached to
@@ -372,7 +389,9 @@ impl WindowRegistry {
             // `OwnedMenu` guard destroys the menu, so returning leaves no
             // leak — but continuing would leave a window whose menu items
             // are in `menu_commands` yet unreachable from any native menu.
-            must_succeed(attached, "SetMenu")?;
+            must_succeed(attached, "SetMenu").map_err(|error| {
+                error.or_context(NativeContext::none().with_window(id).with_handle(hwnd as usize))
+            })?;
             let (_, commands) = built.into_attached();
             runtime.menu_commands = commands;
         }
@@ -400,7 +419,9 @@ impl WindowRegistry {
                 .set_waker(waker);
         });
 
-        runtime.render()?;
+        runtime
+            .render()
+            .map_err(|error| error.or_context(NativeContext::none().with_window(id)))?;
         // SAFETY: `hwnd` was checked non-null above and is a live,
         // just-created top-level HWND.
         //

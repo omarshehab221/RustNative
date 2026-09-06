@@ -33,6 +33,9 @@
 #[cfg(windows)]
 use super::run_sta;
 
+/// `framework_core::FileDialogService` backed by the shell's Common Item
+/// Dialog. Stateless; register an `Arc<WindowsFileDialogs>` into
+/// `framework_core::Services`.
 #[cfg(windows)]
 #[derive(Debug, Default)]
 pub struct WindowsFileDialogs;

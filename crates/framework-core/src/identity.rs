@@ -81,6 +81,12 @@ impl KeyInterner {
         Self { ids: HashMap::new(), next: 0 }
     }
 
+    #[allow(
+        clippy::expect_used,
+        reason = "the standards audit's P1.20 finding requires an identity allocator to fail loudly on \
+    /// exhaustion rather than silently wrap and reuse a live id; there is no caller that \
+    /// could act on a `Result` here"
+    )]
     fn intern(&mut self, key: &str) -> u64 {
         if let Some(&id) = self.ids.get(key) {
             return id;
@@ -169,6 +175,12 @@ impl ComponentId {
     /// standards audit (P1.20), an identity allocator must never silently
     /// wrap and risk reusing a live id — it must fail loudly, and at this
     /// magnitude "loudly" cannot realistically be observed in practice.
+    #[allow(
+        clippy::expect_used,
+        reason = "the standards audit's P1.20 finding requires an identity allocator to fail loudly on \
+    /// exhaustion rather than silently wrap and reuse a live id; there is no caller that \
+    /// could act on a `Result` here"
+    )]
     pub(crate) fn next(counter: &mut u64) -> Self {
         let id = Self(*counter);
         *counter = counter.checked_add(1).expect(
@@ -200,6 +212,12 @@ impl WindowId {
     /// # Panics
     ///
     /// Panics on exhaustion, for the same reason as `ComponentId::next`.
+    #[allow(
+        clippy::expect_used,
+        reason = "the standards audit's P1.20 finding requires an identity allocator to fail loudly on \
+    /// exhaustion rather than silently wrap and reuse a live id; there is no caller that \
+    /// could act on a `Result` here"
+    )]
     pub(crate) fn next(counter: &mut u64) -> Self {
         let id = Self(*counter);
         *counter = counter.checked_add(1).expect(

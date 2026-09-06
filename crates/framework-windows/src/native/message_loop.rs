@@ -1,7 +1,7 @@
 //! Registers the top-level window class, runs the Win32 message loop, and
 //! implements the top-level `WNDPROC`.
 
-use framework_core::Event;
+use framework_core::{Event, PanicAction, PanicReport};
 use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     COLOR_WINDOW, GetSysColorBrush, HDC, SetBkColor, SetBkMode, SetTextColor, TRANSPARENT,
@@ -30,6 +30,7 @@ use super::{
     CONTAINER_CLASS_NAME, EnableWindow, WINDOW_CLASS_NAME, WM_FRAMEWORK_SCHEDULE, WM_MOUSELEAVE,
 };
 use crate::Error;
+use crate::error::{NativeContext, Win32Category};
 use crate::native::util::window_text;
 
 /// Whether the loop should keep going after a message, or stop because
@@ -330,7 +331,14 @@ fn register_window_class(
         // thread-local error code.
         let error = unsafe { windows_sys::Win32::Foundation::GetLastError() };
         if error != ERROR_CLASS_ALREADY_EXISTS {
-            return Err(Error::WindowsApi { operation: "RegisterClassW", code: error });
+            return Err(Error::WindowsApi {
+                operation: "RegisterClassW",
+                code: error,
+                category: Win32Category::of(error),
+                // Class registration happens once, before any window
+                // exists, so there is no window or node to name.
+                context: NativeContext::none(),
+            });
         }
     }
 
@@ -364,25 +372,83 @@ where
     }
 }
 
-/// Shared tail of both `wndproc_boundary` variants: records the panic on
-/// the owning `Runtime` (if resolved) and asks the message loop to exit.
+/// Shared tail of both `wndproc_boundary` variants: records the caught
+/// panic and applies the application's configured [`PanicPolicy`].
+///
 /// Factored out once so the two callback-specific boundaries — which
 /// necessarily resolve `runtime_ptr` differently (see
 /// `container::container_wndproc_boundary`) — do not each re-derive this
 /// SAFETY-critical step independently.
+///
+/// A panic with no resolvable `Runtime` (a callback that panicked before
+/// `WM_NCCREATE` published one) has no application to consult and nowhere
+/// to record the error, so it always quits: continuing would mean running
+/// on after a panic nobody can observe.
 pub(crate) fn poison_runtime_and_quit(runtime_ptr: *mut Runtime, message: String) {
-    if !runtime_ptr.is_null() {
-        // SAFETY: the caller guarantees `runtime_ptr` is either null or
-        // a live `*mut Runtime` per `RuntimeSlot`'s invariant (see
-        // `user_data`'s module docs), and the Win32 message loop is
-        // single-threaded and non-reentrant, so nothing else can be
-        // concurrently mutating this `Runtime` right now.
-        let runtime = unsafe { &mut *runtime_ptr };
-        runtime.error = Some(Error::ComponentPanicked { message });
+    if runtime_ptr.is_null() {
+        quit_message_loop();
+        return;
     }
-    // SAFETY: `PostQuitMessage` takes no pointer arguments and is
-    // always valid to call; it only queues `WM_QUIT` so the message
-    // loop unwinds through its ordinary exit path.
+    // SAFETY: the caller guarantees `runtime_ptr` is either null (returned
+    // above) or a live `*mut Runtime` per `RuntimeSlot`'s invariant (see
+    // `user_data`'s module docs), and the Win32 message loop is
+    // single-threaded and non-reentrant, so nothing else can be
+    // concurrently mutating this `Runtime` right now.
+    let runtime = unsafe { &mut *runtime_ptr };
+    let window = runtime.window_id;
+    let report = PanicReport { message: message.clone(), window };
+    let action =
+        runtime.with_application(|application| application.handle_component_panic(&report));
+
+    match action {
+        PanicAction::Terminate => {
+            let context =
+                NativeContext::none().with_window(window).with_handle(runtime.window as usize);
+            runtime.error = Some(Error::ComponentPanicked { message, context });
+            quit_message_loop();
+        }
+        PanicAction::CloseWindow(target) => {
+            // Deliberately routed through the same deferred path a normal
+            // close uses (`Application::close_window`, picked up by
+            // `WindowRegistry::sync`) rather than destroying the window
+            // here. This code runs *inside* the panicking callback, with
+            // that window's `Runtime` borrowed further up the stack;
+            // tearing it down synchronously is the use-after-free
+            // `WindowRegistry`'s own documentation describes.
+            //
+            // The error is not recorded: under this policy the panic is
+            // handled, not fatal, and `run_application` returns
+            // `Runtime::error` as the failure of `Platform::run`.
+            runtime.with_application(|application| application.close_window(target));
+            // A panic unwinds past the `sync_windows` at the tail of
+            // `Runtime::dispatch`, so the close request just queued would
+            // otherwise sit unapplied forever. Syncing here is what turns it
+            // into a posted `WM_CLOSE`.
+            if let Err(error) = runtime.sync_windows() {
+                // The window could not be torn down, which leaves the
+                // application in exactly the state `CloseWindow` was chosen
+                // to avoid; fall back to the stronger policy rather than
+                // carrying on with a window whose component just panicked.
+                runtime.error = Some(error);
+                quit_message_loop();
+            }
+        }
+        // `PanicAction::Continue`, and any action a future version of
+        // `framework-core` adds that this backend has not caught up with.
+        // Continuing is the right default for an unrecognized action: the
+        // panic was already caught before it could unwind across the FFI
+        // boundary, which is the part that had to happen, and inventing a
+        // termination this backend was not asked for would be worse than
+        // doing nothing.
+        _ => {}
+    }
+}
+
+/// Asks the message loop to exit through its ordinary path.
+fn quit_message_loop() {
+    // SAFETY: `PostQuitMessage` takes no pointer arguments and is always
+    // valid to call; it only queues `WM_QUIT` so the message loop unwinds
+    // through its ordinary exit path.
     unsafe { PostQuitMessage(1) };
 }
 
