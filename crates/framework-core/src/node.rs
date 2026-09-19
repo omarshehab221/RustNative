@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::animation::{AnimatedProperty, Transition};
 use crate::event::AccessibilityInfo;
+use crate::graphics::DrawList;
 use crate::identity::NodeId;
 use crate::input::InputInterest;
 use crate::input::Scalar;
@@ -26,6 +27,12 @@ pub enum Node {
     Button(Button),
     /// An editable single-line text field.
     TextInput(TextInput),
+    /// Custom drawing: a [`DrawList`] realized by the platform's 2D API
+    /// (see [`crate::graphics`]).
+    Canvas(Canvas),
+    /// A bare platform surface an application renders into itself (see
+    /// [`crate::graphics`]).
+    Surface(Surface),
     /// A container that lays its children out vertically.
     Column(Column),
     /// A container that lays its children out horizontally.
@@ -105,6 +112,50 @@ impl Node {
         layout: LayoutStyle,
     ) -> Self {
         Self::Button(Button::new(NodeId::from_key(key.as_ref()), text, layout))
+    }
+
+    /// Creates a canvas that draws `draw_list`.
+    ///
+    /// A canvas is a leaf: it takes part in layout like any node (give it a
+    /// size — it has no intrinsic one), redraws when its draw list changes
+    /// and only then, and reports pointer input with the
+    /// [hit region](DrawList::hit_region) it landed in. See
+    /// [`crate::graphics`] for when to reach for one.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use framework_core::{Color, DrawList, LayoutStyle, Node, Paint, RectF, SizeMode};
+    ///
+    /// let swatch = Node::canvas(
+    ///     "swatch",
+    ///     DrawList::new()
+    ///         .fill_ellipse(RectF::new(0.0, 0.0, 40.0, 40.0), Paint::color(Color::rgb(200, 40, 40))),
+    ///     LayoutStyle::new().width(SizeMode::Fixed(40)).height(SizeMode::Fixed(40)),
+    /// );
+    /// assert!(matches!(swatch, Node::Canvas(_)));
+    /// ```
+    pub fn canvas(key: impl AsRef<str>, draw_list: DrawList, layout: LayoutStyle) -> Self {
+        Self::Canvas(Canvas::new(NodeId::from_key(key.as_ref()), draw_list, layout))
+    }
+
+    /// Creates a native surface: a platform window the framework positions
+    /// and sizes, and never paints.
+    ///
+    /// The application draws into it with its own GPU API, attached through
+    /// the handle its backend gives out, and learns its size from
+    /// [`crate::Event::SurfaceResized`]. See [`crate::graphics`].
+    pub fn native_surface(key: impl AsRef<str>, layout: LayoutStyle) -> Self {
+        Self::Surface(Surface::new(NodeId::from_key(key.as_ref()), (), layout))
+    }
+
+    /// Returns this node's draw list, if it is a canvas.
+    #[must_use]
+    pub fn draw_list(&self) -> Option<&DrawList> {
+        match self {
+            Self::Canvas(canvas) => Some(canvas.draw_list()),
+            _ => None,
+        }
     }
 
     /// Creates a [`TextInput`] node with the default layout.
@@ -191,6 +242,14 @@ impl Node {
                 node.accessibility = accessibility;
                 Self::TextInput(node)
             }
+            Self::Canvas(mut node) => {
+                node.accessibility = accessibility;
+                Self::Canvas(node)
+            }
+            Self::Surface(mut node) => {
+                node.accessibility = accessibility;
+                Self::Surface(node)
+            }
             Self::Column(mut node) => {
                 node.accessibility = accessibility;
                 Self::Column(node)
@@ -219,6 +278,14 @@ impl Node {
                 node.visual_style = style;
                 Self::TextInput(node)
             }
+            Self::Canvas(mut node) => {
+                node.visual_style = style;
+                Self::Canvas(node)
+            }
+            Self::Surface(mut node) => {
+                node.visual_style = style;
+                Self::Surface(node)
+            }
             Self::Column(mut node) => {
                 node.visual_style = style;
                 Self::Column(node)
@@ -237,6 +304,8 @@ impl Node {
             Self::Label(node) => &node.visual_style,
             Self::Button(node) => &node.visual_style,
             Self::TextInput(node) => &node.visual_style,
+            Self::Canvas(node) => &node.visual_style,
+            Self::Surface(node) => &node.visual_style,
             Self::Column(node) => &node.visual_style,
             Self::Row(node) => &node.visual_style,
         }
@@ -261,6 +330,14 @@ impl Node {
                 node.disabled = disabled;
                 Self::TextInput(node)
             }
+            Self::Canvas(mut node) => {
+                node.disabled = disabled;
+                Self::Canvas(node)
+            }
+            Self::Surface(mut node) => {
+                node.disabled = disabled;
+                Self::Surface(node)
+            }
             Self::Column(mut node) => {
                 node.disabled = disabled;
                 Self::Column(node)
@@ -281,6 +358,8 @@ impl Node {
             Self::Label(node) => node.input = input,
             Self::Button(node) => node.input = input,
             Self::TextInput(node) => node.input = input,
+            Self::Canvas(node) => node.input = input,
+            Self::Surface(node) => node.input = input,
             Self::Column(node) => node.input = input,
             Self::Row(node) => node.input = input,
         }
@@ -294,6 +373,8 @@ impl Node {
             Self::Label(node) => node.input,
             Self::Button(node) => node.input,
             Self::TextInput(node) => node.input,
+            Self::Canvas(node) => node.input,
+            Self::Surface(node) => node.input,
             Self::Column(node) => node.input,
             Self::Row(node) => node.input,
         }
@@ -335,6 +416,8 @@ impl Node {
             Self::Label(node) => &node.transitions,
             Self::Button(node) => &node.transitions,
             Self::TextInput(node) => &node.transitions,
+            Self::Canvas(node) => &node.transitions,
+            Self::Surface(node) => &node.transitions,
             Self::Column(node) => &node.transitions,
             Self::Row(node) => &node.transitions,
         }
@@ -345,6 +428,8 @@ impl Node {
             Self::Label(node) => &mut node.transitions,
             Self::Button(node) => &mut node.transitions,
             Self::TextInput(node) => &mut node.transitions,
+            Self::Canvas(node) => &mut node.transitions,
+            Self::Surface(node) => &mut node.transitions,
             Self::Column(node) => &mut node.transitions,
             Self::Row(node) => &mut node.transitions,
         }
@@ -371,6 +456,14 @@ impl Node {
                 node.opacity = opacity;
                 Self::TextInput(node)
             }
+            Self::Canvas(mut node) => {
+                node.opacity = opacity;
+                Self::Canvas(node)
+            }
+            Self::Surface(mut node) => {
+                node.opacity = opacity;
+                Self::Surface(node)
+            }
             Self::Column(mut node) => {
                 node.opacity = opacity;
                 Self::Column(node)
@@ -389,6 +482,8 @@ impl Node {
             Self::Label(node) => node.opacity.get(),
             Self::Button(node) => node.opacity.get(),
             Self::TextInput(node) => node.opacity.get(),
+            Self::Canvas(node) => node.opacity.get(),
+            Self::Surface(node) => node.opacity.get(),
             Self::Column(node) => node.opacity.get(),
             Self::Row(node) => node.opacity.get(),
         }
@@ -401,6 +496,8 @@ impl Node {
             Self::Label(node) => node.disabled,
             Self::Button(node) => node.disabled,
             Self::TextInput(node) => node.disabled,
+            Self::Canvas(node) => node.disabled,
+            Self::Surface(node) => node.disabled,
             Self::Column(node) => node.disabled,
             Self::Row(node) => node.disabled,
         }
@@ -413,6 +510,8 @@ impl Node {
             Self::Label(node) => node.accessibility(),
             Self::Button(node) => node.accessibility(),
             Self::TextInput(node) => node.accessibility(),
+            Self::Canvas(node) => node.accessibility(),
+            Self::Surface(node) => node.accessibility(),
             Self::Column(node) => node.accessibility(),
             Self::Row(node) => node.accessibility(),
         }
@@ -425,6 +524,8 @@ impl Node {
             Self::Label(node) => &mut node.accessibility,
             Self::Button(node) => &mut node.accessibility,
             Self::TextInput(node) => &mut node.accessibility,
+            Self::Canvas(node) => &mut node.accessibility,
+            Self::Surface(node) => &mut node.accessibility,
             Self::Column(node) => &mut node.accessibility,
             Self::Row(node) => &mut node.accessibility,
         }
@@ -437,6 +538,8 @@ impl Node {
             Self::Label(label) => label.id(),
             Self::Button(button) => button.id(),
             Self::TextInput(input) => input.id(),
+            Self::Canvas(input) => input.id(),
+            Self::Surface(input) => input.id(),
             Self::Column(column) => column.id(),
             Self::Row(row) => row.id(),
         }
@@ -449,6 +552,8 @@ impl Node {
             Self::Label(_) => NodeKind::Label,
             Self::Button(_) => NodeKind::Button,
             Self::TextInput(_) => NodeKind::TextInput,
+            Self::Canvas(_) => NodeKind::Canvas,
+            Self::Surface(_) => NodeKind::Surface,
             Self::Column(_) => NodeKind::Column,
             Self::Row(_) => NodeKind::Row,
         }
@@ -461,6 +566,8 @@ impl Node {
             Self::Label(label) => label.layout(),
             Self::Button(button) => button.layout(),
             Self::TextInput(input) => input.layout(),
+            Self::Canvas(input) => input.layout(),
+            Self::Surface(input) => input.layout(),
             Self::Column(column) => column.layout(),
             Self::Row(row) => row.layout(),
         }
@@ -591,6 +698,8 @@ impl Node {
             Self::Label(node) => node.item_index = Some(index),
             Self::Button(node) => node.item_index = Some(index),
             Self::TextInput(node) => node.item_index = Some(index),
+            Self::Canvas(node) => node.item_index = Some(index),
+            Self::Surface(node) => node.item_index = Some(index),
             Self::Column(node) => node.item_index = Some(index),
             Self::Row(node) => node.item_index = Some(index),
         }
@@ -604,6 +713,8 @@ impl Node {
             Self::Label(node) => node.item_index,
             Self::Button(node) => node.item_index,
             Self::TextInput(node) => node.item_index,
+            Self::Canvas(node) => node.item_index,
+            Self::Surface(node) => node.item_index,
             Self::Column(node) => node.item_index,
             Self::Row(node) => node.item_index,
         }
@@ -674,6 +785,8 @@ impl Node {
             Self::Label(node) => node.id = id,
             Self::Button(node) => node.id = id,
             Self::TextInput(node) => node.id = id,
+            Self::Canvas(node) => node.id = id,
+            Self::Surface(node) => node.id = id,
             Self::Column(node) => node.id = id,
             Self::Row(node) => node.id = id,
         }
@@ -698,6 +811,10 @@ pub enum NodeKind {
     Button,
     /// See [`Node::TextInput`].
     TextInput,
+    /// See [`Node::Canvas`].
+    Canvas,
+    /// See [`Node::Surface`].
+    Surface,
     /// See [`Node::Column`].
     Column,
     /// See [`Node::Row`].
@@ -792,6 +909,8 @@ macro_rules! leaf_node {
 leaf_node!(Label, text: String, text, role = Label, focusable = false);
 leaf_node!(Button, text: String, text, role = Button, focusable = true);
 leaf_node!(TextInput, value: String, value, role = TextInput, focusable = true);
+leaf_node!(Canvas, draw_list: DrawList, draw_list, role = Canvas, focusable = false);
+leaf_node!(Surface, reserved: (), reserved, role = Group, focusable = false);
 
 impl Label {
     /// Returns the label's text.
@@ -806,6 +925,14 @@ impl Button {
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
+    }
+}
+
+impl Canvas {
+    /// Returns what the canvas draws.
+    #[must_use]
+    pub fn draw_list(&self) -> &DrawList {
+        &self.draw_list
     }
 }
 

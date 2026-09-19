@@ -168,7 +168,8 @@ pub(crate) struct AccessibilityBridge {
 impl AccessibilityBridge {
     /// Gives a newly created native object its UI Automation provider hook:
     /// system controls are subclassed for `WM_GETOBJECT` (this crate's own
-    /// container windows answer it in `container_proc`).
+    /// container, canvas, and surface windows answer it in their own window
+    /// procedures).
     pub(crate) fn attach(hwnd: HWND, kind: NodeKind) {
         if matches!(kind, NodeKind::Label | NodeKind::Button | NodeKind::TextInput) {
             crate::native::uia::subclass::install(hwnd);

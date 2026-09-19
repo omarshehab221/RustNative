@@ -12,9 +12,10 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 28 — Virtualized Lists**
-(a hundred thousand items on a screenful of recycled native windows), after
-Milestone 27's animations and transitions, Milestone 26's accessibility bridge,
+The latest completed milestone is **Milestone 29 — Graphics escape hatch**
+(Direct2D canvases and native GPU surfaces beside native controls), after
+Milestone 28's virtualized lists, Milestone 27's animations and transitions,
+Milestone 26's accessibility bridge,
 Milestone 25's advanced input system, and the standards-audit remediation
 pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
 verified, what it found while doing so, and what is still open.
@@ -495,6 +496,43 @@ inserted above it (`ScrollAnchor`). On Windows, rows that scroll out hand
 their native windows to rows that scroll in, so scrolling end to end creates
 a screenful of controls once.
 
+## Custom drawing
+
+Ordinary UI is native controls. For the parts of an application that are
+pictures, there are two explicit escape hatches.
+
+A **canvas** draws a portable display list with the platform's 2D API
+(Direct2D on Windows):
+
+```rust
+let chart = DrawList::new()
+    .fill_rect(RectF::new(0.0, 0.0, 240.0, 90.0), Paint::color(Color::rgb(245, 246, 250)))
+    .push_transform(Transform2D::translation(20.0, 10.0))
+    .fill_rect(RectF::new(0.0, 0.0, 36.0, 70.0), Paint::color(Color::rgb(90, 140, 230)))
+    .hit_region(1, RectF::new(0.0, 0.0, 36.0, 70.0))
+    .pop();
+
+Node::canvas("chart", chart, LayoutStyle::new().width(SizeMode::Fixed(240)).height(SizeMode::Fixed(90)))
+    .with_input(InputInterest::new().pointer())
+```
+
+A draw list is data in the node tree: an unchanged list costs nothing, and
+a changed one redraws that canvas alone. Pointer input on a canvas carries
+the hit region it landed in (`PointerEvent::region`), tested under the same
+transforms and clips the drawing used.
+
+A **native surface** is a bare window the framework lays out and never
+paints, for an application's own GPU renderer:
+
+```rust
+Node::native_surface("viewport", LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Fill))
+
+// in update:
+if let Event::SurfaceResized { surface, size, .. } = event {
+    let handle = framework_windows::native_surface(surface); // raw-window-handle 0.6
+}
+```
+
 ## Text input
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
@@ -563,6 +601,6 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 29 — Graphics / custom
-rendering escape hatch**. The roadmap then proceeds through
-persistence/navigation, CLI/packaging, and additional native backends.
+The next implementation target is **Milestone 30 — Persistence and
+navigation**. The roadmap then proceeds through CLI/packaging and additional
+native backends.

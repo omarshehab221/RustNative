@@ -335,7 +335,18 @@ fn character(runtime: &mut Runtime, message: &MSG) {
 pub(crate) fn register_window_classes(instance: HINSTANCE) -> Result<(), Error> {
     let top_level = register_window_class(instance, WINDOW_CLASS_NAME, window_proc)?;
     super::user_data::set_top_level_class_atom(top_level);
-    register_window_class(instance, CONTAINER_CLASS_NAME, container_proc).map(|_| ())
+    register_window_class(instance, CONTAINER_CLASS_NAME, container_proc)?;
+    register_window_class(
+        instance,
+        super::graphics::canvas::CANVAS_CLASS_NAME,
+        super::graphics::canvas::canvas_proc,
+    )?;
+    register_window_class(
+        instance,
+        super::graphics::surface::SURFACE_CLASS_NAME,
+        super::graphics::surface::surface_proc,
+    )
+    .map(|_| ())
 }
 
 /// Registers one class, returning its atom — also when an earlier call in

@@ -39,7 +39,11 @@ impl IntrinsicMeasurer for DefaultIntrinsicMeasurer {
             .saturating_mul(8)
             .saturating_add(match kind {
                 NodeKind::Button | NodeKind::TextInput => 24,
-                NodeKind::Label | NodeKind::Column | NodeKind::Row => 0,
+                NodeKind::Label
+                | NodeKind::Column
+                | NodeKind::Row
+                | NodeKind::Canvas
+                | NodeKind::Surface => 0,
             })
             .max(1);
         let available_width = max_width.unwrap_or(intrinsic_width).max(1);

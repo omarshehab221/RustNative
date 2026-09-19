@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 
 use crate::event::AccessibilityInfo;
+use crate::graphics::DrawList;
 use crate::identity::NodeId;
 use crate::input::{InputInterest, Scalar};
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
@@ -90,6 +91,9 @@ pub struct TreeNode {
     /// This node's virtual-list declaration, if it is one (see
     /// [`crate::Node::virtual_list`]).
     pub virtualization: Option<VirtualListStyle>,
+    /// What this node draws, if it is a canvas (see
+    /// [`crate::Node::canvas`]). Shared with the node tree, not copied.
+    pub draw_list: Option<DrawList>,
 }
 
 impl TreeNode {
@@ -98,7 +102,7 @@ impl TreeNode {
             Node::Label(label) => Some(label.text().to_owned()),
             Node::Button(button) => Some(button.text().to_owned()),
             Node::TextInput(input) => Some(input.value().to_owned()),
-            Node::Column(_) | Node::Row(_) => None,
+            Node::Column(_) | Node::Row(_) | Node::Canvas(_) | Node::Surface(_) => None,
         };
 
         Self {
@@ -122,6 +126,7 @@ impl TreeNode {
             transitions: node.transitions().to_vec(),
             item_index: node.item_index(),
             virtualization: node.virtualization(),
+            draw_list: node.draw_list().cloned(),
         }
     }
 }

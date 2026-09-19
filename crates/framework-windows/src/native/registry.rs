@@ -17,17 +17,31 @@ pub(crate) struct NativeObjectRegistry {
 
 #[derive(Debug)]
 pub(crate) enum NativeObject {
-    Container { viewport: HWND, content: HWND },
+    Container {
+        viewport: HWND,
+        content: HWND,
+    },
     Label(HWND),
     Button(HWND),
     TextInput(HWND),
+    /// A Direct2D canvas window (see `native::graphics::canvas`).
+    Canvas(HWND),
+    /// A native surface window, and the id the application knows it by.
+    Surface {
+        hwnd: HWND,
+        id: framework_core::SurfaceId,
+    },
 }
 
 impl NativeObject {
     pub(crate) fn hwnd(&self) -> HWND {
         match self {
             Self::Container { viewport, .. } => *viewport,
-            Self::Label(hwnd) | Self::Button(hwnd) | Self::TextInput(hwnd) => *hwnd,
+            Self::Label(hwnd)
+            | Self::Button(hwnd)
+            | Self::TextInput(hwnd)
+            | Self::Canvas(hwnd)
+            | Self::Surface { hwnd, .. } => *hwnd,
         }
     }
 

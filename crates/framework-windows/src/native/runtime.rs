@@ -82,6 +82,7 @@ impl Runtime {
         // A render can change how many items a list has, or how large they
         // measured, either of which moves the window of items it needs.
         virtual_list::after_render(self);
+        self.report_surface_changes();
         Ok(())
     }
 
@@ -92,6 +93,26 @@ impl Runtime {
         animation::after_render(self);
         // A resized window shows a different number of items.
         virtual_list::after_render(self);
+        self.report_surface_changes();
+    }
+
+    /// Tells components their native surfaces changed size.
+    ///
+    /// Taken before any is dispatched, so a render caused by answering one
+    /// (which lays out, and could find more) reports what it finds itself
+    /// rather than this loop reporting it twice.
+    fn report_surface_changes(&mut self) {
+        for change in self.renderer.take_surface_changes() {
+            let event = Event::SurfaceResized {
+                target: change.node,
+                surface: change.surface,
+                size: change.size,
+                scale_factor: change.scale_factor,
+            };
+            if !self.dispatch_or_quit(event) {
+                return;
+            }
+        }
     }
 
     /// [`Runtime::dispatch`], with this backend's uniform failure handling:

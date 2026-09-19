@@ -856,7 +856,11 @@ fn scope_component_node_ids(
                 scope_component_node_ids(owner, child, child_node_ids, node_ids, errors);
             }
         }
-        Node::Label(_) | Node::Button(_) | Node::TextInput(_) => {}
+        Node::Label(_)
+        | Node::Button(_)
+        | Node::TextInput(_)
+        | Node::Canvas(_)
+        | Node::Surface(_) => {}
     }
 }
 

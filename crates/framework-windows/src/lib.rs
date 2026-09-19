@@ -78,6 +78,8 @@ mod ffi;
 mod native;
 mod platform;
 mod services;
+#[cfg(windows)]
+mod surface;
 
 pub use error::{Error, NativeContext, Win32Category};
 pub use platform::WindowsPlatform;
@@ -87,3 +89,5 @@ pub use services::clipboard::WindowsClipboard;
 pub use services::dialogs::WindowsFileDialogs;
 #[cfg(windows)]
 pub use services::system::WindowsSystem;
+#[cfg(windows)]
+pub use surface::{SurfaceHandle, native_surface};

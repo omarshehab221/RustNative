@@ -94,6 +94,7 @@
 //! | [`accessibility`] | The portable accessibility model and its [`AccessibilityTree`] projection |
 //! | [`identity`] | [`NodeId`]/[`ComponentId`]/[`WindowId`] allocation and the collision-free key interner |
 //! | [`event`] | [`Event`], keyboard/accessibility types |
+//! | [`graphics`] | Canvas draw lists and native surfaces: the custom-rendering escape hatch |
 //! | [`input`] | Pointer/wheel/gesture/IME/clipboard/drag/gamepad payloads, [`GestureRecognizer`], [`GamepadPoller`] |
 //! | [`node`] | The declarative [`Node`] tree a component's `view`/`render` returns |
 //! | [`component`] | [`Component`], [`ComponentContext`], and the framework-managed [`ComponentTree`] |
@@ -138,6 +139,7 @@ pub mod application;
 pub mod capability;
 pub mod component;
 pub mod event;
+pub mod graphics;
 pub mod identity;
 pub mod input;
 pub mod layout;
@@ -169,6 +171,10 @@ pub use component::{
     WindowRequests,
 };
 pub use event::{AccessibilityInfo, AccessibilityRole, Event, KeyCode, KeyModifiers};
+pub use graphics::{
+    DrawCommand, DrawList, ImageData, ImageError, Paint, Path, PathSegment, RectF, SurfaceId,
+    Transform2D, Vec2,
+};
 pub use identity::{ComponentId, NodeId, WindowId};
 pub use input::{
     ClipboardAction, Composition, DragData, DropEffect, GamepadAxis, GamepadButton, GamepadInput,
@@ -182,7 +188,10 @@ pub use layout::{
     Rect, RowStyle, Size, SizeMode,
 };
 pub use menu::{MenuBar, MenuItem};
-pub use node::{Button, Column, Label, Node, NodeKind, NodeTransition, Row, TextInput, TreeError};
+pub use node::{
+    Button, Canvas, Column, Label, Node, NodeKind, NodeTransition, Row, Surface, TextInput,
+    TreeError,
+};
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};

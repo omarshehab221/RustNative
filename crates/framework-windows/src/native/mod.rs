@@ -8,6 +8,9 @@ mod animation_integration;
 mod app;
 mod container;
 pub(crate) mod context;
+pub(crate) mod graphics;
+#[cfg(test)]
+mod graphics_integration;
 #[cfg(test)]
 mod harness;
 pub(crate) mod input;

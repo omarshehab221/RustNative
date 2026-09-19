@@ -492,6 +492,22 @@ pub(crate) fn pointer_capture_changed(runtime: &mut Runtime, message: &MSG) {
 /// pointers, and to its gesture recognizer if it wants gestures.
 fn deliver(runtime: &mut Runtime, target: NodeId, phase: PointerPhase, sample: &PointerEvent) {
     let wants = interest(runtime, target);
+    // Input on a canvas says which of its drawn regions it landed in, tested
+    // at the center of the pixel the sample is in.
+    let region = runtime.renderer.snapshot.get(target).and_then(|node| {
+        let list = node.draw_list.as_ref()?;
+        let position = sample.position();
+        #[allow(clippy::cast_precision_loss, reason = "a pixel coordinate inside one window")]
+        let (x, y) = (position.x as f32 + 0.5, position.y as f32 + 0.5);
+        list.hit_test(x, y)
+    });
+    let region_sample;
+    let sample = if region.is_some() {
+        region_sample = sample.clone().with_region(region);
+        &region_sample
+    } else {
+        sample
+    };
     if wants.wants_pointer() {
         let event = match phase {
             PointerPhase::Down => Event::PointerDown { target, pointer: sample.clone() },

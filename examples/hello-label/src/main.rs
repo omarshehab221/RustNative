@@ -5,10 +5,10 @@ use std::time::Duration;
 use framework_core::{
     AccessibilityInfo, AccessibilityRole, AccessibleAction, AccessibleActionKind, Alignment,
     AnimatedProperty, AnimatedValue, Animation, AnimationRequests, Application, Callback,
-    CheckedState, ColumnStyle, Component, ComponentContext, DropEffect, EdgeInsets, Event,
-    InputInterest, InputRequests, ItemExtent, LayoutStyle, LiveRegion, MenuBar, MenuItem, Node,
-    NodeId, Overflow, PanicPolicy, Platform, Point, RowStyle, Size, SizeMode, TaskHandle,
-    Transition, VirtualListStyle, VirtualRange, Window,
+    CheckedState, Color, ColumnStyle, Component, ComponentContext, DrawList, DropEffect,
+    EdgeInsets, Event, InputInterest, InputRequests, ItemExtent, LayoutStyle, LiveRegion, MenuBar,
+    MenuItem, Node, NodeId, Overflow, Paint, PanicPolicy, Platform, Point, RectF, RowStyle, Size,
+    SizeMode, TaskHandle, Transition, Vec2, VirtualListStyle, VirtualRange, Window,
 };
 use framework_windows::WindowsPlatform;
 
@@ -352,6 +352,8 @@ struct InputLab {
     // Milestone 27: holding the pad down dims it, and letting go brings it
     // back. Both are animated by the backend, not by rerendering.
     pressed: bool,
+    // Milestone 29: which bar of the canvas chart was clicked.
+    selected_bar: Option<u32>,
     pointer: String,
     gesture: String,
     wheel: String,
@@ -461,6 +463,29 @@ impl Component for LongList {
 const FADE: Duration = Duration::from_millis(120);
 
 impl InputLab {
+    /// A four-bar chart; the selected bar is drawn darker.
+    fn chart(&self) -> DrawList {
+        const VALUES: [f32; 4] = [0.4, 0.9, 0.6, 0.75];
+        let mut chart = DrawList::new()
+            .fill_rounded_rect(
+                RectF::new(0.0, 0.0, 240.0, 90.0),
+                6.0,
+                Paint::color(Color::rgb(245, 246, 250)),
+            )
+            .text(Vec2::new(8.0, 4.0), "Click a bar", 12.0, Color::rgb(90, 90, 110));
+        for ((index, value), x) in (0u32..).zip(VALUES).zip([20.0, 75.0, 130.0, 185.0]) {
+            let height = 60.0 * value;
+            let bar = RectF::new(x, 84.0 - height, 36.0, height);
+            let color = if self.selected_bar == Some(index) {
+                Color::rgb(30, 70, 160)
+            } else {
+                Color::rgb(90, 140, 230)
+            };
+            chart = chart.fill_rect(bar, Paint::color(color)).hit_region(index, bar);
+        }
+        chart
+    }
+
     /// Springs the pad back from an offset to where it was laid out.
     ///
     /// A spring has no duration: it runs until it stops moving, and
@@ -492,6 +517,7 @@ impl Component for InputLab {
             input: None,
             animations: None,
             pressed: false,
+            selected_bar: None,
             pointer: idle(),
             gesture: idle(),
             wheel: idle(),
@@ -540,6 +566,14 @@ impl Component for InputLab {
                         .name("Input test pad")
                         .focusable(true),
                 ),
+                // Milestone 29: a chart drawn with Direct2D. Each bar is a
+                // hit region, so a click says which bar it landed on.
+                Node::canvas(
+                    "lab-chart",
+                    self.chart(),
+                    LayoutStyle::new().width(SizeMode::Fixed(240)).height(SizeMode::Fixed(90)),
+                )
+                .with_input(InputInterest::new().pointer()),
                 line("lab-pointer", format!("Pointer: {}", self.pointer)),
                 line("lab-gesture", format!("Gesture: {}", self.gesture)),
                 line("lab-wheel", format!("Wheel: {}", self.wheel)),
@@ -610,6 +644,9 @@ impl Component for InputLab {
             return;
         };
         match event {
+            Event::PointerDown { target, pointer } if target == NodeId::from_key("lab-chart") => {
+                self.selected_bar = pointer.region();
+            }
             Event::PointerDown { target, .. } if target == NodeId::from_key("lab-mute") => {
                 self.muted = !self.muted;
                 self.bounce_pad();

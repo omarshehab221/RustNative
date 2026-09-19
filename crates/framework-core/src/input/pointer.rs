@@ -91,6 +91,7 @@ pub struct PointerEvent {
     modifiers: KeyModifiers,
     pressure: Option<Scalar>,
     timestamp: Duration,
+    region: Option<u32>,
 }
 
 impl PointerEvent {
@@ -110,7 +111,24 @@ impl PointerEvent {
             modifiers: KeyModifiers::default(),
             pressure: None,
             timestamp,
+            region: None,
         }
+    }
+
+    /// The canvas hit region this sample landed in (see
+    /// [`crate::DrawList::hit_region`]); set by a backend for input on a
+    /// canvas.
+    #[must_use]
+    pub fn with_region(mut self, region: Option<u32>) -> Self {
+        self.region = region;
+        self
+    }
+
+    /// Which hit region of a canvas this sample landed in, if the target is
+    /// a canvas and the point is inside one of its declared regions.
+    #[must_use]
+    pub const fn region(&self) -> Option<u32> {
+        self.region
     }
 
     /// The button whose state changed in this event (down/up only).

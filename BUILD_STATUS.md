@@ -2,7 +2,90 @@
 
 ## Current milestone
 
-**Milestone 28 — Virtualized lists and large data sets — complete.**
+**Milestone 29 — Graphics / custom rendering escape hatch — complete.**
+
+### What was built
+
+`framework_core::graphics`: `DrawList` (retained, cheaply cloned, compared by
+pointer first), `DrawCommand`, `Paint`, `Path`, `ImageData`, `Transform2D`,
+`Vec2`/`RectF` (all on `Scalar`, so the node tree stays `Eq`), hit testing
+that honours transforms and clips, and `SurfaceId`. Two new node kinds,
+`Node::canvas` and `Node::native_surface`; `PointerEvent::region`;
+`Event::SurfaceResized`.
+
+On Windows, `native::graphics`: one Direct2D translation (`d2d`) used by
+both the canvas window and the pixel tests; the canvas window class, which
+keeps its draw list and render target on the window so painting never
+re-enters the runtime, and rebuilds a lost device on the next paint; the
+surface window class and a per-thread `SurfaceId` table; and the public
+`framework_windows::native_surface` returning a `SurfaceHandle` that
+implements `raw-window-handle` 0.6.
+
+**Dependency changes.** `raw-window-handle` 0.6 (MIT/Apache/Zlib) and
+`windows-numerics` 0.3 are new. `windows`/`windows-core` are pinned to 0.62
+instead of `>=0.60, <=0.62`: Direct2D's transform type lives in
+`windows-numerics`, which `windows` does not re-export, so the two must be
+the exact pair `windows` 0.62 uses — a range could resolve to a `windows`
+whose `Matrix3x2` is a different type.
+
+### What it found
+
+1. **A clip rotated twice.** A clip is a Direct2D layer with a geometric
+   mask, and the first version passed the current transform as the layer's
+   `maskTransform` — but Direct2D already carries the mask through the
+   world transform in force at the push. The rotated-clip pixel test saw a
+   square turned 90 degrees instead of 45. The mask transform is identity.
+2. **`PushAxisAlignedClip` would have been wrong for rotation.** It clips to
+   the bounding box of a rotated rectangle, which disagrees with the hit
+   test; clips are layers with geometric masks instead, and the same pixel
+   test pins that a bounding-box corner is outside a rotated clip.
+
+### Verified, and how
+
+Nine pixel tests draw through the production translation into a WIC bitmap
+and read the pixels back: exact fill coverage, a half-covered antialiased
+edge rendering neutral grey, clips (axis-aligned and rotated), transforms
+scoped to their push, an opacity layer compositing overlapping shapes once,
+a filled path, an image scaled into its rectangle, and text rasterized where
+it was placed. Four integration tests drive real windows: a changed draw
+list reaches the same canvas window with one render and no device rebuild;
+a discarded device is rebuilt on the next paint; a pointer press on each
+half of a canvas reports hit region 1 and 2; and a native surface is laid
+out at its declared size, reported once, handed out as a Win32
+`raw-window-handle` for exactly that window, and unavailable once removed.
+Core tests cover transform composition and inversion, hit testing under
+transforms, clips, and stacking, draw-list equality, image validation and
+premultiplication, and that a new drawing updates only its canvas without
+invalidating layout.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+### Not verified on this machine
+
+A real GPU swapchain attached to a native surface (wgpu is not a dependency
+of this workspace; the test proves the handle is the right window, not that
+a particular graphics API accepts it). A genuine device loss: the recovery
+path is exercised by discarding the render target, which is exactly what
+the `D2DERR_RECREATE_TARGET` branch does, but no driver reset was induced.
+
+### Deliberately not built
+
+Shader-backed drawing inside a `DrawList` — that is what a native surface
+is for. Hit regions are not automatically accessibility elements: a region
+has an id but no name, and an unnamed element is noise to a screen reader;
+a canvas describes its content with Milestone 26's `VirtualElement`s, which
+already become UI Automation fragments.
+
+---
+
+## Previous: Milestone 28 — Virtualized lists and large data sets — complete.
 
 ### What was built
 

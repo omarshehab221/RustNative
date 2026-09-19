@@ -116,6 +116,9 @@ fn node_changed(previous: &TreeNode, next: &TreeNode) -> bool {
         || previous.transitions != next.transitions
         || previous.item_index != next.item_index
         || previous.virtualization != next.virtualization
+        // Redraws the canvas; never a layout change, since a canvas is as
+        // big as layout makes it, whatever it draws.
+        || previous.draw_list != next.draw_list
 }
 
 /// Classifies whether the difference between two versions of the same node
@@ -155,6 +158,39 @@ mod tests {
 
     fn label(key: &str, text: &str) -> Node {
         Node::label(key, text)
+    }
+
+    #[test]
+    fn a_new_drawing_updates_only_its_canvas_and_leaves_layout_alone() {
+        use crate::graphics::{DrawList, Paint, RectF};
+        use crate::style::Color;
+
+        let scene = |color: Color| {
+            Node::column(
+                "root",
+                [
+                    Node::canvas(
+                        "canvas",
+                        DrawList::new()
+                            .fill_rect(RectF::new(0.0, 0.0, 9.0, 9.0), Paint::color(color)),
+                        LayoutStyle::new(),
+                    ),
+                    Node::label("steady", "unchanged"),
+                ],
+            )
+        };
+        let previous = TreeSnapshot::from_node(&scene(Color::rgb(255, 0, 0))).unwrap();
+        let next = TreeSnapshot::from_node(&scene(Color::rgb(0, 0, 255))).unwrap();
+        let diff = TreeDiff::between(&previous, &next);
+        assert_eq!(diff.operations().len(), 1, "{:?}", diff.operations());
+        assert!(matches!(
+            &diff.operations()[0],
+            TreeOp::Update(node) if node.id == NodeId::from_key("canvas")
+        ));
+        assert!(!diff.invalidates_layout(), "a canvas is as big as layout makes it");
+
+        let same = TreeSnapshot::from_node(&scene(Color::rgb(255, 0, 0))).unwrap();
+        assert!(TreeDiff::between(&previous, &same).operations().is_empty());
     }
 
     #[test]

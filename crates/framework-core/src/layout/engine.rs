@@ -315,7 +315,11 @@ impl LayoutEngine {
                     ),
                 );
             }
-            NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {}
+            NodeKind::Label
+            | NodeKind::Button
+            | NodeKind::TextInput
+            | NodeKind::Canvas
+            | NodeKind::Surface => {}
         }
     }
 
@@ -723,6 +727,9 @@ impl LayoutEngine {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {
                 measurer.measure(node.kind, node.text.as_deref(), None).width as i32
             }
+            // A picture has no natural size: it is as big as layout makes
+            // it, so it must be given one.
+            NodeKind::Canvas | NodeKind::Surface => 0,
             NodeKind::Column | NodeKind::Row => {
                 self.container_preferred_width(snapshot, node, measurer)
             }
@@ -763,6 +770,7 @@ impl LayoutEngine {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {
                 measurer.measure(node.kind, node.text.as_deref(), max_width).height as i32
             }
+            NodeKind::Canvas | NodeKind::Surface => 0,
             NodeKind::Column => {
                 let style = node.column_style.unwrap_or_default();
                 let children = ordered_children(snapshot, node.id);

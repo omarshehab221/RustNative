@@ -684,23 +684,42 @@ technology ("5,012 of 100,000") automatically.
 
 ---
 
-# 6. Rendering and interaction milestones
-
 ## Milestone 29 — Graphics / custom rendering escape hatch
 
-Provide an explicit low-level rendering path for applications that need custom graphics without turning the framework into a custom-rendered UI toolkit.
+Implemented as two explicit, isolated paths; ordinary UI is still native
+controls:
 
-Possible capabilities:
+- **custom canvas**: `Node::canvas(key, DrawList, layout)`. A `DrawList` is a
+  retained, portable display list — fills, strokes, rounded rectangles,
+  ellipses, lines, paths (lines, quadratic and cubic Béziers), text,
+  RGBA images, and nested transform / clip / opacity scopes — held in the
+  node tree and diffed like any node (cheap clones, pointer-equality fast
+  path). On Windows a canvas is its own child window painted by Direct2D
+  (DirectWrite for text); clips and opacity are Direct2D layers, so a
+  rotated clip clips exactly; a lost device (`D2DERR_RECREATE_TARGET`) is
+  recovered on the next paint from the draw list;
+- **custom drawing regions**: `DrawList::hit_region(id, rect)` declares
+  regions tested under the transforms and clips in force where they were
+  declared; pointer input on a canvas carries the region it landed in
+  (`PointerEvent::region`);
+- **GPU surface access**: `Node::native_surface(key, layout)` is a bare child
+  window the framework positions and sizes and never paints.
+  `Event::SurfaceResized { surface, size, scale_factor }` reports its size;
+  `framework_windows::native_surface(surface)` returns a `SurfaceHandle`
+  implementing `raw-window-handle` 0.6's `HasWindowHandle`/`HasDisplayHandle`,
+  which wgpu, ash, and glutin accept directly;
+- **integration with platform compositors**: both paths are real child
+  windows composed by DWM like every other control.
 
-- GPU surface access;
-- custom canvas;
-- shader-backed drawing where supported;
-- custom drawing regions;
-- integration with platform compositors.
-
-The default UI should continue using native controls.
+Not built: shader-backed drawing inside a `DrawList`. An application that
+needs shaders owns a native surface and brings its own GPU API, which is
+what that path is for.
 
 ---
+
+# 6. Rendering and interaction milestones
+
+All three (Milestones 27–29) are complete; see section 3.
 
 # 7. Application architecture milestones
 

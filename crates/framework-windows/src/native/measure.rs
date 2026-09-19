@@ -50,7 +50,11 @@ impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
         let text_wide = super::util::wide(text);
         let padding = match kind {
             NodeKind::Button | NodeKind::TextInput => 24,
-            NodeKind::Label | NodeKind::Column | NodeKind::Row => 0,
+            NodeKind::Label
+            | NodeKind::Column
+            | NodeKind::Row
+            | NodeKind::Canvas
+            | NodeKind::Surface => 0,
         };
         // `i32::MAX / 4` rather than `i32::MAX`: `DrawTextW` computes a
         // bounding box by adding to these bounds, so leaving three quarters

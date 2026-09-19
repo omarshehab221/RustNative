@@ -500,7 +500,12 @@ impl Theme {
             NodeKind::Label => &self.label,
             NodeKind::Button => &self.button,
             NodeKind::TextInput => &self.text_input,
-            NodeKind::Column | NodeKind::Row => &self.container,
+            // A canvas paints itself and a surface is painted by the
+            // application; what the theme contributes to either is the
+            // background behind them, which is a container's concern.
+            NodeKind::Column | NodeKind::Row | NodeKind::Canvas | NodeKind::Surface => {
+                &self.container
+            }
         }
         .resolve(state);
         ResolvedStyle::new(base.merge(override_style.properties()), state)

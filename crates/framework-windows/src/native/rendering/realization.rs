@@ -37,6 +37,7 @@ use framework_core::{
 };
 use windows_sys::Win32::Foundation::{HWND, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
+use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetParent, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW, SetParent, SetWindowPos,
     WM_SETFONT,
@@ -44,7 +45,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use super::super::EnableWindow;
 use super::super::measure::WindowsIntrinsicMeasurer;
-use super::super::registry::NativeObjectRegistry;
+use super::super::registry::{NativeObject, NativeObjectRegistry};
 use super::super::user_data::BackgroundColorSlot;
 use super::super::win32::{best_effort, ignored_by_contract, informational};
 use super::accessibility::AccessibilityBridge;
@@ -85,6 +86,12 @@ pub(crate) struct Renderer {
     /// Native windows a removal parked for an insertion in the same render
     /// to take back — see `rendering::pool`.
     pool: ControlPool,
+    /// Each native surface's last reported size, so a relayout that did not
+    /// change it does not tell the application to rebuild its swapchain.
+    surface_sizes: HashMap<NodeId, Size>,
+    /// Surface size changes not yet reported (see
+    /// [`Renderer::take_surface_changes`]).
+    surface_changes: Vec<SurfaceChange>,
     /// The semantic projection onto Win32 (tab stops, MSAA annotations) and
     /// UI Automation — see `rendering::accessibility` and `native::uia`.
     pub(crate) accessibility: AccessibilityBridge,
@@ -105,6 +112,8 @@ impl Renderer {
             scroll: ScrollState::default(),
             virtual_lists: VirtualLists::default(),
             pool: ControlPool::default(),
+            surface_sizes: HashMap::new(),
+            surface_changes: Vec::new(),
             accessibility: AccessibilityBridge::default(),
             layout_engine: LayoutEngine,
         }
@@ -200,6 +209,50 @@ impl Renderer {
         for id in self.snapshot.nodes().map(|node| node.id).collect::<Vec<_>>() {
             self.position_node(id);
         }
+        self.collect_surface_changes();
+    }
+
+    /// Queues a `SurfaceResized` for every native surface whose laid-out
+    /// size differs from the one last reported — including a surface
+    /// reported for the first time.
+    fn collect_surface_changes(&mut self) {
+        let snapshot = &self.snapshot;
+        self.surface_sizes.retain(|id, _| snapshot.contains(*id));
+        for (id, object) in self
+            .snapshot
+            .nodes()
+            .filter_map(|node| self.registry.get(node.id).map(|object| (node.id, object)))
+        {
+            let NativeObject::Surface { hwnd, id: surface } = object else {
+                continue;
+            };
+            let Some(rect) = self.layout.get(&id) else {
+                continue;
+            };
+            let size = Size::new(dimension_to_u32(rect.width), dimension_to_u32(rect.height));
+            if self.surface_sizes.insert(id, size) == Some(size) {
+                continue;
+            }
+            // SAFETY: `hwnd` is a live window owned by this renderer's
+            // registry; the call takes no pointers.
+            let dpi = unsafe { GetDpiForWindow(*hwnd) };
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "a DPI value, far below f32's exact range"
+            )]
+            let scale = if dpi == 0 { 1.0 } else { dpi as f32 / 96.0 };
+            self.surface_changes.push(SurfaceChange {
+                node: id,
+                surface: *surface,
+                size,
+                scale_factor: Scalar::new(scale),
+            });
+        }
+    }
+
+    /// Native surfaces whose size changed, for the runtime to report.
+    pub(crate) fn take_surface_changes(&mut self) -> Vec<SurfaceChange> {
+        std::mem::take(&mut self.surface_changes)
     }
 
     /// Runs layout, and runs it once more if measuring the realized items
@@ -363,7 +416,11 @@ impl Renderer {
         match node.kind {
             NodeKind::Column => node.column_style.map(|style| style.overflow),
             NodeKind::Row => node.row_style.map(|style| style.overflow),
-            NodeKind::Label | NodeKind::Button | NodeKind::TextInput => None,
+            NodeKind::Label
+            | NodeKind::Button
+            | NodeKind::TextInput
+            | NodeKind::Canvas
+            | NodeKind::Surface => None,
         }
     }
 
@@ -566,7 +623,13 @@ impl Renderer {
                     BackgroundColorSlot::set(content_hwnd, background);
                 }
             }
-            NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {}
+            // A canvas clears to its node's background before drawing, so
+            // an unstyled canvas matches the container it sits in.
+            NodeKind::Canvas => crate::native::graphics::canvas::set_background(
+                hwnd,
+                Some(colorref_to_color(background)),
+            ),
+            NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::Surface => {}
         }
 
         // SAFETY: `hwnd` is a live HWND owned by this renderer's registry;
@@ -859,6 +922,21 @@ impl Renderer {
             .and_then(|parent_id| self.registry.get(parent_id))
             .map_or(window, |object| object.content_hwnd().unwrap_or_else(|| object.hwnd()))
     }
+}
+
+/// A native surface's new size, waiting to be reported to its component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SurfaceChange {
+    pub(crate) node: NodeId,
+    pub(crate) surface: framework_core::SurfaceId,
+    pub(crate) size: Size,
+    pub(crate) scale_factor: Scalar,
+}
+
+/// A GDI `COLORREF` (`0x00BBGGRR`) as a portable color.
+fn colorref_to_color(color: u32) -> framework_core::Color {
+    let [red, green, blue, _] = color.to_le_bytes();
+    framework_core::Color::rgb(red, green, blue)
 }
 
 /// The node realizing item `index` of the virtual list `list`, if it is

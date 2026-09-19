@@ -31,6 +31,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use super::super::CONTAINER_CLASS_NAME;
+use super::super::graphics::canvas::{self, CANVAS_CLASS_NAME};
+use super::super::graphics::surface::{self, SURFACE_CLASS_NAME};
 use super::super::registry::{NativeObject, NativeObjectRegistry};
 use super::super::util::{module_instance, wide, window_text};
 use super::super::win32::{best_effort, must_succeed};
@@ -81,7 +83,58 @@ pub(crate) fn create(
             WS_BORDER | ES_LEFT as u32 | ES_AUTOHSCROLL as u32,
             NativeObject::TextInput,
         ),
+        NodeKind::Canvas => {
+            let hwnd = create_own(node, parent, CANVAS_CLASS_NAME)?;
+            canvas::attach(hwnd, node.draw_list.clone().unwrap_or_default());
+            adopt(registry, node, hwnd, NativeObject::Canvas, "CANVAS")
+        }
+        NodeKind::Surface => {
+            let hwnd = create_own(node, parent, SURFACE_CLASS_NAME)?;
+            let id = surface::register(hwnd);
+            if let Err(error) = registry.insert(node.id, NativeObject::Surface { hwnd, id }) {
+                destroy_orphan(hwnd, "SURFACE");
+                return Err(error);
+            }
+            Ok(())
+        }
     }
+}
+
+/// Creates a window of one of this crate's own graphics classes, which
+/// paint themselves (a canvas) or are painted by the application (a
+/// surface) — never by a system control class.
+fn create_own(node: &TreeNode, parent: HWND, class_name: &'static str) -> Result<HWND, Error> {
+    let class = wide(class_name);
+    // SAFETY: `class` names a class `register_window_classes` registered
+    // before any window exists; `parent` is a live HWND owned by the
+    // renderer; a null `lpParam` is not read by either class's procedure.
+    let hwnd = unsafe {
+        CreateWindowExW(
+            0,
+            class.as_ptr(),
+            null(),
+            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+            0,
+            0,
+            0,
+            0,
+            parent,
+            null_mut(),
+            module_instance(),
+            null(),
+        )
+    };
+    if hwnd.is_null() {
+        return Err(Error::windows_api_in(
+            if class_name == CANVAS_CLASS_NAME {
+                "CreateWindowExW(CANVAS)"
+            } else {
+                "CreateWindowExW(SURFACE)"
+            },
+            NativeContext::none().with_node(node.id),
+        ));
+    }
+    Ok(hwnd)
 }
 
 /// Whether the native object currently registered for `node` is still the
@@ -98,6 +151,8 @@ pub(crate) fn needs_replacement(registry: &NativeObjectRegistry, node: &TreeNode
             | (NodeKind::Label, Some(NativeObject::Label(_)))
             | (NodeKind::Button, Some(NativeObject::Button(_)))
             | (NodeKind::TextInput, Some(NativeObject::TextInput(_)))
+            | (NodeKind::Canvas, Some(NativeObject::Canvas(_)))
+            | (NodeKind::Surface, Some(NativeObject::Surface { .. }))
     )
 }
 
@@ -117,7 +172,13 @@ pub(crate) fn update_text(registry: &NativeObjectRegistry, node: &TreeNode) -> R
     let hwnd = object.hwnd();
 
     match node.kind {
-        NodeKind::Column | NodeKind::Row => Ok(false),
+        NodeKind::Column | NodeKind::Row | NodeKind::Surface => Ok(false),
+        // A canvas's content is its draw list: handed to the window, which
+        // repaints only if it actually changed.
+        NodeKind::Canvas => {
+            canvas::set_draw_list(hwnd, &node.draw_list.clone().unwrap_or_default());
+            Ok(false)
+        }
         NodeKind::Label | NodeKind::Button => {
             let text = wide(node.text.as_deref().unwrap_or_default());
             // SAFETY: `hwnd` is a live HWND owned by the registry entry

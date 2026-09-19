@@ -3,9 +3,10 @@
 use crate::accessibility::AccessibleAction;
 pub use crate::accessibility::{AccessibilityInfo, AccessibilityRole};
 use crate::animation::AnimatedProperty;
+use crate::graphics::SurfaceId;
 use crate::identity::{NodeId, WindowId};
 use crate::input::{
-    ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, WheelDelta,
+    ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, Scalar, WheelDelta,
 };
 use crate::layout::{Point, Size};
 use crate::virtualization::VirtualRange;
@@ -232,6 +233,23 @@ pub enum Event {
         /// What was asked.
         action: AccessibleAction,
     },
+    /// A native surface was realized, or changed size.
+    ///
+    /// Delivered after layout gives the surface its first size and after
+    /// every change to it, so an application attaching a swapchain creates
+    /// it here and resizes it here. `surface` is what the backend's handle
+    /// lookup takes (on Windows, `framework_windows::native_surface`).
+    SurfaceResized {
+        /// The surface node.
+        target: NodeId,
+        /// The backend's identifier for the surface.
+        surface: SurfaceId,
+        /// The surface's size in physical pixels — what a swapchain is
+        /// created with.
+        size: Size,
+        /// Physical pixels per layout unit (1.0 at 96 DPI on Windows).
+        scale_factor: Scalar,
+    },
     /// A virtual list needs a different window of items realized.
     ///
     /// Raised when scrolling (or a resize, or newly measured item extents)
@@ -293,7 +311,8 @@ impl Event {
             | Self::Gamepad { target, .. }
             | Self::AccessibilityAction { target, .. }
             | Self::AnimationFinished { target, .. }
-            | Self::VisibleRangeChanged { target, .. } => Some(*target),
+            | Self::VisibleRangeChanged { target, .. }
+            | Self::SurfaceResized { target, .. } => Some(*target),
             Self::KeyDown { target, .. }
             | Self::KeyUp { target, .. }
             | Self::TextInput { target, .. }
@@ -331,7 +350,8 @@ impl Event {
             | Self::Gamepad { target: current, .. }
             | Self::AccessibilityAction { target: current, .. }
             | Self::AnimationFinished { target: current, .. }
-            | Self::VisibleRangeChanged { target: current, .. } => {
+            | Self::VisibleRangeChanged { target: current, .. }
+            | Self::SurfaceResized { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }
