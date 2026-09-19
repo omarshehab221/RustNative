@@ -1,49 +1,10 @@
-//! Virtual-key translation and the interaction-state machine (focus, hover,
-//! press) layered on top of native controls.
+//! The interaction-state machine (focus, hover, press) layered on top of
+//! native controls.
 
-use framework_core::{Event, KeyCode, KeyModifiers, NodeId};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetFocus, GetKeyState, SetFocus, VK_BACK, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT,
-    VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
-};
+use framework_core::{Event, NodeId};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetFocus, SetFocus};
 
-use super::runtime::Runtime;
-
-pub(crate) fn key_code(vkey: u32) -> KeyCode {
-    // `vkey` is documented by every caller (see `message_loop.rs`'s
-    // `WM_KEYDOWN` handler) to come from a Win32 virtual-key code, which
-    // Microsoft documents as always fitting in a `u16` (in practice,
-    // almost always a single byte) — the `u32` parameter type exists only
-    // because `WPARAM` is `usize`-sized, not because callers ever pass a
-    // value this truncation could actually lose.
-    #[allow(clippy::cast_possible_truncation)]
-    match vkey as u16 {
-        VK_RETURN => KeyCode::Enter,
-        VK_SPACE => KeyCode::Space,
-        VK_TAB => KeyCode::Tab,
-        VK_ESCAPE => KeyCode::Escape,
-        VK_BACK => KeyCode::Backspace,
-        VK_LEFT => KeyCode::ArrowLeft,
-        VK_RIGHT => KeyCode::ArrowRight,
-        VK_UP => KeyCode::ArrowUp,
-        VK_DOWN => KeyCode::ArrowDown,
-        value if (0x30..=0x5A).contains(&value) => {
-            KeyCode::Character(char::from_u32(u32::from(value)).unwrap_or('?'))
-        }
-        value => KeyCode::Unknown(u32::from(value)),
-    }
-}
-
-pub(crate) fn modifiers() -> KeyModifiers {
-    // SAFETY: `GetKeyState` takes a plain virtual-key-code integer and
-    // no pointer arguments; it is always safe to call, from any thread.
-    let shift = unsafe { GetKeyState(i32::from(VK_SHIFT)) } & i16::MIN != 0;
-    // SAFETY: same as above.
-    let ctrl = unsafe { GetKeyState(0x11) } & i16::MIN != 0;
-    // SAFETY: same as above.
-    let alt = unsafe { GetKeyState(0x12) } & i16::MIN != 0;
-    KeyModifiers { shift, ctrl, alt }
-}
+use super::super::runtime::Runtime;
 
 pub(crate) fn focused_node(runtime: &Runtime) -> Option<NodeId> {
     // SAFETY: `GetFocus` takes no arguments; a null return (checked

@@ -110,7 +110,8 @@ pub(crate) fn event_window_id(event: &Event) -> Option<WindowId> {
         | Event::WindowMoved { window, .. }
         | Event::WindowCloseRequested { window }
         | Event::WindowStateChanged { window, .. }
-        | Event::MenuAction { window, .. } => Some(*window),
+        | Event::MenuAction { window, .. }
+        | Event::ClipboardChanged { window } => Some(*window),
         _ => None,
     }
 }

@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_MESSAGE, RegisterClassW,
-    WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 
 use super::util::{module_instance, wide};
@@ -65,6 +65,22 @@ impl TestWindow {
     /// Panics if class registration or window creation fails — both are
     /// treated as test infrastructure failures, not conditions under test.
     pub(crate) fn new() -> Self {
+        Self::create(HWND_MESSAGE, 0)
+    }
+
+    /// Creates a visible, ordinary top-level window — for tests that need
+    /// a window that can be *activated* (which a message-only window never
+    /// can), such as a second window taking activation away from one under
+    /// test.
+    ///
+    /// # Panics
+    ///
+    /// As [`Self::new`].
+    pub(crate) fn new_top_level() -> Self {
+        Self::create(std::ptr::null_mut(), WS_VISIBLE)
+    }
+
+    fn create(parent: HWND, extra_style: u32) -> Self {
         let class_name = wide(format!(
             "framework-test-window-{}",
             CLASS_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -96,12 +112,12 @@ impl TestWindow {
                 0,
                 class_name.as_ptr(),
                 std::ptr::null(),
-                WS_OVERLAPPEDWINDOW,
+                WS_OVERLAPPEDWINDOW | extra_style,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
-                HWND_MESSAGE,
+                parent,
                 std::ptr::null_mut(),
                 instance,
                 std::ptr::null_mut(),

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 use super::Component;
-use super::context::{ComponentContext, QueuedMessage, WindowCommand};
+use super::context::{ComponentContext, InputRequest, QueuedMessage, WindowCommand};
 use super::effects::{DeclaredEffect, EffectContext, EffectDependencies, EffectEntry};
 use super::error::RenderError;
 use crate::event::Event;
@@ -125,6 +125,7 @@ pub struct ComponentTree {
     root_view: Option<Node>,
     message_sink: Rc<RefCell<VecDeque<QueuedMessage>>>,
     window_commands: Rc<RefCell<VecDeque<WindowCommand>>>,
+    input_requests: Rc<RefCell<VecDeque<InputRequest>>>,
     scheduler: Scheduler,
     pending_effects: HashMap<ComponentId, Vec<DeclaredEffect>>,
     /// Structured, user-triggerable composition problems collected during
@@ -166,6 +167,7 @@ impl ComponentTree {
             root_view: None,
             message_sink: Rc::new(RefCell::new(VecDeque::new())),
             window_commands: Rc::new(RefCell::new(VecDeque::new())),
+            input_requests: Rc::new(RefCell::new(VecDeque::new())),
             scheduler: Scheduler::new(),
             pending_effects: HashMap::new(),
             pending_render_errors: Vec::new(),
@@ -350,6 +352,18 @@ impl ComponentTree {
     /// registry these requests act on.
     pub(crate) fn take_window_commands(&mut self) -> Vec<WindowCommand> {
         self.window_commands.borrow_mut().drain(..).collect()
+    }
+
+    /// Drains the pointer-capture and drag-feedback requests components
+    /// queued through [`crate::InputRequests`] since the last call, in the
+    /// order they were made. A platform backend calls this after every
+    /// dispatch.
+    pub fn take_input_requests(&mut self) -> Vec<InputRequest> {
+        self.input_requests.borrow_mut().drain(..).collect()
+    }
+
+    pub(crate) fn input_requests(&self) -> &Rc<RefCell<VecDeque<InputRequest>>> {
+        &self.input_requests
     }
 
     pub(crate) fn message_sink(&self) -> &Rc<RefCell<VecDeque<QueuedMessage>>> {

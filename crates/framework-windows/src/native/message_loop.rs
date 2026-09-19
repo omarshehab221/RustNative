@@ -2,7 +2,7 @@
 //! implements the top-level `WNDPROC`.
 
 use framework_core::{Event, PanicAction, PanicReport};
-use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     COLOR_WINDOW, GetSysColorBrush, HDC, SetBkColor, SetBkMode, SetTextColor, TRANSPARENT,
 };
@@ -11,16 +11,24 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BN_CLICKED, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW, DestroyWindow,
-    DispatchMessageW, EN_CHANGE, GetCursorPos, GetMessageW, MSG, PostQuitMessage, RegisterClassW,
-    TranslateMessage, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
-    WM_CTLCOLORSTATIC, WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_QUIT, WM_SIZE, WNDCLASSW, WindowFromPoint,
+    DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PostMessageW, PostQuitMessage,
+    RegisterClassW, TranslateMessage, WM_CAPTURECHANGED, WM_CHAR, WM_CLOSE, WM_COMMAND,
+    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_POINTERDOWN,
+    WM_POINTERUP, WM_POINTERUPDATE, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK, WM_XBUTTONDOWN, WM_XBUTTONUP,
+    WNDCLASSW,
 };
 
 use super::container::container_proc;
 use super::context::{root_window, with_runtime};
+use super::input::pointer::{
+    LONG_PRESS_TIMER_ID, MOUSE_POINTER_ID, WM_FRAMEWORK_CAPTURE_LOST, WM_POINTERCAPTURECHANGED,
+};
 use super::input::{
-    focus_next, focused_node, key_code, modifiers, set_hovered, set_pressed, sync_focus,
+    self, clipboard, focus_next, focused_node, key_code, modifiers, set_hovered, set_pressed,
+    sync_focus,
 };
 use super::registry::NativeObject;
 use super::runtime::Runtime;
@@ -175,8 +183,26 @@ fn pre_dispatch(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
     }
 
     match message.message {
-        WM_MOUSEWHEEL => wheel_scroll(runtime, message),
-        WM_KEYDOWN => key_down(runtime, message),
+        WM_MOUSEMOVE | WM_LBUTTONDOWN | WM_LBUTTONUP | WM_LBUTTONDBLCLK | WM_RBUTTONDOWN
+        | WM_RBUTTONUP | WM_RBUTTONDBLCLK | WM_MBUTTONDOWN | WM_MBUTTONUP | WM_MBUTTONDBLCLK
+        | WM_XBUTTONDOWN | WM_XBUTTONUP | WM_XBUTTONDBLCLK => {
+            input::pointer::mouse_message(runtime, message);
+        }
+        WM_MOUSELEAVE => input::pointer::mouse_left(runtime),
+        WM_POINTERDOWN | WM_POINTERUPDATE | WM_POINTERUP => {
+            input::pointer::pointer_message(runtime, message);
+        }
+        WM_POINTERCAPTURECHANGED => input::pointer::pointer_capture_changed(runtime, message),
+        _ => {}
+    }
+
+    match message.message {
+        WM_MOUSEWHEEL | WM_MOUSEHWHEEL => wheel(runtime, message),
+        WM_KEYDOWN | WM_SYSKEYDOWN => key_down(runtime, message),
+        WM_KEYUP | WM_SYSKEYUP => {
+            key_up(runtime, message);
+            MessageFlow::Dispatch
+        }
         WM_CHAR => {
             character(runtime, message);
             MessageFlow::Dispatch
@@ -205,25 +231,29 @@ fn track_mouse_leave(hwnd: HWND) {
     best_effort(tracked, "TrackMouseEvent(TME_LEAVE)", "hover styling is cosmetic");
 }
 
-/// Translates a wheel event into a scroll of whichever scrollable container
-/// is under the pointer, if any.
-fn wheel_scroll(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
-    let mut point = POINT { x: 0, y: 0 };
-    // SAFETY: `point` is a valid, exclusively borrowed `POINT` for
-    // `GetCursorPos` to write into.
-    let located = unsafe { GetCursorPos(&raw mut point) } != 0;
-    if !located {
-        // The documented failure here is the calling thread lacking access
-        // to the input desktop, in which case there is no pointer position
-        // to scroll relative to at all.
-        best_effort(located, "GetCursorPos", "there is no pointer position to scroll under");
+/// Delivers a wheel event to the innermost wheel-interested node under the
+/// pointer, or — if a scrollable container is nearer, or no node asked —
+/// scrolls that container, as before Milestone 25.
+fn wheel(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
+    // The wheel message carries the pointer's screen position, and Windows
+    // has already decided it belongs to this window; the only question left
+    // is which of this window's own descendants is under that point. Asking
+    // `WindowFromPoint` instead would answer with whatever window is topmost
+    // on the desktop there, which is not this window's business.
+    let hovered = input::pointer::deepest_child_at(
+        runtime.window,
+        input::pointer::wheel_screen_point(message),
+    );
+    if input::pointer::wheel(runtime, message, hovered) {
+        // The component owns this wheel; the native control must not also
+        // act on it.
+        return MessageFlow::Consumed;
+    }
+    if message.message == WM_MOUSEHWHEEL {
+        // Containers scroll vertically only; a horizontal wheel no node
+        // asked for is left to the native control under the pointer.
         return MessageFlow::Dispatch;
     }
-    // SAFETY: `WindowFromPoint` takes a plain `POINT` value, no pointer
-    // arguments; a null return is its documented "no window at that point"
-    // signal, which `scrollable_ancestor` already treats as "not found"
-    // via its own null check on the same handle it walks.
-    let hovered = unsafe { WindowFromPoint(point) };
     let Some(id) = runtime.renderer.scrollable_ancestor(hovered) else {
         return MessageFlow::Dispatch;
     };
@@ -257,12 +287,21 @@ fn key_down(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
         // time.
         return MessageFlow::Consumed;
     }
-    runtime.dispatch_or_quit(Event::KeyDown {
-        target: focused_node(runtime),
-        key,
-        modifiers: modifiers(),
-    });
+    let held = modifiers();
+    let target = focused_node(runtime);
+    if runtime.dispatch_or_quit(Event::KeyDown { target, key, modifiers: held }) {
+        clipboard::shortcut(runtime, key, held);
+    }
     MessageFlow::Dispatch
+}
+
+/// Delivers a key release to the focused component.
+fn key_up(runtime: &mut Runtime, message: &MSG) {
+    // As in `key_down`: the virtual-key code occupies the low byte.
+    #[allow(clippy::cast_possible_truncation)]
+    let key = key_code(message.wParam as u32);
+    let target = focused_node(runtime);
+    runtime.dispatch_or_quit(Event::KeyUp { target, key, modifiers: modifiers() });
 }
 
 /// Delivers committed text to the focused component, for every focus target
@@ -622,9 +661,59 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             }
             0
         }
+        WM_TIMER => {
+            match wparam {
+                LONG_PRESS_TIMER_ID => {
+                    with_runtime(hwnd, input::pointer::long_press_timer);
+                }
+                input::gamepad::GAMEPAD_TIMER_ID => {
+                    with_runtime(hwnd, input::gamepad::poll);
+                }
+                _ => return default(),
+            }
+            0
+        }
+        WM_CAPTURECHANGED => {
+            // Sent synchronously from inside `SetCapture`/`ReleaseCapture`,
+            // which `native::input::pointer` calls while this window's
+            // runtime is borrowed — so do not resolve it here; re-post, and
+            // let the posted message check the real capture state.
+            // SAFETY: `hwnd` is the live window this callback is for.
+            let posted = unsafe { PostMessageW(hwnd, WM_FRAMEWORK_CAPTURE_LOST, 0, 0) } != 0;
+            best_effort(posted, "PostMessageW(capture lost)", "a lost capture ends at release");
+            0
+        }
+        WM_FRAMEWORK_CAPTURE_LOST => {
+            with_runtime(hwnd, input::pointer::capture_lost);
+            0
+        }
+        clipboard::WM_CLIPBOARDUPDATE => {
+            // Re-posted for the reason documented on
+            // `WM_FRAMEWORK_CLIPBOARD_CHANGED`.
+            // SAFETY: `hwnd` is the live window this callback is for.
+            let posted =
+                unsafe { PostMessageW(hwnd, clipboard::WM_FRAMEWORK_CLIPBOARD_CHANGED, 0, 0) } != 0;
+            best_effort(posted, "PostMessageW(clipboard)", "one clipboard change goes unreported");
+            0
+        }
+        clipboard::WM_FRAMEWORK_CLIPBOARD_CHANGED => {
+            with_runtime(hwnd, clipboard::changed);
+            0
+        }
         WM_DESTROY => {
             with_runtime(hwnd, |runtime| {
                 runtime.destroyed = true;
+                input::drop_target::revoke(runtime);
+                clipboard::stop_listening(runtime);
+                for timer in [LONG_PRESS_TIMER_ID, input::gamepad::GAMEPAD_TIMER_ID] {
+                    // SAFETY: `hwnd` is live inside its own `WM_DESTROY`;
+                    // killing a timer that was never set is harmless.
+                    ignored_by_contract(unsafe { KillTimer(hwnd, timer) });
+                }
+                if runtime.input.pointer.captured(MOUSE_POINTER_ID).is_some() {
+                    // The window is going away; nothing more to cancel to.
+                    runtime.input.pointer = input::pointer::PointerState::default();
+                }
                 // Stop advertising this window as a dialog-owner candidate
                 // before it actually stops existing — see
                 // `native::window_handles`'s module doc comment.

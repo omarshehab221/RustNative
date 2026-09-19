@@ -111,6 +111,7 @@ fn node_changed(previous: &TreeNode, next: &TreeNode) -> bool {
         || previous.style_override != next.style_override
         || previous.visual_style != next.visual_style
         || previous.disabled != next.disabled
+        || previous.input != next.input
 }
 
 /// Classifies whether the difference between two versions of the same node

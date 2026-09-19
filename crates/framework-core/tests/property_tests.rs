@@ -462,3 +462,97 @@ proptest! {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// Gesture recognition (crate::input, Milestone 25).
+// ---------------------------------------------------------------------
+
+mod gestures {
+    use std::time::Duration;
+
+    use proptest::prelude::*;
+
+    use framework_core::{
+        Gesture, GesturePhase, GestureRecognizer, Point, PointerEvent, PointerKind, PointerPhase,
+    };
+
+    fn phase_strategy() -> impl Strategy<Value = PointerPhase> {
+        prop_oneof![
+            Just(PointerPhase::Down),
+            Just(PointerPhase::Move),
+            Just(PointerPhase::Up),
+            Just(PointerPhase::Cancel),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(512))]
+
+        /// Any interleaving of up to three contacts, including physically
+        /// impossible ones (an up with no down, a down twice), must never
+        /// panic, and once every contact has lifted the recognizer must be
+        /// idle again — a stuck recognizer would swallow every later
+        /// gesture on that node.
+        #[test]
+        fn arbitrary_pointer_streams_never_panic_and_always_settle(
+            steps in proptest::collection::vec(
+                (0u32..3, phase_strategy(), -500i32..500, -500i32..500, 0u64..50),
+                0..80,
+            )
+        ) {
+            let mut recognizer = GestureRecognizer::default();
+            let mut now = 0u64;
+            for (id, phase, x, y, dt) in steps {
+                now += dt;
+                let sample = PointerEvent::new(
+                    id, PointerKind::Touch, Point::new(x, y), Duration::from_millis(now),
+                );
+                let _ = recognizer.handle(phase, &sample);
+                let _ = recognizer.tick(Duration::from_millis(now));
+            }
+            for id in 0..3 {
+                let sample = PointerEvent::new(
+                    id, PointerKind::Touch, Point::new(0, 0), Duration::from_millis(now),
+                );
+                let _ = recognizer.handle(PointerPhase::Up, &sample);
+            }
+            prop_assert!(!recognizer.is_active());
+            prop_assert_eq!(recognizer.next_deadline(), None);
+        }
+
+        /// For a single-contact drag, the per-event pan deltas always sum
+        /// to the reported total — so a component accumulating deltas and
+        /// one reading totals agree on where the content is.
+        #[test]
+        fn single_contact_pan_deltas_sum_to_the_total(
+            path in proptest::collection::vec((-300i32..300, -300i32..300), 1..40)
+        ) {
+            let mut recognizer = GestureRecognizer::default();
+            let at = |x, y, ms| {
+                PointerEvent::new(0, PointerKind::Mouse, Point::new(x, y), Duration::from_millis(ms))
+            };
+            recognizer.handle(PointerPhase::Down, &at(0, 0, 0));
+            let mut sum = Point::new(0, 0);
+            let mut total = Point::new(0, 0);
+            let mut observe = |gestures: Vec<Gesture>| {
+                for gesture in gestures {
+                    if let Gesture::Pan { delta, total: t, .. } = gesture {
+                        sum = Point::new(sum.x + delta.x, sum.y + delta.y);
+                        total = t;
+                    }
+                }
+            };
+            for (step, (x, y)) in path.iter().enumerate() {
+                observe(recognizer.handle(PointerPhase::Move, &at(*x, *y, step as u64 + 1)));
+            }
+            let (x, y) = *path.last().unwrap();
+            let ended = recognizer.handle(PointerPhase::Up, &at(x, y, 1_000));
+            let was_pan = ended.iter().any(|g| matches!(g, Gesture::Pan { phase: GesturePhase::Ended, .. }));
+            observe(ended);
+            if was_pan {
+                prop_assert_eq!(sum, total);
+                prop_assert_eq!(total, Point::new(x, y));
+            }
+        }
+    }
+}

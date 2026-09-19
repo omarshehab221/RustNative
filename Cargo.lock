@@ -246,6 +246,7 @@ dependencies = [
  "framework-core",
  "tokio",
  "windows",
+ "windows-core",
  "windows-sys",
 ]
 

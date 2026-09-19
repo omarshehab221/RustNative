@@ -272,11 +272,24 @@ mod annotation {
         /// handle value, so [`Annotator::clear`] can skip the COM call for
         /// the overwhelming majority of controls that never had one.
         annotated: HashSet<usize>,
+        /// The annotation service, created on first use (see
+        /// [`Annotator::services`]).
+        services: ServiceState,
+    }
+
+    /// Whether the annotation service has been created yet, and whether it
+    /// could be.
+    #[derive(Debug, Default)]
+    enum ServiceState {
+        #[default]
+        Untried,
+        Unavailable,
+        Ready(IAccPropServices),
     }
 
     impl Annotator {
         pub(super) fn annotate(&mut self, hwnd: HWND, projection: &AccessibleProjection) {
-            if with_services(|services| apply(services, hwnd, projection)).unwrap_or(false) {
+            if self.services().is_some_and(|services| apply(services, hwnd, projection)) {
                 self.annotated.insert(hwnd as usize);
             }
         }
@@ -285,7 +298,7 @@ mod annotation {
             if !self.annotated.remove(&(hwnd as usize)) {
                 return;
             }
-            with_services(|services| {
+            if let Some(services) = self.services() {
                 // SAFETY: `services` is a live COM interface obtained on
                 // this thread; `hwnd` may already have been destroyed,
                 // which `ClearHwndProps` reports as an `Err` rather than
@@ -299,39 +312,46 @@ mod annotation {
                         &ANNOTATED_PROPERTIES,
                     )
                 };
-            });
+            }
         }
-    }
 
-    /// Runs `f` with the thread's `IAccPropServices`, or returns `None` if
-    /// the service is unavailable in this process.
-    ///
-    /// The instance is a `thread_local!` rather than a `OnceLock` because
-    /// COM interface pointers are apartment-affine and this bridge only
-    /// ever runs on the single Win32 message-loop thread; handing the
-    /// pointer to another thread would require marshalling it, which
-    /// nothing here needs. It is also created lazily, so an application
-    /// that never overrides an accessible name never activates COM at all.
-    ///
-    /// A failure — most often "this thread has no COM apartment" — is
-    /// cached rather than retried per control: it is a property of the
-    /// environment, not of any one call.
-    fn with_services<R>(f: impl FnOnce(&IAccPropServices) -> R) -> Option<R> {
-        use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
-        use windows::Win32::UI::Accessibility::CAccPropServices;
+        /// The window's `IAccPropServices`, created on first use, or `None`
+        /// if COM could not provide one.
+        ///
+        /// Owned by this (per-window) annotator rather than kept in a
+        /// `thread_local!`, which is what an earlier revision did. A
+        /// thread-local is destroyed at thread exit — after the message loop
+        /// has already torn down the thread's COM apartment
+        /// (`native::app::OleApartment`) — so its final `Release` ran against
+        /// an uninitialized apartment. That crashed the process with an
+        /// access violation as soon as Milestone 25 initialized OLE on the UI
+        /// thread (before which the service silently failed to create at
+        /// all, hiding the problem). Owned here, it is released with the
+        /// window's renderer, while the apartment is still alive.
+        ///
+        /// A failure — most often "this thread has no COM apartment" — is
+        /// remembered rather than retried per control: it is a property of
+        /// the environment, not of any one call.
+        fn services(&mut self) -> Option<&IAccPropServices> {
+            use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
+            use windows::Win32::UI::Accessibility::CAccPropServices;
 
-        thread_local! {
-            static SERVICES: windows::core::Result<IAccPropServices> =
+            if matches!(self.services, ServiceState::Untried) {
                 // SAFETY: `CoCreateInstance` takes a class id, a null
                 // outer-unknown (documented valid for a non-aggregated
-                // object), and a context flag. The `windows` bindings
-                // return a `Result`, so a failure — including an
-                // uninitialized apartment — surfaces as `Err` rather than
-                // as an invalid interface pointer.
-                unsafe { CoCreateInstance(&CAccPropServices, None, CLSCTX_INPROC_SERVER) };
+                // object), and a context flag. The `windows` bindings return
+                // a `Result`, so a failure — including an uninitialized
+                // apartment — surfaces as `Err` rather than as an invalid
+                // interface pointer.
+                let created =
+                    unsafe { CoCreateInstance(&CAccPropServices, None, CLSCTX_INPROC_SERVER) };
+                self.services = created.map_or(ServiceState::Unavailable, ServiceState::Ready);
+            }
+            match &self.services {
+                ServiceState::Ready(services) => Some(services),
+                ServiceState::Untried | ServiceState::Unavailable => None,
+            }
         }
-
-        SERVICES.with(|services| services.as_ref().ok().map(f))
     }
 
     /// Reinterprets this crate's `windows-sys` handle as the `windows`

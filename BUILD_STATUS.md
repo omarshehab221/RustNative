@@ -2,7 +2,114 @@
 
 ## Current milestone
 
-**Second standards-audit remediation pass — complete.**
+**Milestone 25 — Advanced input system — complete.**
+
+### What was built
+
+`framework-core::input` holds the portable half: pointer, wheel, gesture,
+IME, clipboard, drag, and gamepad payloads; per-node `InputInterest` so
+high-frequency streams are opt-in; `GestureRecognizer` and `GamepadPoller`,
+the two pieces of input *logic* that do not depend on a platform and so exist
+once; and `InputRequests` for deferred pointer capture and drag feedback.
+`framework-windows::native::input` realizes it: mouse and hover,
+`WM_POINTER*` touch and pen with implicit per-contact capture, top-level
+mouse capture with lost capture reported as a cancel, IMM32 composition,
+clipboard shortcuts and change notifications, an OLE `IDropTarget` per
+window, and `XInput` polling that runs only while a node asks.
+
+### What it found
+
+1. **`WindowsClipboard::write_text` had never worked.** It opened the
+   clipboard with a NULL owner, and Microsoft documents that `EmptyClipboard`
+   then leaves the clipboard ownerless, which makes the following
+   `SetClipboardData` fail. Every write through the shipped service returned
+   "SetClipboardData failed". Nothing had ever written the clipboard for
+   real until this milestone's paste test did. Fixed with a throwaway
+   message-only owner window per write; `services::clipboard::tests::
+   written_text_reads_back` guards it.
+2. **A COM object outlived its apartment.** The accessibility annotator kept
+   its `IAccPropServices` in a `thread_local!`, released at thread exit —
+   after the thread's COM apartment was torn down. It never crashed before
+   only because COM was never initialized on the UI thread, so the object
+   was never created and annotation silently did nothing. Initializing OLE
+   for drag-and-drop made it real, and one native test crashed the process
+   with `STATUS_ACCESS_VIOLATION`. The service is now owned by the
+   per-window annotator and released with the window. (Side effect worth
+   stating plainly: accessible-name annotations on standard controls now
+   actually apply at runtime, where before they were a no-op.)
+3. **Wheel targeting asked the desktop, not the window.** Scroll-container
+   wheel handling used `GetCursorPos` + `WindowFromPoint`, answering with
+   whatever window is topmost on the desktop. It now hit-tests within the
+   window the message was delivered to, from the screen point
+   `WM_MOUSEWHEEL` itself carries.
+
+### Reentrancy, deliberately avoided
+
+`WM_CAPTURECHANGED` (sent from inside `SetCapture`/`ReleaseCapture`) and
+`WM_CLIPBOARDUPDATE` (sent cross-thread, deliverable during any
+message-processing Win32 call) can both arrive while the window's `Runtime`
+is already borrowed. Their handlers only re-post a private message and
+return; the posted message is handled on an unnested turn of the loop.
+
+An existing instance of the same hazard was noticed and **not** fixed in this
+milestone, because it predates it and changing it alters established event
+timing: `SetWindowTextW` on a native `EDIT` sends `EN_CHANGE` synchronously,
+which the container forwards to the root `window_proc`, which resolves the
+same `Runtime` that `Runtime::dispatch` is still borrowing. It is recorded
+under "Known remaining work" below.
+
+### Verified, and how
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (below)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+cargo run -p hello-label                                          starts and stays up
+```
+
+Native tests added (`native::input_integration`), all against real windows
+through the production loop: pointer delivery in node-local coordinates to
+interested nodes only (with a mouse tap recognized); capture routing outside
+the node, native release, and a lost capture becoming `PointerCancel`; wheel
+delivery to interested nodes vs. container scrolling with **zero renders**;
+Ctrl+C and `KeyUp`; IME start/commit/cancel on a focusable container; a real
+Shell data object for two real files driven through the registered
+`IDropTarget` exactly as OLE drives it; controller polling that is opt-in,
+backs off when nothing is connected, and is ignored by an inactive window;
+and two touch contacts described by real `POINTER_INFO`s that stay
+implicitly captured and pinch.
+
+### Not verified on this machine, and why
+
+This development shell runs inside a job object that denies clipboard access
+(`OpenClipboard` fails with `ERROR_ACCESS_DENIED` for every process it
+starts, PowerShell's `Set-Clipboard` included) and whose `SetCursorPos` does
+not produce mouse messages. Three tests need exactly those and are
+`#[ignore]`d with that reason rather than weakened into passing:
+
+- `native_pointer_hover_follows_the_real_cursor`
+- `native_clipboard_paste_and_change_notification`
+- `services::clipboard::tests::written_text_reads_back`
+
+CI runs them (`cargo test --workspace -- --ignored` on `windows-latest`),
+and so can anyone on an ordinary desktop session. Also not exercised with
+real hardware here: a physical touch screen, pen, or game controller (the
+tests stand in for the *device* with a real `POINTER_INFO` or a controller
+source; everything after that is production code), and an installed CJK IME
+(composition was driven with the IMM32 messages themselves, whose result
+strings are empty without an IME).
+
+### Known remaining work (carried forward)
+
+- **Nested `EN_CHANGE` during `SetWindowTextW`** re-resolves a `Runtime`
+  that is still mutably borrowed further up the stack (see above).
+
+---
+
+## Previous: second standards-audit remediation pass — complete.
 
 An earlier revision of this document claimed every `Audit.md` finding was
 already closed. That claim was wrong, and this pass began by checking it
@@ -525,6 +632,7 @@ Application
 22. Platform capability abstraction
 23. Native dialogs, menus, and system integration — realized (file dialogs, notifications, native menu bar), not just contracts
 24. Window lifecycle + multi-window support, including opening/closing windows at runtime
+25. Advanced input: pointers/touch/pen with capture, wheels, portable gestures, IME, clipboard events, OLE drag-and-drop, XInput controllers
 
 ## Structured task-scope guarantees
 

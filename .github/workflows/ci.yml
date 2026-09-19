@@ -130,5 +130,11 @@ jobs:
         run: cargo check --workspace --all-targets
       - name: cargo test (native backend included)
         run: cargo test --workspace
+      # Tests that need the interactive desktop's real cursor or the system
+      # clipboard are `#[ignore]`d so a restricted local shell reports them
+      # as not run instead of failing or silently passing; the runner's
+      # interactive session can run them, so it does.
+      - name: cargo test (interactive-desktop tests)
+        run: cargo test --workspace -- --ignored
       - name: cargo clippy (native backend included)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

@@ -191,6 +191,28 @@ impl Renderer {
         None
     }
 
+    /// The nearest scrollable container strictly between `hwnd` and the
+    /// node `stop` (walking outward), if any — the one a wheel event over
+    /// `hwnd` should scroll instead of reaching `stop`.
+    pub(crate) fn scrollable_ancestor_below(&self, hwnd: HWND, stop: NodeId) -> Option<NodeId> {
+        let mut current = hwnd;
+        while !current.is_null() {
+            if let Some(id) = self.registry.id_for_hwnd(current) {
+                if id == stop {
+                    return None;
+                }
+                if self.overflow_of(id) == Some(Overflow::Scroll) {
+                    return Some(id);
+                }
+            }
+            // SAFETY: `current` was just checked non-null and is a live
+            // HWND (the caller's or one `GetParent` returned); a null return
+            // ends the walk.
+            current = unsafe { GetParent(current) };
+        }
+        None
+    }
+
     /// Applies a live interaction transition (hover, press, focus) without
     /// rebuilding the declarative tree.
     ///

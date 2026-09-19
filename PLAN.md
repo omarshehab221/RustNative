@@ -542,26 +542,47 @@ Implemented:
   — closed or not — is kept alive until the whole native event loop returns,
   so this is sound even when a window closes itself.
 
+## Milestone 25 — Advanced input system
+
+Implemented:
+
+- portable payloads in `framework-core::input`: `PointerEvent` (mouse,
+  touch, pen; per-contact ids; buttons; modifiers; pressure; monotonic
+  timestamps), `WheelDelta` (1/120-notch lines, or pixels), `Gesture`,
+  `Composition`, `ClipboardAction`, `DragData`/`DropEffect`, and gamepad
+  `GamepadState`/`GamepadInput`, plus `KeyUp`, navigation/function keys, and
+  the meta modifier;
+- **opt-in delivery**: a node declares `InputInterest` (pointer, wheel,
+  gestures, drop target, gamepad) and only interested nodes — found by
+  walking up from the node under the pointer — receive those streams, so a
+  moving mouse is never a rerender storm;
+- portable **gesture recognition** (`GestureRecognizer`: tap, long press,
+  pan, two-finger pinch) driven from the pointer stream with an injected
+  clock, and portable **gamepad diffing** (`GamepadPoller` over a
+  `GamepadSource`) — logic that exists once for every future backend;
+- deferred **input requests** (`ComponentContext::input()` →
+  `InputRequests`): pointer capture/release and drag-feedback answers,
+  scoped to framework-wide node ids and applied by the backend after the
+  dispatch that made them;
+- Windows realization: mouse (all five buttons, hover enter/leave,
+  horizontal wheel), touch and pen through `WM_POINTER*` with implicit
+  per-contact capture (touch-promoted mouse messages recognized and
+  skipped), mouse capture on the top-level window with lost capture
+  delivered as `PointerCancel`, IMM32 composition for focusable custom
+  containers, Ctrl/Shift clipboard shortcuts plus `WM_CLIPBOARDUPDATE`,
+  an OLE `IDropTarget` per window (files and text; source-allowed effects
+  negotiated), and `XInput` controllers polled only while a node asks and
+  delivered only to the active window;
+- `Capability::{DragAndDrop, Touch, Pen, Gamepad, Ime}` advertised.
+
+Deliberately not done: mouse input is not moved into the pointer stack
+(`EnableMouseInPointer` is process-global and changes standard-control
+behavior); Windows' own `WM_GESTURE` is not used (it is mutually exclusive
+with `WM_POINTER`).
+
 ---
 
 # 4. Immediate next milestones
-
-## Milestone 25 — Advanced input system
-
-Expand the event system with:
-
-- pointer move/down/up;
-- pointer capture;
-- touch and multi-touch;
-- gestures;
-- drag and drop;
-- hover;
-- mouse wheel/trackpad detail;
-- IME/composition events;
-- clipboard events;
-- gamepad/controller input where available.
-
-Input should remain semantic in the core and native in the backend.
 
 ## Milestone 26 — Full accessibility bridge
 

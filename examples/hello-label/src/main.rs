@@ -2,8 +2,9 @@
 
 use framework_core::{
     AccessibilityInfo, AccessibilityRole, Alignment, Application, Callback, ColumnStyle, Component,
-    ComponentContext, EdgeInsets, Event, LayoutStyle, MenuBar, MenuItem, Node, NodeId, Overflow,
-    PanicPolicy, Platform, RowStyle, Size, SizeMode, TaskHandle, Window,
+    ComponentContext, DropEffect, EdgeInsets, Event, InputInterest, InputRequests, LayoutStyle,
+    MenuBar, MenuItem, Node, NodeId, Overflow, PanicPolicy, Platform, RowStyle, Size, SizeMode,
+    TaskHandle, Window,
 };
 use framework_windows::WindowsPlatform;
 
@@ -255,6 +256,7 @@ struct AppShell {
     child_name: String,
     settings_requested: bool,
     settings_opened_count: u32,
+    input_lab_requested: bool,
 }
 
 /// A separate root used to exercise the native multi-window host. It has no
@@ -332,6 +334,135 @@ impl Component for SettingsWindow {
     fn update(&mut self, _: Event) {}
 }
 
+/// Milestone 25's advanced input, live: opened from "File \u{2192} Input
+/// Lab". Every stream it shows is opt-in on a node (`with_input`), so the
+/// rest of the example never receives pointer or controller traffic.
+struct InputLab {
+    input: Option<InputRequests>,
+    pointer: String,
+    gesture: String,
+    wheel: String,
+    dropped: String,
+    keyboard: String,
+    gamepad: String,
+}
+
+impl Component for InputLab {
+    type Props = ();
+    type Message = ();
+
+    fn new((): Self::Props) -> Self {
+        let idle = || "\u{2014}".to_owned();
+        Self {
+            input: None,
+            pointer: idle(),
+            gesture: idle(),
+            wheel: idle(),
+            dropped: "Drop files here".to_owned(),
+            keyboard: idle(),
+            gamepad: "No controller input yet".to_owned(),
+        }
+    }
+
+    fn props(&self) -> &Self::Props {
+        static PROPS: () = ();
+        &PROPS
+    }
+
+    fn set_props(&mut self, (): Self::Props) {}
+
+    fn view(&self) -> Node {
+        let line = |key: &str, text: String| {
+            Node::label_with_layout(key, text, LayoutStyle::new().height(SizeMode::Fixed(24)))
+        };
+        Node::column_with_layout(
+            "lab-root",
+            [
+                Node::column_with_layout(
+                    "lab-pad",
+                    [line("lab-pad-hint", "Press, drag, pinch, or scroll here".to_owned())],
+                    LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Fixed(120)),
+                    ColumnStyle::new().padding(EdgeInsets::all(12)),
+                )
+                // Pointer capture is requested on press (see `update`), so a
+                // drag keeps reporting after it leaves the pad.
+                .with_input(InputInterest::new().pointer().gestures().wheel().gamepad())
+                // Focusable, so it can receive keys and IME composition.
+                .with_accessibility(
+                    AccessibilityInfo::new(AccessibilityRole::Group)
+                        .name("Input test pad")
+                        .focusable(true),
+                ),
+                line("lab-pointer", format!("Pointer: {}", self.pointer)),
+                line("lab-gesture", format!("Gesture: {}", self.gesture)),
+                line("lab-wheel", format!("Wheel: {}", self.wheel)),
+                line("lab-keyboard", format!("Keyboard/IME/clipboard: {}", self.keyboard)),
+                line("lab-gamepad", format!("Gamepad: {}", self.gamepad)),
+                Node::column_with_layout(
+                    "lab-drop",
+                    [line("lab-drop-text", self.dropped.clone())],
+                    LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Fixed(60)),
+                    ColumnStyle::new().padding(EdgeInsets::all(12)),
+                )
+                .with_input(InputInterest::new().drop_target()),
+            ],
+            LayoutStyle::new(),
+            ColumnStyle::new().padding(EdgeInsets::all(16)).gap(6),
+        )
+    }
+
+    fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+        self.input = Some(context.input());
+        self.view()
+    }
+
+    fn update(&mut self, event: Event) {
+        let Some(input) = self.input.clone() else {
+            return;
+        };
+        match event {
+            Event::PointerDown { pointer, .. } => {
+                input.capture_pointer("lab-pad", pointer.pointer_id());
+                self.pointer = format!("{:?} down at {:?}", pointer.kind(), pointer.position());
+            }
+            Event::PointerMove { pointer, .. } if !pointer.buttons().is_empty() => {
+                self.pointer = format!("dragging at {:?}", pointer.position());
+            }
+            Event::PointerUp { pointer, .. } => {
+                input.release_pointer("lab-pad", pointer.pointer_id());
+                self.pointer = format!("up at {:?}", pointer.position());
+            }
+            Event::PointerCancel { .. } => "cancelled (capture lost)".clone_into(&mut self.pointer),
+            Event::PointerEnter { .. } => "hovering".clone_into(&mut self.pointer),
+            Event::PointerLeave { .. } => "left the pad".clone_into(&mut self.pointer),
+            Event::Gesture { gesture, .. } => self.gesture = format!("{gesture:?}"),
+            Event::Wheel { delta, .. } => self.wheel = format!("{delta:?}"),
+            Event::KeyUp { key, .. } => self.keyboard = format!("released {key:?}"),
+            Event::Composition { composition, .. } => {
+                self.keyboard = format!("IME {composition:?}");
+            }
+            Event::Clipboard { action, .. } => self.keyboard = format!("{action:?}"),
+            Event::Gamepad { gamepad, input: change, .. } => {
+                self.gamepad = format!("#{gamepad}: {change:?}");
+            }
+            Event::DragEnter { data, .. } | Event::DragOver { data, .. } => {
+                let accept = !data.files().is_empty();
+                input.set_drop_effect(if accept { DropEffect::Copy } else { DropEffect::None });
+            }
+            Event::Drop { data, .. } => {
+                let names: Vec<_> = data
+                    .files()
+                    .iter()
+                    .filter_map(|path| path.file_name())
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .collect();
+                self.dropped = format!("Dropped: {}", names.join(", "));
+            }
+            _ => {}
+        }
+    }
+}
+
 impl AppShell {
     fn new() -> Self {
         Self {
@@ -341,6 +472,7 @@ impl AppShell {
             child_name: String::new(),
             settings_requested: false,
             settings_opened_count: 0,
+            input_lab_requested: false,
         }
     }
 
@@ -379,6 +511,15 @@ impl Component for AppShell {
             context.windows().open(
                 SettingsWindow::new(self.settings_opened_count),
                 Window::new("Rust Native UI — Settings", Size::new(360, 160)),
+                None,
+            );
+        }
+
+        if self.input_lab_requested {
+            self.input_lab_requested = false;
+            context.windows().open(
+                InputLab::new(()),
+                Window::new("Rust Native UI — Input Lab", Size::new(520, 440)),
                 None,
             );
         }
@@ -450,6 +591,8 @@ impl Component for AppShell {
                     self.panel_visible = !self.panel_visible;
                 } else if item == NodeId::from_key("file.new-settings-window") {
                     self.settings_requested = true;
+                } else if item == NodeId::from_key("file.input-lab") {
+                    self.input_lab_requested = true;
                 }
             }
             _ => {}
@@ -469,7 +612,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         MenuItem::submenu(
             "file",
             "File",
-            [MenuItem::action("file.new-settings-window", "New Settings Window")],
+            [
+                MenuItem::action("file.new-settings-window", "New Settings Window"),
+                MenuItem::action("file.input-lab", "Input Lab"),
+            ],
         ),
         MenuItem::submenu("view", "View", [MenuItem::action("view.toggle-panel", "Toggle Panel")]),
     ]);

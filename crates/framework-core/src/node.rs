@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::event::AccessibilityInfo;
 use crate::identity::NodeId;
+use crate::input::InputInterest;
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
 use crate::style::VisualStyle;
 
@@ -268,6 +269,33 @@ impl Node {
         }
     }
 
+    /// Declares which advanced input (pointer, wheel, gestures, drops,
+    /// gamepad) this node wants delivered to it; see [`InputInterest`] for
+    /// why that is opt-in.
+    #[must_use]
+    pub fn with_input(mut self, input: InputInterest) -> Self {
+        match &mut self {
+            Self::Label(node) => node.input = input,
+            Self::Button(node) => node.input = input,
+            Self::TextInput(node) => node.input = input,
+            Self::Column(node) => node.input = input,
+            Self::Row(node) => node.input = input,
+        }
+        self
+    }
+
+    /// Returns which advanced input this node wants.
+    #[must_use]
+    pub fn input(&self) -> InputInterest {
+        match self {
+            Self::Label(node) => node.input,
+            Self::Button(node) => node.input,
+            Self::TextInput(node) => node.input,
+            Self::Column(node) => node.input,
+            Self::Row(node) => node.input,
+        }
+    }
+
     /// Returns whether this node is disabled.
     #[must_use]
     pub fn is_disabled(&self) -> bool {
@@ -456,6 +484,7 @@ macro_rules! leaf_node {
             accessibility: AccessibilityInfo,
             visual_style: VisualStyle,
             disabled: bool,
+            input: InputInterest,
         }
 
         impl $name {
@@ -488,6 +517,7 @@ macro_rules! leaf_node {
                         .focusable($focusable),
                     visual_style: VisualStyle::default(),
                     disabled: false,
+                    input: InputInterest::new(),
                 }
             }
 
@@ -552,6 +582,7 @@ macro_rules! container_node {
             accessibility: AccessibilityInfo,
             visual_style: VisualStyle,
             disabled: bool,
+            input: InputInterest,
         }
 
         impl $name {
@@ -564,6 +595,7 @@ macro_rules! container_node {
                     accessibility: AccessibilityInfo::new(crate::event::AccessibilityRole::Group),
                     visual_style: VisualStyle::default(),
                     disabled: false,
+                    input: InputInterest::new(),
                 }
             }
 

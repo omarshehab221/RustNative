@@ -12,6 +12,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use super::context::HostRef;
+use super::input::{self, InputState};
 use super::menu::build_native_menu;
 use super::rendering::Renderer;
 use super::util::{module_instance, wide};
@@ -42,6 +43,9 @@ pub(crate) struct Runtime {
     pub(crate) hovered: Option<NodeId>,
     pub(crate) pressed: Option<NodeId>,
     pub(crate) destroyed: bool,
+    /// Advanced-input bookkeeping (pointers, capture, IME, drag-and-drop,
+    /// controllers) — see `native::input`.
+    pub(crate) input: InputState,
 }
 
 impl Runtime {
@@ -67,7 +71,9 @@ impl Runtime {
         }) else {
             return Ok(());
         };
-        self.renderer.render(&tree, self.window, &theme)
+        self.renderer.render(&tree, self.window, &theme)?;
+        input::after_render(self);
+        Ok(())
     }
 
     pub(crate) fn relayout(&mut self) {
@@ -113,6 +119,7 @@ impl Runtime {
         if handled {
             self.render()?;
         }
+        self.apply_input_requests();
 
         // A component may have queued a window-open or window-close
         // request while handling that event (see `ComponentContext::windows`).
@@ -124,7 +131,18 @@ impl Runtime {
         if self.with_application(|application| application.pump_tasks_for(self.window_id)) {
             self.render()?;
         }
+        self.apply_input_requests();
         self.sync_windows()
+    }
+
+    /// Applies the pointer-capture and drag-feedback requests components
+    /// queued while handling the dispatch or task pump that just finished.
+    fn apply_input_requests(&mut self) {
+        let window = self.window_id;
+        let requests = self.with_application(|application| application.take_input_requests(window));
+        if !requests.is_empty() {
+            input::apply_requests(self, requests);
+        }
     }
 
     /// Picks up any window opened or closed since the last sync. See
@@ -305,6 +323,7 @@ impl WindowRegistry {
             hovered: None,
             pressed: None,
             destroyed: false,
+            input: InputState::default(),
         });
 
         let runtime_ptr: *mut Runtime = &raw mut *runtime;
@@ -395,6 +414,11 @@ impl WindowRegistry {
             let (_, commands) = built.into_attached();
             runtime.menu_commands = commands;
         }
+
+        // Drops and clipboard-change notifications are registered before
+        // the first render, so a window is never briefly shown without them.
+        input::drop_target::register(runtime);
+        input::clipboard::listen(runtime);
 
         let wake_target = hwnd as usize;
         // SAFETY: `wake_target` is `hwnd` captured as a plain integer

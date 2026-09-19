@@ -12,10 +12,11 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is the **standards-audit remediation pass**
-(`Audit.md`), on top of Window Lifecycle + Multi-Window Support. See
-`BUILD_STATUS.md` for what that pass closed, what it found while closing it,
-and what is still open.
+The latest completed milestone is **Milestone 25 — Advanced Input System**
+(pointers, capture, touch, pen, gestures, wheels, IME, clipboard events,
+drag-and-drop, and game controllers), on top of the standards-audit
+remediation pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
+verified, what it found while doing so, and what is still open.
 
 ## Architecture
 
@@ -120,13 +121,16 @@ RustNative/
 │               ├── registry.rs      (NodeId <-> native object, both directions)
 │               ├── rendering/       (realization, controls, styling,
 │               │                     accessibility, scrolling)
-│               ├── input.rs         (key translation, focus/hover/press)
+│               ├── input/           (keys, focus, pointers/capture/gestures,
+│               │                     IME, clipboard events, OLE drop target,
+│               │                     XInput controllers)
 │               ├── measure.rs       (GDI text measurement)
 │               ├── menu.rs          (MenuBar -> HMENU, with RAII)
 │               ├── user_data.rs     (typed GWLP_USERDATA accessors)
 │               ├── window_handles.rs
 │               ├── harness.rs       (test-only bounded message pump)
-│               └── integration.rs   (test-only native scenarios)
+│               ├── integration.rs   (test-only native scenarios)
+│               └── input_integration.rs (test-only advanced-input scenarios)
 │
 ├── examples/
 │   ├── hello-label/
@@ -158,6 +162,9 @@ Contains the portable runtime and UI model:
 - intrinsic measurement contracts;
 - overflow/clipping/scroll semantics;
 - focus/keyboard abstractions;
+- advanced input: pointer/touch/pen events with capture, wheels, portable
+  gesture recognition, IME composition, clipboard actions, drag-and-drop, and
+  gamepad diffing, all opt-in per node;
 - accessibility semantics;
 - scheduler;
 - task scopes;
@@ -179,6 +186,8 @@ Owns Windows-specific implementation details:
 - Win32 event translation;
 - native text measurement;
 - native focus APIs;
+- advanced input (`WM_POINTER*`, mouse capture, IMM32, OLE drag-and-drop,
+  `XInput`);
 - native scrolling/viewport implementation;
 - Windows event-loop wakeups;
 - the accessibility bridge (`WS_TABSTOP`, and MSAA dynamic annotation for
@@ -340,6 +349,38 @@ Scrollable container
 
 Scroll position is transient runtime state and does not itself trigger a component rerender.
 
+## Advanced input
+
+Beyond clicks, keys, text, and focus — which every node receives — a node opts
+into the higher-frequency streams it actually wants:
+
+```rust
+Node::column("canvas", children)
+    .with_input(InputInterest::new().pointer().gestures().wheel())
+```
+
+A backend delivers those streams only to interested nodes, walking up from
+whatever is under the pointer to the nearest one that asked. A component that
+needs every sample of a drag, even outside its bounds, captures the pointer
+through a deferred request:
+
+```rust
+fn render(&mut self, context: &mut ComponentContext<'_, ()>) -> Node {
+    self.input = Some(context.input()); // keep for `update`
+    self.view()
+}
+// in `update`, on `Event::PointerDown { pointer, .. }`:
+// self.input.capture_pointer("canvas", pointer.pointer_id());
+```
+
+Gesture recognition (tap, long press, pan, pinch) and gamepad state diffing
+live in `framework-core`, not in a backend, so every platform agrees on what a
+tap is. The Windows backend realizes the rest natively: `WM_POINTER*` for
+touch and pen, top-level mouse capture with lost capture reported as
+`PointerCancel`, IMM32 composition for focusable custom containers, an OLE
+`IDropTarget` per window, clipboard shortcuts and `WM_CLIPBOARDUPDATE`, and
+`XInput` controllers polled only while some node asks for them.
+
 ## Focus, keyboard, and accessibility
 
 The core exposes semantic input events instead of Win32 virtual-key constants. The Windows backend translates native input to those events.
@@ -426,10 +467,20 @@ creation reentrancy, stale-event rejection, and every component-panic policy.
 Those tests need an interactive window station — true on a developer machine
 and on GitHub's `windows-latest` runner, not true under a service account.
 
+A few tests need more than a window station: the real cursor (hover is
+decided by where it actually is) or access to the system clipboard. Those are
+`#[ignore]`d with a reason, so a restricted shell reports them as *not run*
+rather than failing or quietly passing, and CI runs them explicitly:
+
+```powershell
+cargo test --workspace -- --ignored
+```
+
 ## Roadmap
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Advanced Input System**. The roadmap then
-proceeds through accessibility, animations, virtualization, custom rendering,
-persistence/navigation, CLI/packaging, and additional native backends.
+The next implementation target is **Milestone 26 — Full Accessibility
+Bridge** (a real UI Automation provider). The roadmap then proceeds through
+animations, virtualization, custom rendering, persistence/navigation,
+CLI/packaging, and additional native backends.

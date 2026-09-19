@@ -278,6 +278,15 @@ impl Application {
         changed
     }
 
+    /// Drains window `id`'s pending [`crate::InputRequest`]s (pointer
+    /// capture and drag feedback), or returns nothing if it is not open.
+    pub fn take_input_requests(&mut self, id: WindowId) -> Vec<crate::InputRequest> {
+        self.windows
+            .get_mut(&id)
+            .map(|entry| entry.components.take_input_requests())
+            .unwrap_or_default()
+    }
+
     /// Returns the primary window's scheduler.
     #[must_use]
     pub fn scheduler(&self) -> &Scheduler {

@@ -43,6 +43,11 @@ impl Platform for WindowsPlatform {
             Capability::FileDialogs,
             Capability::Notifications,
             Capability::Menus,
+            Capability::DragAndDrop,
+            Capability::Touch,
+            Capability::Pen,
+            Capability::Gamepad,
+            Capability::Ime,
         ])
     }
 
@@ -82,10 +87,16 @@ mod tests {
         assert!(capabilities.supports(Capability::FileDialogs));
         assert!(capabilities.supports(Capability::Notifications));
         assert!(capabilities.supports(Capability::Menus));
-        // Drag-and-drop, system sharing, and system-appearance change
-        // notifications are still only portable contracts (see PLAN.md);
-        // this backend does not yet realize them.
-        assert!(!capabilities.supports(Capability::DragAndDrop));
+        // Milestone 25: OLE drop target, `WM_POINTER` touch and pen,
+        // `XInput` controllers, and IMM32 composition.
+        assert!(capabilities.supports(Capability::DragAndDrop));
+        assert!(capabilities.supports(Capability::Touch));
+        assert!(capabilities.supports(Capability::Pen));
+        assert!(capabilities.supports(Capability::Gamepad));
+        assert!(capabilities.supports(Capability::Ime));
+        // System sharing and system-appearance change notifications are
+        // still only portable contracts (see PLAN.md); this backend does
+        // not yet realize them.
         assert!(!capabilities.supports(Capability::SystemShare));
         assert!(!capabilities.supports(Capability::SystemAppearance));
     }

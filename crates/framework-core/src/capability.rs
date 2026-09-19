@@ -34,6 +34,14 @@ pub enum Capability {
     DragAndDrop,
     /// Native menu bars/context menus.
     Menus,
+    /// Touch-screen contacts delivered as pointer events.
+    Touch,
+    /// Pen/stylus input delivered as pointer events (with pressure).
+    Pen,
+    /// Game-controller input.
+    Gamepad,
+    /// Input-method (IME) composition events for custom text targets.
+    Ime,
 }
 
 /// The set of [`Capability`]s one platform adapter actually realizes.

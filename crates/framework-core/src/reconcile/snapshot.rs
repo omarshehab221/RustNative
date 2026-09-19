@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use crate::event::AccessibilityInfo;
 use crate::identity::NodeId;
+use crate::input::InputInterest;
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
 use crate::node::{Node, TreeError};
 #[cfg(test)]
@@ -73,6 +74,9 @@ pub struct TreeNode {
     pub visual_style: ResolvedStyle,
     /// Whether the node is disabled.
     pub disabled: bool,
+    /// Which advanced input the node wants delivered (see
+    /// [`crate::InputInterest`]).
+    pub input: InputInterest,
 }
 
 impl TreeNode {
@@ -100,6 +104,7 @@ impl TreeNode {
             // no theme applied (see its own doc comment).
             visual_style: ResolvedStyle::default(),
             disabled: node.is_disabled(),
+            input: node.input(),
         }
     }
 }

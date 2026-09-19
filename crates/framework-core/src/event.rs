@@ -1,6 +1,9 @@
 //! Semantic input events delivered from a platform backend to a component.
 
 use crate::identity::{NodeId, WindowId};
+use crate::input::{
+    ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, WheelDelta,
+};
 use crate::layout::{Point, Size};
 use crate::window::WindowPresentation;
 
@@ -94,6 +97,136 @@ pub enum Event {
         /// The identity of the menu item that was selected.
         item: NodeId,
     },
+    /// A key was released. Delivered like [`Event::KeyDown`].
+    KeyUp {
+        /// The focused node, or `None` if no node has focus.
+        target: Option<NodeId>,
+        /// The key that was released.
+        key: KeyCode,
+        /// Which modifier keys were held down at the same time.
+        modifiers: KeyModifiers,
+    },
+    /// A pointer contact began (button pressed, finger or pen touched) on
+    /// a node with pointer interest (see [`crate::InputInterest`]).
+    PointerDown {
+        /// The interested node.
+        target: NodeId,
+        /// The sample, in `target`'s local coordinates.
+        pointer: PointerEvent,
+    },
+    /// A pointer moved over (or, while captured, anywhere on behalf of) a
+    /// node with pointer interest.
+    PointerMove {
+        /// The interested node.
+        target: NodeId,
+        /// The sample, in `target`'s local coordinates.
+        pointer: PointerEvent,
+    },
+    /// A pointer contact ended.
+    PointerUp {
+        /// The interested node.
+        target: NodeId,
+        /// The sample, in `target`'s local coordinates.
+        pointer: PointerEvent,
+    },
+    /// A pointer contact was taken away without ending normally — pointer
+    /// capture was lost, or the window was deactivated mid-press. Treat
+    /// like an up event that must not commit anything.
+    PointerCancel {
+        /// The interested node.
+        target: NodeId,
+        /// The last sample, in `target`'s local coordinates.
+        pointer: PointerEvent,
+    },
+    /// The pointer entered a node with pointer interest (hover began).
+    PointerEnter {
+        /// The interested node.
+        target: NodeId,
+    },
+    /// The pointer left a node with pointer interest (hover ended).
+    PointerLeave {
+        /// The interested node.
+        target: NodeId,
+    },
+    /// A scroll wheel or trackpad scrolled over a node with wheel interest.
+    Wheel {
+        /// The interested node.
+        target: NodeId,
+        /// How far, and in which unit.
+        delta: WheelDelta,
+    },
+    /// A gesture was recognized on a node with gesture interest.
+    Gesture {
+        /// The interested node.
+        target: NodeId,
+        /// The gesture, in `target`'s local coordinates.
+        gesture: Gesture,
+    },
+    /// An input-method composition step for the focused node.
+    Composition {
+        /// The focused node, or `None` if no node has focus.
+        target: Option<NodeId>,
+        /// The composition step.
+        composition: Composition,
+    },
+    /// The person performed a clipboard operation on the focused node.
+    Clipboard {
+        /// The focused node, or `None` if no node has focus.
+        target: Option<NodeId>,
+        /// The operation.
+        action: ClipboardAction,
+    },
+    /// The system clipboard's content changed (from any application).
+    /// Routed like a window-lifecycle event, to the window's root
+    /// component.
+    ClipboardChanged {
+        /// The window being notified.
+        window: WindowId,
+    },
+    /// A drag entered a drop-target node. Answer with
+    /// `ComponentContext::input().set_drop_effect(...)` to accept it.
+    DragEnter {
+        /// The drop-target node.
+        target: NodeId,
+        /// What is being dragged.
+        data: DragData,
+        /// Pointer position in `target`'s local coordinates.
+        position: Point,
+    },
+    /// A drag moved over a drop-target node.
+    DragOver {
+        /// The drop-target node.
+        target: NodeId,
+        /// What is being dragged.
+        data: DragData,
+        /// Pointer position in `target`'s local coordinates.
+        position: Point,
+    },
+    /// A drag left a drop-target node without dropping.
+    DragLeave {
+        /// The drop-target node.
+        target: NodeId,
+    },
+    /// Data was dropped on a drop-target node that accepted it.
+    Drop {
+        /// The drop-target node.
+        target: NodeId,
+        /// What was dropped.
+        data: DragData,
+        /// Drop position in `target`'s local coordinates.
+        position: Point,
+    },
+    /// A game controller changed, delivered to the first node (in
+    /// declarative order) of the active window that declared gamepad
+    /// interest.
+    Gamepad {
+        /// The interested node.
+        target: NodeId,
+        /// Which controller (slot number, stable while it stays connected).
+        gamepad: u32,
+        /// What changed.
+        input: GamepadInput,
+    },
 }
 
 impl Event {
@@ -103,16 +236,34 @@ impl Event {
     #[must_use]
     pub const fn target(&self) -> Option<NodeId> {
         match self {
-            Self::Click { target } | Self::FocusGained { target } | Self::FocusLost { target } => {
-                Some(*target)
-            }
-            Self::KeyDown { target, .. } | Self::TextInput { target, .. } => *target,
-            Self::TextChanged { target, .. } => Some(*target),
+            Self::Click { target }
+            | Self::FocusGained { target }
+            | Self::FocusLost { target }
+            | Self::TextChanged { target, .. }
+            | Self::PointerDown { target, .. }
+            | Self::PointerMove { target, .. }
+            | Self::PointerUp { target, .. }
+            | Self::PointerCancel { target, .. }
+            | Self::PointerEnter { target }
+            | Self::PointerLeave { target }
+            | Self::Wheel { target, .. }
+            | Self::Gesture { target, .. }
+            | Self::DragEnter { target, .. }
+            | Self::DragOver { target, .. }
+            | Self::DragLeave { target }
+            | Self::Drop { target, .. }
+            | Self::Gamepad { target, .. } => Some(*target),
+            Self::KeyDown { target, .. }
+            | Self::KeyUp { target, .. }
+            | Self::TextInput { target, .. }
+            | Self::Composition { target, .. }
+            | Self::Clipboard { target, .. } => *target,
             Self::WindowResized { .. }
             | Self::WindowMoved { .. }
             | Self::WindowCloseRequested { .. }
             | Self::WindowStateChanged { .. }
-            | Self::MenuAction { .. } => None,
+            | Self::MenuAction { .. }
+            | Self::ClipboardChanged { .. } => None,
         }
     }
 
@@ -123,19 +274,37 @@ impl Event {
             Self::Click { target: current }
             | Self::FocusGained { target: current }
             | Self::FocusLost { target: current }
-            | Self::TextChanged { target: current, .. } => {
+            | Self::TextChanged { target: current, .. }
+            | Self::PointerDown { target: current, .. }
+            | Self::PointerMove { target: current, .. }
+            | Self::PointerUp { target: current, .. }
+            | Self::PointerCancel { target: current, .. }
+            | Self::PointerEnter { target: current }
+            | Self::PointerLeave { target: current }
+            | Self::Wheel { target: current, .. }
+            | Self::Gesture { target: current, .. }
+            | Self::DragEnter { target: current, .. }
+            | Self::DragOver { target: current, .. }
+            | Self::DragLeave { target: current }
+            | Self::Drop { target: current, .. }
+            | Self::Gamepad { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }
             }
-            Self::KeyDown { target: current, .. } | Self::TextInput { target: current, .. } => {
+            Self::KeyDown { target: current, .. }
+            | Self::KeyUp { target: current, .. }
+            | Self::TextInput { target: current, .. }
+            | Self::Composition { target: current, .. }
+            | Self::Clipboard { target: current, .. } => {
                 *current = target;
             }
             Self::WindowResized { .. }
             | Self::WindowMoved { .. }
             | Self::WindowCloseRequested { .. }
             | Self::WindowStateChanged { .. }
-            | Self::MenuAction { .. } => {}
+            | Self::MenuAction { .. }
+            | Self::ClipboardChanged { .. } => {}
         }
         self
     }
@@ -164,6 +333,20 @@ pub enum KeyCode {
     ArrowUp,
     /// The down arrow key.
     ArrowDown,
+    /// The Delete (forward delete) key.
+    Delete,
+    /// The Insert key.
+    Insert,
+    /// The Home key.
+    Home,
+    /// The End key.
+    End,
+    /// The Page Up key.
+    PageUp,
+    /// The Page Down key.
+    PageDown,
+    /// A function key, `F1` through `F24`, carrying its number.
+    Function(u8),
     /// A printable character key, carrying the character it produces.
     Character(char),
     /// A key this crate does not yet name explicitly, carrying the
@@ -173,6 +356,10 @@ pub enum KeyCode {
 
 /// Which modifier keys were held down when a [`KeyCode`] was produced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "four independent physical keys, each held or not; not a state machine in disguise"
+)]
 pub struct KeyModifiers {
     /// Whether either Shift key was held down.
     pub shift: bool,
@@ -180,6 +367,9 @@ pub struct KeyModifiers {
     pub ctrl: bool,
     /// Whether either Alt key was held down.
     pub alt: bool,
+    /// Whether the platform's "meta" key (Windows key, Command, Super) was
+    /// held down.
+    pub meta: bool,
 }
 
 /// A portable accessibility role. Mirrors the small set of controls this

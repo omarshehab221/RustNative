@@ -89,6 +89,9 @@ pub(crate) struct NativeHarness {
     /// Set once `WM_QUIT` has been seen, so a test can assert that the
     /// backend asked to exit (the panic boundary's observable effect).
     quit: bool,
+    /// Declared after `registry` so it is dropped after it, as in
+    /// `run_application`.
+    _ole: super::app::OleApartment,
     _lock: MutexGuard<'static, ()>,
 }
 
@@ -114,9 +117,10 @@ impl NativeHarness {
         register_window_classes(module_instance())
             .expect("registering this backend's window classes must succeed");
 
+        let ole = super::app::OleApartment::enter();
         // SAFETY: forwarded from this function's own contract above.
         let registry = Box::new(unsafe { WindowRegistry::new(application) });
-        let mut harness = Self { registry, quit: false, _lock: lock };
+        let mut harness = Self { registry, quit: false, _ole: ole, _lock: lock };
         harness.registry.sync().expect("bringing up the application's initial windows");
         harness.pump();
         harness
@@ -187,6 +191,55 @@ impl NativeHarness {
     /// Panics if `id` names no window the backend created.
     pub(crate) fn with_runtime<R>(&self, id: WindowId, f: impl FnOnce(&Runtime) -> R) -> R {
         f(self.registry.runtimes.get(&id).expect("the harness was asked about an unknown window"))
+    }
+
+    /// Runs `f` against one window's `Runtime` mutably — for tests that
+    /// stand in a fake device (a controller source) or drive a backend
+    /// entry point directly with a native structure of their own.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `id` names no window the backend created.
+    pub(crate) fn with_runtime_mut<R>(
+        &mut self,
+        id: WindowId,
+        f: impl FnOnce(&mut Runtime) -> R,
+    ) -> R {
+        let runtime = self
+            .registry
+            .runtimes
+            .get_mut(&id)
+            .expect("the harness was asked about an unknown window");
+        let result = f(runtime);
+        self.pump();
+        result
+    }
+
+    /// Posts `message` to `hwnd` — through the queue, so it reaches the
+    /// loop's pre-dispatch pass exactly as real input does — and pumps.
+    pub(crate) fn post(&mut self, hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) {
+        // SAFETY: `hwnd` is a live window owned by this thread;
+        // `PostMessageW` takes no pointer arguments beyond it.
+        let posted = unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::PostMessageW(hwnd, message, wparam, lparam)
+        } != 0;
+        assert!(posted, "posting a test message must succeed");
+        self.pump();
+    }
+
+    /// Sends `message` to `hwnd` synchronously, then pumps whatever it
+    /// caused to be posted.
+    pub(crate) fn send(
+        &mut self,
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> isize {
+        // SAFETY: as in `post`.
+        let result = unsafe { SendMessageW(hwnd, message, wparam, lparam) };
+        self.pump();
+        result
     }
 
     /// One window's native top-level `HWND`.

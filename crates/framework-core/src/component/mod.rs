@@ -16,7 +16,7 @@ mod effects;
 mod error;
 mod tree;
 
-pub use context::{Callback, ComponentContext, WindowRequests};
+pub use context::{Callback, ComponentContext, InputRequest, InputRequests, WindowRequests};
 pub use effects::{EffectCleanup, EffectContext};
 pub use error::RenderError;
 pub use tree::ComponentTree;

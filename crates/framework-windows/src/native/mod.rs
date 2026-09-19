@@ -7,7 +7,9 @@ mod container;
 pub(crate) mod context;
 #[cfg(test)]
 mod harness;
-mod input;
+pub(crate) mod input;
+#[cfg(test)]
+mod input_integration;
 #[cfg(test)]
 mod integration;
 mod measure;

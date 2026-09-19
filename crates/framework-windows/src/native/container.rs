@@ -9,7 +9,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_CTLCOLORSTATIC, WM_ERASEBKGND,
 };
 
-use super::context::root_window;
+use super::context::{root_window, with_runtime};
+use super::input::ime;
 use super::message_loop::{panic_payload_message, poison_runtime_and_quit};
 use super::rendering::styling::background_brush_for;
 use super::user_data::RuntimeSlot;
@@ -68,6 +69,15 @@ fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM)
             // handlers for these same message values already expect in that
             // shape.
             unsafe { SendMessageW(root, message, wparam, lparam) }
+        }
+        ime::WM_IME_STARTCOMPOSITION | ime::WM_IME_COMPOSITION | ime::WM_IME_ENDCOMPOSITION => {
+            // A focusable container composes IME text itself; see
+            // `native::input::ime`.
+            let handled = with_runtime(root_window(hwnd), |runtime| {
+                ime::handle(runtime, hwnd, message, lparam)
+            })
+            .unwrap_or(false);
+            if handled { 0 } else { default() }
         }
         WM_ERASEBKGND => {
             // A container paints its own background directly, because —

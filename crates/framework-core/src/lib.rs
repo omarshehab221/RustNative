@@ -92,6 +92,7 @@
 //! |---|---|
 //! | [`identity`] | [`NodeId`]/[`ComponentId`]/[`WindowId`] allocation and the collision-free key interner |
 //! | [`event`] | [`Event`], keyboard/accessibility types |
+//! | [`input`] | Pointer/wheel/gesture/IME/clipboard/drag/gamepad payloads, [`GestureRecognizer`], [`GamepadPoller`] |
 //! | [`node`] | The declarative [`Node`] tree a component's `view`/`render` returns |
 //! | [`component`] | [`Component`], [`ComponentContext`], and the framework-managed [`ComponentTree`] |
 //! | [`reconcile`] | Snapshotting a [`Node`] tree and diffing two snapshots |
@@ -133,6 +134,7 @@ pub mod capability;
 pub mod component;
 pub mod event;
 pub mod identity;
+pub mod input;
 pub mod layout;
 pub mod menu;
 pub mod node;
@@ -148,10 +150,16 @@ pub use application::Application;
 pub use capability::{Capability, PlatformCapabilities};
 pub use component::{
     Callback, Component, ComponentContext, ComponentHost, ComponentTree, EffectCleanup,
-    EffectContext, RenderError, WindowRequests,
+    EffectContext, InputRequest, InputRequests, RenderError, WindowRequests,
 };
 pub use event::{AccessibilityInfo, AccessibilityRole, Event, KeyCode, KeyModifiers};
 pub use identity::{ComponentId, NodeId, WindowId};
+pub use input::{
+    ClipboardAction, Composition, DragData, DropEffect, GamepadAxis, GamepadButton, GamepadInput,
+    GamepadPoller, GamepadSource, GamepadState, Gesture, GestureConfig, GesturePhase,
+    GestureRecognizer, InputInterest, PointerButton, PointerButtons, PointerEvent, PointerKind,
+    PointerPhase, Scalar, WheelDelta,
+};
 pub use layout::{
     Alignment, ColumnStyle, Constraints, DefaultIntrinsicMeasurer, EdgeInsets, IntrinsicMeasurer,
     LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, Overflow, Point, Rect, RowStyle,

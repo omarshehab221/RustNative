@@ -51,7 +51,21 @@ windows = { version = ">=0.60, <=0.62", default-features = false, features = [
     # `IAccPropServices::SetHwndProp`) behind.
     "Win32_System_Ole",
     "Win32_System_Variant",
+    # Milestone 25's drag-and-drop target (`native::input::drop_target`)
+    # implements OLE's `IDropTarget` and reads `IDataObject` media, which
+    # need the storage-medium (`STGMEDIUM`), global-memory, and
+    # modifier-key-state definitions these gate.
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Memory",
+    "Win32_System_SystemServices",
     "Win32_UI_Accessibility",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
 ] }
+# `windows::core::implement` — used to author COM objects this crate hands
+# *to* the OS (the OLE drop target in `native::input::drop_target`) —
+# expands to paths rooted at `::windows_core`, so the crate that uses the
+# macro must depend on it by that name. Version-locked to the same range as
+# `windows` above, which re-exports it.
+windows-core = { version = ">=0.60, <=0.62", default-features = false }

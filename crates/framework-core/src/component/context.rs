@@ -12,7 +12,8 @@ use std::time::Duration;
 use super::Component;
 use super::effects::{EffectCleanup, EffectContext};
 use super::tree::ComponentTree;
-use crate::identity::{ComponentId, WindowId};
+use crate::identity::{ComponentId, NodeId, WindowId};
+use crate::input::DropEffect;
 use crate::node::Node;
 use crate::scheduler::{SleepFuture, TaskHandle, TaskScope};
 use crate::services::Services;
@@ -66,6 +67,126 @@ impl WindowRequests {
     /// is a harmless no-op, matching `Application::close_window`.
     pub fn close(&self, id: WindowId) {
         self.sink.borrow_mut().push_back(WindowCommand::Close(id));
+    }
+}
+
+/// A request from a component to the platform backend about advanced
+/// input, queued through [`InputRequests`] and drained by the backend
+/// (`Application::take_input_requests`) after the dispatch that produced
+/// it completes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum InputRequest {
+    /// Route every event from `pointer_id` to `node` until released, even
+    /// when the pointer leaves it.
+    CapturePointer {
+        /// The framework-wide identity of the capturing node.
+        node: NodeId,
+        /// Which contact to capture.
+        pointer_id: u32,
+    },
+    /// End a capture started with [`InputRequest::CapturePointer`].
+    ReleasePointer {
+        /// The framework-wide identity of the capturing node.
+        node: NodeId,
+        /// Which contact to release.
+        pointer_id: u32,
+    },
+    /// The answer to the most recent `DragEnter`/`DragOver`: what would
+    /// happen if the data were dropped now.
+    SetDropEffect(DropEffect),
+}
+
+/// A component's handle for requesting pointer capture and answering drag
+/// feedback.
+///
+/// Obtained during `render` through [`ComponentContext::input`] and, like a
+/// [`Callback`], kept in component state so `update` can use it — `update`
+/// itself receives no context. Requests are deferred: the backend applies
+/// them once the current dispatch finishes, so a component never reaches
+/// into native state mid-update.
+///
+/// # Example
+///
+/// ```
+/// use framework_core::{
+///     Component, ComponentContext, Event, InputInterest, InputRequests, Node,
+/// };
+///
+/// struct Slider {
+///     input: Option<InputRequests>,
+///     dragging: bool,
+/// }
+///
+/// impl Component for Slider {
+///     type Props = ();
+///     type Message = ();
+///     fn new((): ()) -> Self { Self { input: None, dragging: false } }
+///     fn props(&self) -> &() { &() }
+///     fn set_props(&mut self, (): ()) {}
+///     fn view(&self) -> Node {
+///         Node::column("track", []).with_input(InputInterest::new().pointer())
+///     }
+///     fn render(&mut self, context: &mut ComponentContext<'_, ()>) -> Node {
+///         self.input = Some(context.input());
+///         self.view()
+///     }
+///     fn update(&mut self, event: Event) {
+///         match event {
+///             Event::PointerDown { pointer, .. } => {
+///                 self.dragging = true;
+///                 // Keep receiving moves even when the pointer leaves the track.
+///                 if let Some(input) = &self.input {
+///                     input.capture_pointer("track", pointer.pointer_id());
+///                 }
+///             }
+///             Event::PointerUp { .. } | Event::PointerCancel { .. } => self.dragging = false,
+///             _ => {}
+///         }
+///     }
+/// }
+/// ```
+#[derive(Clone)]
+pub struct InputRequests {
+    owner: ComponentId,
+    sink: Rc<RefCell<VecDeque<InputRequest>>>,
+}
+
+impl fmt::Debug for InputRequests {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InputRequests").field("owner", &self.owner).finish_non_exhaustive()
+    }
+}
+
+impl InputRequests {
+    pub(crate) fn new(owner: ComponentId, sink: Rc<RefCell<VecDeque<InputRequest>>>) -> Self {
+        Self { owner, sink }
+    }
+
+    /// Resolves a component-local key to the framework-wide identity the
+    /// backend knows the node by — the same scoping `ComponentTree`
+    /// applies to every node a component renders.
+    fn global(&self, key: &str) -> NodeId {
+        let local = NodeId::from_key(key);
+        if self.owner == ComponentId::ROOT { local } else { NodeId::scoped(self.owner, local) }
+    }
+
+    /// Captures `pointer_id` to this component's node `key`.
+    pub fn capture_pointer(&self, key: impl AsRef<str>, pointer_id: u32) {
+        let node = self.global(key.as_ref());
+        self.sink.borrow_mut().push_back(InputRequest::CapturePointer { node, pointer_id });
+    }
+
+    /// Releases a capture of `pointer_id` held by this component's node
+    /// `key`.
+    pub fn release_pointer(&self, key: impl AsRef<str>, pointer_id: u32) {
+        let node = self.global(key.as_ref());
+        self.sink.borrow_mut().push_back(InputRequest::ReleasePointer { node, pointer_id });
+    }
+
+    /// Answers the current drag: what dropping now would do.
+    pub fn set_drop_effect(&self, effect: DropEffect) {
+        self.sink.borrow_mut().push_back(InputRequest::SetDropEffect(effect));
     }
 }
 
@@ -241,6 +362,13 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
     #[must_use]
     pub fn windows(&self) -> WindowRequests {
         WindowRequests::new(Rc::clone(self.tree.window_commands()))
+    }
+
+    /// Returns this component's handle for pointer capture and drag
+    /// feedback; see [`InputRequests`].
+    #[must_use]
+    pub fn input(&self) -> InputRequests {
+        InputRequests::new(self.parent, Rc::clone(self.tree.input_requests()))
     }
 
     /// Returns the active theme.
