@@ -42,6 +42,10 @@ pub enum Capability {
     Gamepad,
     /// Input-method (IME) composition events for custom text targets.
     Ime,
+    /// Time-based animation of native properties.
+    Animations,
+    /// Reporting the system's reduced-motion preference.
+    ReducedMotionPreference,
 }
 
 /// The set of [`Capability`]s one platform adapter actually realizes.

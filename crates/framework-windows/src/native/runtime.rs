@@ -11,6 +11,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_OVERLAPPEDWINDOW,
 };
 
+use super::animation::{self, AnimationState};
 use super::context::HostRef;
 use super::input::{self, InputState};
 use super::menu::build_native_menu;
@@ -46,6 +47,9 @@ pub(crate) struct Runtime {
     /// Advanced-input bookkeeping (pointers, capture, IME, drag-and-drop,
     /// controllers) — see `native::input`.
     pub(crate) input: InputState,
+    /// Running animations and the clock they are timed by — see
+    /// `native::animation`.
+    pub(crate) animation: AnimationState,
 }
 
 impl Runtime {
@@ -73,11 +77,15 @@ impl Runtime {
         };
         self.renderer.render(&tree, self.window, &theme)?;
         input::after_render(self);
+        animation::after_render(self);
         Ok(())
     }
 
     pub(crate) fn relayout(&mut self) {
         self.renderer.relayout(self.window);
+        // Layout is where a node's position and size change, so it is
+        // where their transitions begin.
+        animation::after_render(self);
     }
 
     /// [`Runtime::dispatch`], with this backend's uniform failure handling:
@@ -135,13 +143,19 @@ impl Runtime {
         self.sync_windows()
     }
 
-    /// Applies the pointer-capture and drag-feedback requests components
-    /// queued while handling the dispatch or task pump that just finished.
+    /// Applies the pointer-capture, drag-feedback, and animation requests
+    /// components queued while handling the dispatch or task pump that just
+    /// finished.
     fn apply_input_requests(&mut self) {
         let window = self.window_id;
         let requests = self.with_application(|application| application.take_input_requests(window));
         if !requests.is_empty() {
             input::apply_requests(self, requests);
+        }
+        let animations =
+            self.with_application(|application| application.take_animation_requests(window));
+        if !animations.is_empty() {
+            animation::apply_requests(self, animations);
         }
     }
 
@@ -324,6 +338,7 @@ impl WindowRegistry {
             pressed: None,
             destroyed: false,
             input: InputState::default(),
+            animation: AnimationState::default(),
         });
 
         let runtime_ptr: *mut Runtime = &raw mut *runtime;
@@ -419,6 +434,7 @@ impl WindowRegistry {
         // the first render, so a window is never briefly shown without them.
         input::drop_target::register(runtime);
         input::clipboard::listen(runtime);
+        animation::sync_motion_preference(runtime);
 
         let wake_target = hwnd as usize;
         // SAFETY: `wake_target` is `hwnd` captured as a plain integer

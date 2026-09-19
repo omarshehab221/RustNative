@@ -2,6 +2,7 @@
 
 use crate::accessibility::AccessibleAction;
 pub use crate::accessibility::{AccessibilityInfo, AccessibilityRole};
+use crate::animation::AnimatedProperty;
 use crate::identity::{NodeId, WindowId};
 use crate::input::{
     ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, WheelDelta,
@@ -230,6 +231,15 @@ pub enum Event {
         /// What was asked.
         action: AccessibleAction,
     },
+    /// An animation on `target` ended — because it ran out, not because
+    /// it was cancelled. Delivered to the component that owns the node, so
+    /// one animation can lead to the next.
+    AnimationFinished {
+        /// The node that was animating.
+        target: NodeId,
+        /// Which property finished.
+        property: AnimatedProperty,
+    },
     /// A game controller changed, delivered to the first node (in
     /// declarative order) of the active window that declared gamepad
     /// interest.
@@ -267,7 +277,8 @@ impl Event {
             | Self::DragLeave { target }
             | Self::Drop { target, .. }
             | Self::Gamepad { target, .. }
-            | Self::AccessibilityAction { target, .. } => Some(*target),
+            | Self::AccessibilityAction { target, .. }
+            | Self::AnimationFinished { target, .. } => Some(*target),
             Self::KeyDown { target, .. }
             | Self::KeyUp { target, .. }
             | Self::TextInput { target, .. }
@@ -303,7 +314,8 @@ impl Event {
             | Self::DragLeave { target: current }
             | Self::Drop { target: current, .. }
             | Self::Gamepad { target: current, .. }
-            | Self::AccessibilityAction { target: current, .. } => {
+            | Self::AccessibilityAction { target: current, .. }
+            | Self::AnimationFinished { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }

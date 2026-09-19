@@ -48,6 +48,8 @@ impl Platform for WindowsPlatform {
             Capability::Pen,
             Capability::Gamepad,
             Capability::Ime,
+            Capability::Animations,
+            Capability::ReducedMotionPreference,
         ])
     }
 
@@ -94,6 +96,10 @@ mod tests {
         assert!(capabilities.supports(Capability::Pen));
         assert!(capabilities.supports(Capability::Gamepad));
         assert!(capabilities.supports(Capability::Ime));
+        // Milestone 27: frame-driven native property animation, and the
+        // system's own reduced-motion setting.
+        assert!(capabilities.supports(Capability::Animations));
+        assert!(capabilities.supports(Capability::ReducedMotionPreference));
         // System sharing and system-appearance change notifications are
         // still only portable contracts (see PLAN.md); this backend does
         // not yet realize them.

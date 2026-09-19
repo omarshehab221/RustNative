@@ -556,3 +556,145 @@ mod gestures {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// Animation (crate::animation, Milestone 27).
+// ---------------------------------------------------------------------
+
+mod animation {
+    use std::time::Duration;
+
+    use proptest::prelude::*;
+
+    use framework_core::{
+        AnimatedProperty, AnimatedValue, Animation, AnimationOwner, Easing, Fill, NodeId, Point,
+        Timeline, Transition,
+    };
+
+    fn easing_strategy() -> impl Strategy<Value = Easing> {
+        prop_oneof![
+            Just(Easing::Linear),
+            Just(Easing::EaseIn),
+            Just(Easing::EaseOut),
+            Just(Easing::EaseInOut),
+            (0.0f32..1.0, -2.0f32..2.0, 0.0f32..1.0, -2.0f32..2.0)
+                .prop_map(|(x1, y1, x2, y2)| Easing::cubic_bezier(x1, y1, x2, y2)),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        /// However a curve is shaped, it starts at its start and ends at
+        /// its end: an animation that did not actually arrive where the
+        /// rendered tree says it belongs would leave the UI permanently
+        /// wrong.
+        #[test]
+        fn every_curve_lands_exactly_on_both_endpoints(easing in easing_strategy()) {
+            prop_assert!(easing.progress(0.0).abs() < 1e-3);
+            prop_assert!((easing.progress(1.0) - 1.0).abs() < 1e-3);
+        }
+
+        /// A timed animation always finishes by the end of its duration,
+        /// whatever the curve and however coarse the frames — a timeline
+        /// that never finished would animate forever and keep the frame
+        /// driver awake.
+        #[test]
+        fn a_timed_animation_finishes_within_its_duration(
+            millis in 1u64..500,
+            frame in 1u64..80,
+            easing in easing_strategy(),
+        ) {
+            let node = NodeId::from_key("p");
+            let mut timeline = Timeline::new();
+            timeline.transition(
+                node,
+                AnimatedProperty::Translation,
+                AnimatedValue::Offset(Point::new(0, 0)),
+                AnimatedValue::Offset(Point::new(100, 0)),
+                Transition::new(Duration::from_millis(millis)).easing(easing),
+                Duration::ZERO,
+            );
+            let mut now = Duration::ZERO;
+            let mut finished = None;
+            while now <= Duration::from_millis(millis * 2 + frame) {
+                now += Duration::from_millis(frame);
+                let output = timeline.tick(now);
+                if let Some(done) = output.finished.first() {
+                    finished = Some((now, output.frames[0].value));
+                    prop_assert_eq!(done.node, node);
+                    break;
+                }
+            }
+            let (at, value) = finished.expect("a timed animation must finish");
+            prop_assert!(at <= Duration::from_millis(millis + frame));
+            // A finished transition releases the property back to the
+            // rendered tree rather than pinning its target value.
+            prop_assert_eq!(value, None);
+            prop_assert!(!timeline.is_active());
+        }
+
+        /// Interrupting an animation never makes the value jump: the
+        /// replacement starts from exactly where the old one had reached.
+        #[test]
+        fn retargeting_is_continuous(
+            first in 1i32..400,
+            second in -400i32..400,
+            interrupt_at in 1u64..99,
+        ) {
+            let node = NodeId::from_key("p");
+            let mut timeline = Timeline::new();
+            let linear = Transition::new(Duration::from_millis(100)).easing(Easing::Linear);
+            let at = |x| AnimatedValue::Offset(Point::new(x, 0));
+            timeline.transition(node, AnimatedProperty::Position, at(0), at(first), linear, Duration::ZERO);
+
+            let before = timeline
+                .tick(Duration::from_millis(interrupt_at))
+                .frames
+                .first()
+                .and_then(|frame| frame.value)
+                .unwrap_or(at(0));
+            timeline.transition(
+                node,
+                AnimatedProperty::Position,
+                at(second),
+                at(second),
+                linear,
+                Duration::from_millis(interrupt_at),
+            );
+            let after = timeline
+                .tick(Duration::from_millis(interrupt_at))
+                .frames
+                .first()
+                .and_then(|frame| frame.value)
+                .unwrap_or(before);
+            prop_assert_eq!(after, before, "the value must not jump when retargeted");
+        }
+
+        /// An animation that fills forwards holds its final value, and one
+        /// that does not returns the property to rest — either way the
+        /// timeline ends up empty rather than leaking a track.
+        #[test]
+        fn every_animation_ends_and_leaves_the_timeline_empty(
+            millis in 1u64..200,
+            forwards in any::<bool>(),
+        ) {
+            let node = NodeId::from_key("p");
+            let mut timeline = Timeline::new();
+            let animation = Animation::new(
+                AnimatedProperty::Translation,
+                AnimatedValue::Offset(Point::new(30, 0)),
+                Transition::new(Duration::from_millis(millis)).easing(Easing::EaseOut),
+            )
+            .from(AnimatedValue::Offset(Point::new(0, 0)))
+            .fill(if forwards { Fill::Forwards } else { Fill::None });
+            timeline.start(node, &animation, AnimationOwner::Transition(node), None, Duration::ZERO);
+
+            let end = timeline.tick(Duration::from_millis(millis));
+            prop_assert_eq!(end.finished.len(), 1);
+            let expected = if forwards { Point::new(30, 0) } else { Point::new(0, 0) };
+            prop_assert_eq!(end.frames[0].value, Some(AnimatedValue::Offset(expected)));
+            prop_assert!(timeline.is_empty());
+        }
+    }
+}

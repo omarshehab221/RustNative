@@ -8,9 +8,11 @@
 
 use std::collections::HashMap;
 
+use crate::animation::{AnimatedProperty, Transition};
 use crate::event::AccessibilityInfo;
 use crate::identity::NodeId;
 use crate::input::InputInterest;
+use crate::input::Scalar;
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
 use crate::style::VisualStyle;
 
@@ -296,6 +298,101 @@ impl Node {
         }
     }
 
+    /// Declares how `property` moves when a render changes it.
+    ///
+    /// The backend animates from the value on screen to the new one; an
+    /// interrupted transition retargets rather than jumping. See
+    /// [`crate::animation`] for what animating does *not* do: cause a
+    /// rerender.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use framework_core::{AnimatedProperty, Node, Transition};
+    ///
+    /// // Wherever layout puts this panel next, it slides there.
+    /// let panel = Node::column("panel", []).with_transition(
+    ///     AnimatedProperty::Position,
+    ///     Transition::new(Duration::from_millis(150)),
+    /// );
+    /// assert_eq!(panel.transitions().len(), 1);
+    /// ```
+    #[must_use]
+    pub fn with_transition(mut self, property: AnimatedProperty, transition: Transition) -> Self {
+        let transitions = self.transitions_mut();
+        transitions.retain(|declared| declared.property != property);
+        transitions.push(NodeTransition { property, transition });
+        self
+    }
+
+    /// Returns this node's declared transitions.
+    #[must_use]
+    pub fn transitions(&self) -> &[NodeTransition] {
+        match self {
+            Self::Label(node) => &node.transitions,
+            Self::Button(node) => &node.transitions,
+            Self::TextInput(node) => &node.transitions,
+            Self::Column(node) => &node.transitions,
+            Self::Row(node) => &node.transitions,
+        }
+    }
+
+    fn transitions_mut(&mut self) -> &mut Vec<NodeTransition> {
+        match self {
+            Self::Label(node) => &mut node.transitions,
+            Self::Button(node) => &mut node.transitions,
+            Self::TextInput(node) => &mut node.transitions,
+            Self::Column(node) => &mut node.transitions,
+            Self::Row(node) => &mut node.transitions,
+        }
+    }
+
+    /// Sets this node's opacity, from `0.0` (invisible) to `1.0`.
+    ///
+    /// Realized natively rather than by painting: a backend makes the
+    /// node's own object translucent, so its content — including native
+    /// controls it contains — fades as one.
+    #[must_use]
+    pub fn with_opacity(self, opacity: f32) -> Self {
+        let opacity = Scalar::new(opacity.clamp(0.0, 1.0));
+        match self {
+            Self::Label(mut node) => {
+                node.opacity = opacity;
+                Self::Label(node)
+            }
+            Self::Button(mut node) => {
+                node.opacity = opacity;
+                Self::Button(node)
+            }
+            Self::TextInput(mut node) => {
+                node.opacity = opacity;
+                Self::TextInput(node)
+            }
+            Self::Column(mut node) => {
+                node.opacity = opacity;
+                Self::Column(node)
+            }
+            Self::Row(mut node) => {
+                node.opacity = opacity;
+                Self::Row(node)
+            }
+        }
+    }
+
+    /// Returns this node's opacity.
+    #[must_use]
+    pub fn opacity(&self) -> f32 {
+        match self {
+            Self::Label(node) => node.opacity.get(),
+            Self::Button(node) => node.opacity.get(),
+            Self::TextInput(node) => node.opacity.get(),
+            Self::Column(node) => node.opacity.get(),
+            Self::Row(node) => node.opacity.get(),
+        }
+    }
+
     /// Returns whether this node is disabled.
     #[must_use]
     pub fn is_disabled(&self) -> bool {
@@ -457,6 +554,15 @@ impl Node {
     }
 }
 
+/// One declared transition: how a property moves when it changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NodeTransition {
+    /// The property it applies to.
+    pub property: AnimatedProperty,
+    /// How it moves.
+    pub transition: Transition,
+}
+
 /// A UI node's realization kind, independent of any single node instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeKind {
@@ -497,6 +603,8 @@ macro_rules! leaf_node {
             visual_style: VisualStyle,
             disabled: bool,
             input: InputInterest,
+            opacity: Scalar,
+            transitions: Vec<NodeTransition>,
         }
 
         impl $name {
@@ -530,6 +638,8 @@ macro_rules! leaf_node {
                     visual_style: VisualStyle::default(),
                     disabled: false,
                     input: InputInterest::new(),
+                    opacity: Scalar::ONE,
+                    transitions: Vec::new(),
                 }
             }
 
@@ -595,6 +705,8 @@ macro_rules! container_node {
             visual_style: VisualStyle,
             disabled: bool,
             input: InputInterest,
+            opacity: Scalar,
+            transitions: Vec<NodeTransition>,
         }
 
         impl $name {
@@ -608,6 +720,8 @@ macro_rules! container_node {
                     visual_style: VisualStyle::default(),
                     disabled: false,
                     input: InputInterest::new(),
+                    opacity: Scalar::ONE,
+                    transitions: Vec::new(),
                 }
             }
 

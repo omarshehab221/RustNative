@@ -12,8 +12,9 @@ use std::collections::HashMap;
 
 use crate::event::AccessibilityInfo;
 use crate::identity::NodeId;
-use crate::input::InputInterest;
+use crate::input::{InputInterest, Scalar};
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
+use crate::node::NodeTransition;
 use crate::node::{Node, TreeError};
 #[cfg(test)]
 use crate::style::VisualStyle;
@@ -77,6 +78,11 @@ pub struct TreeNode {
     /// Which advanced input the node wants delivered (see
     /// [`crate::InputInterest`]).
     pub input: InputInterest,
+    /// The node's opacity, `0.0` to `1.0`.
+    pub opacity: Scalar,
+    /// How this node's properties move when they change (see
+    /// [`crate::animation`]).
+    pub transitions: Vec<NodeTransition>,
 }
 
 impl TreeNode {
@@ -105,6 +111,8 @@ impl TreeNode {
             visual_style: ResolvedStyle::default(),
             disabled: node.is_disabled(),
             input: node.input(),
+            opacity: Scalar::new(node.opacity()),
+            transitions: node.transitions().to_vec(),
         }
     }
 }

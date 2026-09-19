@@ -87,6 +87,7 @@ pub struct Application {
     services: Services,
     theme: Theme,
     panic_policy: PanicPolicy,
+    motion: crate::MotionPreference,
 }
 
 impl fmt::Debug for Application {
@@ -138,6 +139,7 @@ impl Application {
             services,
             theme,
             panic_policy: PanicPolicy::default(),
+            motion: crate::MotionPreference::default(),
         };
         // A component may request another window from its first render. The
         // root tree is rendered while this Application is being
@@ -287,6 +289,31 @@ impl Application {
             .unwrap_or_default()
     }
 
+    /// Drains window `id`'s pending [`crate::AnimationRequest`]s, or
+    /// returns nothing if it is not open.
+    pub fn take_animation_requests(&mut self, id: WindowId) -> Vec<crate::AnimationRequest> {
+        self.windows
+            .get_mut(&id)
+            .map(|entry| entry.components.take_animation_requests())
+            .unwrap_or_default()
+    }
+
+    /// Whether the person has asked their system for reduced motion.
+    #[must_use]
+    pub const fn motion_preference(&self) -> crate::MotionPreference {
+        self.motion
+    }
+
+    /// Records the platform's reduced-motion setting, for this application
+    /// and every window it owns. A backend calls this at startup and
+    /// whenever the system setting changes.
+    pub fn set_motion_preference(&mut self, motion: crate::MotionPreference) {
+        self.motion = motion;
+        for entry in self.windows.values() {
+            entry.components.set_motion_preference(motion);
+        }
+    }
+
     /// Returns the primary window's scheduler.
     #[must_use]
     pub fn scheduler(&self) -> &Scheduler {
@@ -321,6 +348,9 @@ impl Application {
                 ),
             },
         );
+        if let Some(entry) = self.windows.get(&id) {
+            entry.components.set_motion_preference(self.motion);
+        }
         // The new root has already rendered and may itself have queued
         // follow-up requests. Apply them now so initial rendering is a
         // complete lifecycle transaction, including nested requests.

@@ -2,6 +2,9 @@
 //! Rust UI tree against real Win32 windows and controls, and runs the
 //! message loop that drives it.
 
+mod animation;
+#[cfg(test)]
+mod animation_integration;
 mod app;
 mod container;
 pub(crate) mod context;

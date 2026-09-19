@@ -2,7 +2,86 @@
 
 ## Current milestone
 
-**Milestone 26 — Full accessibility bridge — complete.**
+**Milestone 27 — Animations and transitions — complete.**
+
+### What was built
+
+`framework_core::animation`: animatable properties and typed animated values,
+`Transition` (duration and easing curve, or a mass/stiffness/damping spring,
+either with a start delay), `Animation` (from/to, repeat, autoreverse, fill,
+reduced-motion behaviour), and `Timeline`, the platform-free evaluator that
+turns elapsed time into per-property frames and carries velocity across a
+retarget. Nodes declare transitions (`Node::with_transition`) and opacity;
+components request and cancel animations through `ComponentContext`.
+
+On Windows, `native::animation`: a process-wide frame driver thread paced by
+`DwmFlush`, per-window frame handling, and `native::rendering::animated`, the
+per-node overrides a frame writes so geometry, opacity, and colours change
+without touching the rendered tree. Opacity is realized with `WS_EX_LAYERED`
+and `SetLayeredWindowAttributes`, geometry with `SetWindowPos`.
+
+### What it found
+
+1. **The overdamped spring started at the wrong end.** The two-root solution
+   was written with its coefficients transposed, so an overdamped spring
+   began at `+1` — the far side of the target — and swung across it. It is now
+   solved from `x(0) = -1, v(0) = 0` with the weights that follow;
+   `an_overdamped_spring_never_overshoots` pins it, and needed a 2000-step
+   window, because the correct spring settles slowly, as an overdamped one
+   should.
+2. **A transition jumped, then animated.** A transition is driven by the
+   rendered value changing, so by the time the backend noticed, the native
+   object had already been moved to the new value: the animation then ran
+   from the target to the target. The renderer now pins the *previous* value
+   as the animation's start when it collects the transition
+   (`pin_transition_start`), before applying the new one.
+3. **A finished transition left its property pinned.** Holding the final
+   value as an override meant a later relayout could not move the node. A
+   transition now completes with `Frame { value: None }`: the override is
+   dropped and the node returns to exactly what the tree says.
+4. **`Fill::Forwards` held the wrong value.** It held the animation's `to`,
+   which is wrong for an autoreversed animation that ends back at its start.
+   It now holds the value actually evaluated at completion.
+
+### Verified, and how
+
+Six integration tests (`native::animation_integration`) drive a real window
+through the production message loop with a `ManualFrameClock` installed and
+frame messages delivered by hand, so timing is deterministic rather than
+wall-clock: a transition animates a node **without a single rerender**;
+frames stop — and the driver goes idle — once everything settles; an explicit
+animation reaches its target and reports `Event::AnimationFinished`; opacity
+makes the window layered and steps its alpha; reduced motion arrives at the
+target immediately; and animations end when their node or window does. The
+core timeline has its own unit tests, plus property tests over interruption
+and completion.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+Layered child windows need a manifest declaring a supported OS, which a
+`cargo test` binary does not get by default.
+`crates/framework-windows/build.rs` embeds `tests.manifest` into the test
+executables, so the opacity test exercises the real code path instead of
+silently proving nothing.
+
+### Not verified on this machine
+
+Frame *pacing* against a real display: the tests drive a manual clock, so
+they prove what each frame computes and that frames stop, not that `DwmFlush`
+lands them on the compositor's rhythm. Reduced motion was exercised by
+setting the preference directly and by a synthesized `WM_SETTINGCHANGE`, not
+by toggling the setting in Windows' own settings UI.
+
+---
+
+## Previous: Milestone 26 — Full accessibility bridge — complete.
 
 ### What was built
 

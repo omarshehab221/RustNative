@@ -1,10 +1,14 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+use std::time::Duration;
+
 use framework_core::{
     AccessibilityInfo, AccessibilityRole, AccessibleAction, AccessibleActionKind, Alignment,
-    Application, Callback, CheckedState, ColumnStyle, Component, ComponentContext, DropEffect,
-    EdgeInsets, Event, InputInterest, InputRequests, LayoutStyle, LiveRegion, MenuBar, MenuItem,
-    Node, NodeId, Overflow, PanicPolicy, Platform, RowStyle, Size, SizeMode, TaskHandle, Window,
+    AnimatedProperty, AnimatedValue, Animation, AnimationRequests, Application, Callback,
+    CheckedState, ColumnStyle, Component, ComponentContext, DropEffect, EdgeInsets, Event,
+    InputInterest, InputRequests, LayoutStyle, LiveRegion, MenuBar, MenuItem, Node, NodeId,
+    Overflow, PanicPolicy, Platform, Point, RowStyle, Size, SizeMode, TaskHandle, Transition,
+    Window,
 };
 use framework_windows::WindowsPlatform;
 
@@ -339,6 +343,10 @@ impl Component for SettingsWindow {
 /// rest of the example never receives pointer or controller traffic.
 struct InputLab {
     input: Option<InputRequests>,
+    animations: Option<AnimationRequests>,
+    // Milestone 27: holding the pad down dims it, and letting go brings it
+    // back. Both are animated by the backend, not by rerendering.
+    pressed: bool,
     pointer: String,
     gesture: String,
     wheel: String,
@@ -351,6 +359,31 @@ struct InputLab {
     volume: f32,
 }
 
+/// How long the pad takes to dim and to come back.
+const FADE: Duration = Duration::from_millis(120);
+
+impl InputLab {
+    /// Springs the pad back from an offset to where it was laid out.
+    ///
+    /// A spring has no duration: it runs until it stops moving, and
+    /// interrupting it mid-flight keeps the motion continuous instead of
+    /// restarting. Nothing in the tree changes while it runs.
+    fn bounce_pad(&self) {
+        let Some(animations) = &self.animations else {
+            return;
+        };
+        animations.animate(
+            "lab-pad",
+            Animation::new(
+                AnimatedProperty::Translation,
+                AnimatedValue::Offset(Point::new(0, 0)),
+                Transition::spring(220.0, 14.0, 1.0),
+            )
+            .from(AnimatedValue::Offset(Point::new(24, 0))),
+        );
+    }
+}
+
 impl Component for InputLab {
     type Props = ();
     type Message = ();
@@ -359,6 +392,8 @@ impl Component for InputLab {
         let idle = || "\u{2014}".to_owned();
         Self {
             input: None,
+            animations: None,
+            pressed: false,
             pointer: idle(),
             gesture: idle(),
             wheel: idle(),
@@ -386,13 +421,21 @@ impl Component for InputLab {
             [
                 Node::column_with_layout(
                     "lab-pad",
-                    [line("lab-pad-hint", "Press, drag, pinch, or scroll here".to_owned())],
+                    [line(
+                        "lab-pad-hint",
+                        "Press, drag, pinch, or scroll here; muting springs it".to_owned(),
+                    )],
                     LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Fixed(120)),
                     ColumnStyle::new().padding(EdgeInsets::all(12)),
                 )
                 // Pointer capture is requested on press (see `update`), so a
                 // drag keeps reporting after it leaves the pad.
                 .with_input(InputInterest::new().pointer().gestures().wheel().gamepad())
+                // Milestone 27: the declared opacity changes with `pressed`,
+                // and the transition says to reach the new value over 120 ms
+                // instead of jumping to it. The fade costs no renders.
+                .with_opacity(if self.pressed { 0.6 } else { 1.0 })
+                .with_transition(AnimatedProperty::Opacity, Transition::new(FADE))
                 // Focusable, so it can receive keys and IME composition.
                 .with_accessibility(
                     AccessibilityInfo::new(AccessibilityRole::Group)
@@ -460,6 +503,7 @@ impl Component for InputLab {
 
     fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
         self.input = Some(context.input());
+        self.animations = Some(context.animations());
         self.view()
     }
 
@@ -470,6 +514,7 @@ impl Component for InputLab {
         match event {
             Event::PointerDown { target, .. } if target == NodeId::from_key("lab-mute") => {
                 self.muted = !self.muted;
+                self.bounce_pad();
             }
             Event::AccessibilityAction { action: AccessibleAction::Toggle, .. } => {
                 self.muted = !self.muted;
@@ -481,6 +526,7 @@ impl Component for InputLab {
             }
             Event::PointerDown { pointer, .. } => {
                 input.capture_pointer("lab-pad", pointer.pointer_id());
+                self.pressed = true;
                 self.pointer = format!("{:?} down at {:?}", pointer.kind(), pointer.position());
             }
             Event::PointerMove { pointer, .. } if !pointer.buttons().is_empty() => {
@@ -488,9 +534,13 @@ impl Component for InputLab {
             }
             Event::PointerUp { pointer, .. } => {
                 input.release_pointer("lab-pad", pointer.pointer_id());
+                self.pressed = false;
                 self.pointer = format!("up at {:?}", pointer.position());
             }
-            Event::PointerCancel { .. } => "cancelled (capture lost)".clone_into(&mut self.pointer),
+            Event::PointerCancel { .. } => {
+                self.pressed = false;
+                "cancelled (capture lost)".clone_into(&mut self.pointer);
+            }
             Event::PointerEnter { .. } => "hovering".clone_into(&mut self.pointer),
             Event::PointerLeave { .. } => "left the pad".clone_into(&mut self.pointer),
             Event::Gesture { gesture, .. } => self.gesture = format!("{gesture:?}"),

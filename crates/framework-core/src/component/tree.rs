@@ -9,7 +9,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 use super::Component;
-use super::context::{ComponentContext, InputRequest, QueuedMessage, WindowCommand};
+use super::context::{
+    AnimationRequest, ComponentContext, InputRequest, QueuedMessage, WindowCommand,
+};
 use super::effects::{DeclaredEffect, EffectContext, EffectDependencies, EffectEntry};
 use super::error::RenderError;
 use crate::event::Event;
@@ -126,6 +128,8 @@ pub struct ComponentTree {
     message_sink: Rc<RefCell<VecDeque<QueuedMessage>>>,
     window_commands: Rc<RefCell<VecDeque<WindowCommand>>>,
     input_requests: Rc<RefCell<VecDeque<InputRequest>>>,
+    animation_requests: Rc<RefCell<VecDeque<AnimationRequest>>>,
+    motion: std::cell::Cell<crate::animation::MotionPreference>,
     scheduler: Scheduler,
     pending_effects: HashMap<ComponentId, Vec<DeclaredEffect>>,
     /// Structured, user-triggerable composition problems collected during
@@ -168,6 +172,8 @@ impl ComponentTree {
             message_sink: Rc::new(RefCell::new(VecDeque::new())),
             window_commands: Rc::new(RefCell::new(VecDeque::new())),
             input_requests: Rc::new(RefCell::new(VecDeque::new())),
+            animation_requests: Rc::new(RefCell::new(VecDeque::new())),
+            motion: std::cell::Cell::new(crate::animation::MotionPreference::default()),
             scheduler: Scheduler::new(),
             pending_effects: HashMap::new(),
             pending_render_errors: Vec::new(),
@@ -364,6 +370,27 @@ impl ComponentTree {
 
     pub(crate) fn input_requests(&self) -> &Rc<RefCell<VecDeque<InputRequest>>> {
         &self.input_requests
+    }
+
+    /// Drains the animation requests components queued since the last
+    /// call, in order. A platform backend calls this after every dispatch.
+    pub fn take_animation_requests(&mut self) -> Vec<AnimationRequest> {
+        self.animation_requests.borrow_mut().drain(..).collect()
+    }
+
+    pub(crate) fn animation_requests(&self) -> &Rc<RefCell<VecDeque<AnimationRequest>>> {
+        &self.animation_requests
+    }
+
+    /// Whether the person has asked for reduced motion.
+    #[must_use]
+    pub fn motion_preference(&self) -> crate::animation::MotionPreference {
+        self.motion.get()
+    }
+
+    /// Records the platform's reduced-motion setting.
+    pub fn set_motion_preference(&self, motion: crate::animation::MotionPreference) {
+        self.motion.set(motion);
     }
 
     pub(crate) fn message_sink(&self) -> &Rc<RefCell<VecDeque<QueuedMessage>>> {
@@ -712,10 +739,11 @@ impl ComponentTree {
             return;
         };
 
-        // Structured task ownership ends with the component lifetime.
-        // Cancel before unmounting so no task can legitimately outlive its
-        // owner.
+        // Structured ownership ends with the component lifetime: its tasks
+        // are cancelled here, and its animations are queued for the backend
+        // to stop for the same reason — neither may outlive its owner.
         entry.task_scope.cancel_all();
+        self.animation_requests.borrow_mut().push_back(AnimationRequest::CancelOwner(id));
         Self::dispose_effects(&mut entry);
 
         let children = entry.children.values().copied().collect::<Vec<_>>();

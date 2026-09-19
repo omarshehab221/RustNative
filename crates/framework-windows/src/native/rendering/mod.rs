@@ -27,6 +27,7 @@
 //! | Module | Owns | Changes when |
 //! |---|---|---|
 //! | [`realization`] | The [`Renderer`] coordinator, the current snapshot, layout rectangles | Reconciliation or layout integration changes |
+//! | [`animated`] | Per-frame animated values, held beside the tree | Animation changes |
 //! | [`controls`] | Creating, replacing, and destroying each native control kind | The set of supported `NodeKind`s or their Win32 classes changes |
 //! | [`styling`] | Resolved styles as owned GDI resources, and the shared brush cache | Theming, painting, or GDI ownership changes |
 //! | [`accessibility`] | The portable semantic model's projection onto Win32 | Accessibility semantics change |
@@ -42,6 +43,7 @@
 //! be tested against a bare `HWND` without standing up a message loop.
 
 pub(crate) mod accessibility;
+pub(crate) mod animated;
 pub(crate) mod controls;
 pub(crate) mod realization;
 pub(crate) mod scrolling;

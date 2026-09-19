@@ -17,8 +17,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP,
     WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_POINTERDOWN,
     WM_POINTERUP, WM_POINTERUPDATE, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK, WM_XBUTTONDOWN, WM_XBUTTONUP,
-    WNDCLASSW,
+    WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK,
+    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
 };
 
 use super::container::container_proc;
@@ -710,6 +710,16 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             best_effort(posted, "PostMessageW(capture lost)", "a lost capture ends at release");
             0
         }
+        super::animation::WM_FRAMEWORK_FRAME => {
+            with_runtime(hwnd, super::animation::frame);
+            0
+        }
+        WM_SETTINGCHANGE => {
+            // A system setting changed; the one this backend follows is
+            // the reduced-motion preference.
+            with_runtime(hwnd, super::animation::sync_motion_preference);
+            default()
+        }
         super::uia::WM_FRAMEWORK_UIA => {
             // Drained inside the borrow, raised after it ends — see
             // `native::uia`'s module docs for why raising must not happen
@@ -744,6 +754,7 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             }
             with_runtime(hwnd, |runtime| {
                 runtime.destroyed = true;
+                super::animation::release(runtime);
                 input::drop_target::revoke(runtime);
                 clipboard::stop_listening(runtime);
                 for timer in [LONG_PRESS_TIMER_ID, input::gamepad::GAMEPAD_TIMER_ID] {

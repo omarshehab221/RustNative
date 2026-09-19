@@ -12,10 +12,11 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 26 — Full Accessibility
-Bridge** (a portable accessibility model realized as real UI Automation
-providers), after Milestone 25's advanced input system and the
-standards-audit remediation pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
+The latest completed milestone is **Milestone 27 — Animations and
+Transitions** (a portable timeline whose frames touch native properties
+alone, never the component tree), after Milestone 26's accessibility bridge,
+Milestone 25's advanced input system, and the standards-audit remediation
+pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
 verified, what it found while doing so, and what is still open.
 
 ## Architecture
@@ -412,6 +413,57 @@ names and roles through the Dynamic Annotation API.
 Every UIA test runs a real `IUIAutomation` client on another thread, the way a
 screen reader in another process reaches the application.
 
+## Animations and transitions
+
+A value can change over time without the component tree knowing. Two ways in:
+
+```rust
+// A transition: whenever this node's opacity changes, animate to the new
+// value over 120 ms rather than jumping to it.
+Node::column("panel", [])
+    .with_opacity(if pressed { 0.6 } else { 1.0 })
+    .with_transition(
+        AnimatedProperty::Opacity,
+        Transition::new(Duration::from_millis(120)),
+    );
+
+// An explicit animation, requested from a component: a spring back to the
+// laid-out position, starting 24 px to the right of it.
+context.animations().animate(
+    "panel",
+    Animation::new(
+        AnimatedProperty::Translation,
+        AnimatedValue::Offset(Point::new(0, 0)),
+        Transition::spring(220.0, 14.0, 1.0),
+    )
+    .from(AnimatedValue::Offset(Point::new(24, 0))),
+);
+```
+
+`framework_core::animation::Timeline` evaluates both, and is entirely
+platform-free: it turns elapsed time into a per-property value and handles
+repeats, autoreverse, fill modes, and — for springs — carries the current
+velocity into a retarget, so interrupting a motion continues it rather than
+restarting it. A finished animation releases its property, and the node goes
+back to exactly what the rendered tree says.
+
+**A frame is not a render.** The backend applies the frame's value to the
+native object it belongs to and nothing else: `SetWindowPos` for geometry, a
+layered-window alpha for opacity, an invalidation for colours. A component
+hears only `Event::AnimationFinished`, and may ignore it; the animation tests
+assert that render counts do not move while values animate.
+
+Frames come from one process-wide driver thread paced by `DwmFlush` and
+posted — never sent — to each animating window, coalesced so a busy UI thread
+drops frames rather than queueing them. With nothing animating, that thread
+sleeps on a condition variable and the application costs nothing.
+
+Animations are cancelled per node and property, per component (unmounting
+cancels a component's own animations), and per window. The system's
+reduced-motion preference is read at startup and tracked live; each animation
+says whether it is skipped (jump straight to the target) or still run when
+motion is reduced.
+
 ## Text input
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
@@ -480,7 +532,6 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 27 — Animations and
-Transitions**. The roadmap then proceeds through virtualization, custom
-rendering, persistence/navigation, CLI/packaging, and additional native
-backends.
+The next implementation target is **Milestone 28 — Virtualized lists and
+large data sets**. The roadmap then proceeds through custom rendering,
+persistence/navigation, CLI/packaging, and additional native backends.

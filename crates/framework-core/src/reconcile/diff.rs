@@ -112,6 +112,8 @@ fn node_changed(previous: &TreeNode, next: &TreeNode) -> bool {
         || previous.visual_style != next.visual_style
         || previous.disabled != next.disabled
         || previous.input != next.input
+        || previous.opacity != next.opacity
+        || previous.transitions != next.transitions
 }
 
 /// Classifies whether the difference between two versions of the same node

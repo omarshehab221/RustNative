@@ -90,6 +90,7 @@
 //!
 //! | Module | Owns |
 //! |---|---|
+//! | [`animation`] | Easing, springs, and the [`Timeline`] a backend drives frames from |
 //! | [`accessibility`] | The portable accessibility model and its [`AccessibilityTree`] projection |
 //! | [`identity`] | [`NodeId`]/[`ComponentId`]/[`WindowId`] allocation and the collision-free key interner |
 //! | [`event`] | [`Event`], keyboard/accessibility types |
@@ -131,6 +132,7 @@
 //! regress).
 #![deny(missing_docs)]
 pub mod accessibility;
+pub mod animation;
 pub mod application;
 pub mod capability;
 pub mod component;
@@ -152,11 +154,17 @@ pub use accessibility::{
     AccessibilityTree, AccessibleAction, AccessibleActionKind, AccessibleNode, AccessibleValue,
     CheckedState, LiveRegion, Relation, VirtualElement,
 };
+pub use animation::{
+    AnimatedProperty, AnimatedValue, Animation, AnimationId, AnimationOwner, Easing, Fill,
+    Finished, Frame, FrameClock, ManualFrameClock, MotionPreference, ReducedMotion, Repeat,
+    TickOutput, Timeline, Transition,
+};
 pub use application::Application;
 pub use capability::{Capability, PlatformCapabilities};
 pub use component::{
-    Callback, Component, ComponentContext, ComponentHost, ComponentTree, EffectCleanup,
-    EffectContext, InputRequest, InputRequests, RenderError, WindowRequests,
+    AnimationRequest, AnimationRequests, Callback, Component, ComponentContext, ComponentHost,
+    ComponentTree, EffectCleanup, EffectContext, InputRequest, InputRequests, RenderError,
+    WindowRequests,
 };
 pub use event::{AccessibilityInfo, AccessibilityRole, Event, KeyCode, KeyModifiers};
 pub use identity::{ComponentId, NodeId, WindowId};
@@ -172,7 +180,7 @@ pub use layout::{
     Size, SizeMode,
 };
 pub use menu::{MenuBar, MenuItem};
-pub use node::{Button, Column, Label, Node, NodeKind, Row, TextInput, TreeError};
+pub use node::{Button, Column, Label, Node, NodeKind, NodeTransition, Row, TextInput, TreeError};
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};

@@ -12,6 +12,7 @@ use std::time::Duration;
 use super::Component;
 use super::effects::{EffectCleanup, EffectContext};
 use super::tree::ComponentTree;
+use crate::animation::{AnimatedProperty, Animation, MotionPreference};
 use crate::identity::{ComponentId, NodeId, WindowId};
 use crate::input::DropEffect;
 use crate::node::Node;
@@ -187,6 +188,128 @@ impl InputRequests {
     /// Answers the current drag: what dropping now would do.
     pub fn set_drop_effect(&self, effect: DropEffect) {
         self.sink.borrow_mut().push_back(InputRequest::SetDropEffect(effect));
+    }
+}
+
+/// A request from a component to the platform backend about animation,
+/// queued through [`AnimationRequests`] and drained by the backend after
+/// the dispatch that produced it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AnimationRequest {
+    /// Start an animation on `node`, owned by `owner`.
+    Start {
+        /// The framework-wide identity of the node to animate.
+        node: NodeId,
+        /// What to animate, and how.
+        animation: Animation,
+        /// The component that asked, so the animation can be cancelled
+        /// when it unmounts.
+        owner: ComponentId,
+    },
+    /// Stop the animation of one property, returning it to rest.
+    Cancel {
+        /// The framework-wide identity of the animated node.
+        node: NodeId,
+        /// Which property to stop animating.
+        property: AnimatedProperty,
+    },
+    /// Stop everything a component started — queued by the runtime itself
+    /// when that component leaves the tree.
+    CancelOwner(ComponentId),
+}
+
+/// A component's handle for starting animations.
+///
+/// Obtained during `render` through [`ComponentContext::animations`] and,
+/// like a [`Callback`], kept in component state so `update` can use it.
+/// Requests are deferred: the backend applies them once the current
+/// dispatch finishes, so starting an animation never reaches into native
+/// state mid-update.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use framework_core::{
+///     AnimatedProperty, AnimatedValue, Animation, AnimationRequests, Component,
+///     ComponentContext, Event, Node, Point, Transition,
+/// };
+///
+/// struct Toast {
+///     animations: Option<AnimationRequests>,
+/// }
+///
+/// impl Component for Toast {
+///     type Props = ();
+///     type Message = ();
+///     fn new((): ()) -> Self { Self { animations: None } }
+///     fn props(&self) -> &() { &() }
+///     fn set_props(&mut self, (): ()) {}
+///     fn view(&self) -> Node { Node::label("toast", "Saved") }
+///     fn render(&mut self, context: &mut ComponentContext<'_, ()>) -> Node {
+///         self.animations = Some(context.animations());
+///         self.view()
+///     }
+///     fn update(&mut self, event: Event) {
+///         if let (Event::Click { .. }, Some(animations)) = (&event, &self.animations) {
+///             // Slide in from the left, then rest where layout puts it.
+///             animations.animate(
+///                 "toast",
+///                 Animation::new(
+///                     AnimatedProperty::Translation,
+///                     AnimatedValue::Offset(Point::new(0, 0)),
+///                     Transition::new(Duration::from_millis(180)),
+///                 )
+///                 .from(AnimatedValue::Offset(Point::new(-40, 0))),
+///             );
+///         }
+///     }
+/// }
+/// ```
+#[derive(Clone)]
+pub struct AnimationRequests {
+    owner: ComponentId,
+    sink: Rc<RefCell<VecDeque<AnimationRequest>>>,
+}
+
+impl fmt::Debug for AnimationRequests {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AnimationRequests").field("owner", &self.owner).finish_non_exhaustive()
+    }
+}
+
+impl AnimationRequests {
+    pub(crate) fn new(owner: ComponentId, sink: Rc<RefCell<VecDeque<AnimationRequest>>>) -> Self {
+        Self { owner, sink }
+    }
+
+    /// Animates this component's node `key`.
+    ///
+    /// One property animates at a time: asking again for a property that is
+    /// already animating retargets it from where it is, rather than
+    /// restarting or fighting with it. The animation ends when it finishes,
+    /// when [`Self::cancel`] stops it, or when this component unmounts.
+    pub fn animate(&self, key: impl AsRef<str>, animation: Animation) {
+        let node = self.global(key.as_ref());
+        self.sink.borrow_mut().push_back(AnimationRequest::Start {
+            node,
+            animation,
+            owner: self.owner,
+        });
+    }
+
+    /// Stops animating `property` on this component's node `key`, returning
+    /// it to the value the rendered tree gives it.
+    pub fn cancel(&self, key: impl AsRef<str>, property: AnimatedProperty) {
+        let node = self.global(key.as_ref());
+        self.sink.borrow_mut().push_back(AnimationRequest::Cancel { node, property });
+    }
+
+    fn global(&self, key: &str) -> NodeId {
+        let local = NodeId::from_key(key);
+        if self.owner == ComponentId::ROOT { local } else { NodeId::scoped(self.owner, local) }
     }
 }
 
@@ -369,6 +492,23 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
     #[must_use]
     pub fn input(&self) -> InputRequests {
         InputRequests::new(self.parent, Rc::clone(self.tree.input_requests()))
+    }
+
+    /// Returns this component's handle for starting animations; see
+    /// [`AnimationRequests`].
+    #[must_use]
+    pub fn animations(&self) -> AnimationRequests {
+        AnimationRequests::new(self.parent, Rc::clone(self.tree.animation_requests()))
+    }
+
+    /// Whether the person has asked their system for reduced motion.
+    ///
+    /// Transitions and animations already honor this without being asked
+    /// (see [`crate::animation`]); read it when a component wants to choose
+    /// *different content* — a static illustration instead of a moving one.
+    #[must_use]
+    pub fn motion_preference(&self) -> MotionPreference {
+        self.tree.motion_preference()
     }
 
     /// Returns the active theme.

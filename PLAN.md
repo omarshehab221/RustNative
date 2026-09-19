@@ -613,21 +613,44 @@ the same portable model when their backends exist (Milestones 33–36).
 
 ---
 
-# 6. Rendering and interaction milestones
-
 ## Milestone 27 — Animations and transitions
 
-Introduce:
+Implemented:
 
-- time-based animations;
-- transitions;
-- interruptible animations;
-- animation cancellation;
-- frame scheduling;
-- reduced-motion preference support;
-- declarative animation state.
+- a portable animation model in `framework_core::animation`: animatable
+  properties (position, size, translation, opacity, background, foreground),
+  typed animated values, `Transition` (a duration and easing curve, or a real
+  mass/stiffness/damping spring, either with a start delay), `Animation`
+  (explicit from/to, repeat counts, autoreverse, fill mode) and `Timeline`,
+  the platform-free evaluator that turns elapsed time into per-property
+  frames;
+- **transitions**, declared on a node (`Node::with_transition`): when a
+  rendered value changes, the backend animates from the previous value to the
+  new one instead of jumping, then releases the property back to the tree;
+- **interruption**: retargeting a running animation continues from the value
+  and velocity it had, so a reversed drag or a second click bends the motion
+  rather than restarting it;
+- **cancellation**: per node and property, per owning component (a component
+  that unmounts cancels its own animations), and per window;
+- **frame scheduling**: one process-wide driver thread paced by `DwmFlush`,
+  posting — never sending — a private frame message, coalesced per window, and
+  asleep on a condition variable whenever nothing animates;
+- **reduced-motion preference support**: the system preference
+  (`SPI_GETCLIENTAREAANIMATION`) read at startup and tracked through
+  `WM_SETTINGCHANGE`; each animation declares whether it is skipped or still
+  run when motion is reduced;
+- **declarative animation state**: nothing about a frame reaches the
+  component tree — `Event::AnimationFinished` is the only thing a component
+  hears, and it may ignore it.
 
-Animations must not turn into full component rerenders on every frame. Frame updates should target only the native properties that need to change.
+Frames do not rerender. A frame applies the changed property to the native
+object alone (`SetWindowPos` for geometry, a layered-window alpha for
+opacity, an invalidation for colours); the tests assert the component's
+render count does not move while values animate.
+
+---
+
+# 6. Rendering and interaction milestones
 
 ## Milestone 28 — Virtualized lists and large data sets
 

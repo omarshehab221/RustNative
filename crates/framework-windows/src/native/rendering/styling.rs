@@ -284,6 +284,53 @@ fn cached_brush(color: COLORREF) -> HBRUSH {
     entry.0
 }
 
+/// Makes `hwnd` translucent, or fully opaque again.
+///
+/// Opacity is realized as a layered window, which is what lets a node fade
+/// *with its content* — including native controls inside it — rather than
+/// by painting over anything. Layered **child** windows need the
+/// application to declare Windows 8 or later support in its manifest
+/// (Milestone 32 embeds one; this crate's own tests embed one through
+/// `build.rs`). Without that declaration Windows refuses the style, which
+/// is why this is best effort: the node stays opaque, and nothing else
+/// about it changes.
+pub(crate) fn set_opacity(hwnd: HWND, opacity: f32) {
+    use crate::native::win32::best_effort;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, GetWindowLongPtrW, LWA_ALPHA, SetLayeredWindowAttributes, SetWindowLongPtrW,
+        WS_EX_LAYERED,
+    };
+
+    // SAFETY: `hwnd` is a live window owned by this renderer's registry;
+    // `GWL_EXSTYLE` is a documented, always-valid index.
+    let current = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    // `WS_EX_LAYERED` is a single fixed style bit, far below `isize::MAX`.
+    #[allow(clippy::cast_possible_wrap)]
+    let layered = WS_EX_LAYERED as isize;
+    let opaque = opacity >= 1.0;
+    let next = if opaque { current & !layered } else { current | layered };
+    if next != current {
+        // SAFETY: as above; only the documented `WS_EX_LAYERED` bit is
+        // toggled, and `SetWindowLongPtrW` returns the previous value
+        // rather than a status.
+        crate::native::win32::informational(unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next) });
+    }
+    if opaque {
+        return;
+    }
+    // 0..=255, the range `LWA_ALPHA` takes.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to 0.0..=1.0 and scaled, so always within u8"
+    )]
+    let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+    // SAFETY: `hwnd` carries `WS_EX_LAYERED` (set just above); a zero color
+    // key is unused with `LWA_ALPHA`.
+    let applied = unsafe { SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA) } != 0;
+    best_effort(applied, "SetLayeredWindowAttributes", "the node stays opaque");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
