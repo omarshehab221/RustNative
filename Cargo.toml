@@ -32,6 +32,8 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
     "Win32_System_LibraryLoader",
     "Win32_System_DataExchange",
     "Win32_System_Memory",
@@ -46,6 +48,7 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_UI_Input_XboxController",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
+    "Win32_UI_Controls",
     "Win32_UI_Controls_Dialogs",
 ] }
 

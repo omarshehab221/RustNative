@@ -36,6 +36,7 @@ use super::super::graphics::surface::{self, SURFACE_CLASS_NAME};
 use super::super::registry::{NativeObject, NativeObjectRegistry};
 use super::super::util::{module_instance, wide, window_text};
 use super::super::win32::{best_effort, must_succeed};
+use super::tabs::{self, TAB_CLASS_NAME};
 use crate::Error;
 use crate::error::NativeContext;
 
@@ -83,6 +84,21 @@ pub(crate) fn create(
             WS_BORDER | ES_LEFT as u32 | ES_AUTOHSCROLL as u32,
             NativeObject::TextInput,
         ),
+        NodeKind::TabBar => {
+            tabs::ensure_class();
+            create_simple(
+                registry,
+                node,
+                parent,
+                TAB_CLASS_NAME,
+                WS_CLIPSIBLINGS,
+                NativeObject::TabBar,
+            )?;
+            if let (Some(object), Some(labels)) = (registry.get(node.id), &node.tabs) {
+                tabs::sync(object.hwnd(), labels);
+            }
+            Ok(())
+        }
         NodeKind::Canvas => {
             let hwnd = create_own(node, parent, CANVAS_CLASS_NAME)?;
             canvas::attach(hwnd, node.draw_list.clone().unwrap_or_default());
@@ -152,6 +168,7 @@ pub(crate) fn needs_replacement(registry: &NativeObjectRegistry, node: &TreeNode
             | (NodeKind::Button, Some(NativeObject::Button(_)))
             | (NodeKind::TextInput, Some(NativeObject::TextInput(_)))
             | (NodeKind::Canvas, Some(NativeObject::Canvas(_)))
+            | (NodeKind::TabBar, Some(NativeObject::TabBar(_)))
             | (NodeKind::Surface, Some(NativeObject::Surface { .. }))
     )
 }
@@ -173,6 +190,14 @@ pub(crate) fn update_text(registry: &NativeObjectRegistry, node: &TreeNode) -> R
 
     match node.kind {
         NodeKind::Column | NodeKind::Row | NodeKind::Surface => Ok(false),
+        // A tab bar's content is its labels and selection; an update is
+        // only emitted when one of them changed.
+        NodeKind::TabBar => {
+            if let Some(labels) = &node.tabs {
+                tabs::sync(hwnd, labels);
+            }
+            Ok(false)
+        }
         // A canvas's content is its draw list: handed to the window, which
         // repaints only if it actually changed.
         NodeKind::Canvas => {
@@ -340,6 +365,7 @@ fn adopt(
             match class_name {
                 "STATIC" => "CreateWindowExW(STATIC)",
                 "BUTTON" => "CreateWindowExW(BUTTON)",
+                TAB_CLASS_NAME => "CreateWindowExW(SysTabControl32)",
                 _ => "CreateWindowExW(EDIT)",
             },
             NativeContext::none().with_node(node.id),

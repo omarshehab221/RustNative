@@ -26,6 +26,8 @@ pub(crate) enum NativeObject {
     TextInput(HWND),
     /// A Direct2D canvas window (see `native::graphics::canvas`).
     Canvas(HWND),
+    /// A system tab control (see `rendering::tabs`).
+    TabBar(HWND),
     /// A native surface window, and the id the application knows it by.
     Surface {
         hwnd: HWND,
@@ -41,6 +43,7 @@ impl NativeObject {
             | Self::Button(hwnd)
             | Self::TextInput(hwnd)
             | Self::Canvas(hwnd)
+            | Self::TabBar(hwnd)
             | Self::Surface { hwnd, .. } => *hwnd,
         }
     }

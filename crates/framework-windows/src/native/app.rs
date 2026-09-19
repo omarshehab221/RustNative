@@ -46,7 +46,25 @@ impl Drop for OleApartment {
     }
 }
 
-pub(crate) fn run_application(application: &mut Application) -> Result<(), Error> {
+pub(crate) fn run_application(
+    application: &mut Application,
+    app_id: Option<&str>,
+    launch_url: Option<String>,
+) -> Result<(), Error> {
+    // A single-instance application hands its launch URL to the running
+    // instance, if there is one, instead of starting a second copy.
+    let _instance = match app_id.map(super::single_instance::claim) {
+        Some(super::single_instance::Claim::AlreadyRunning) => {
+            let handed_over = super::single_instance::forward(
+                app_id.unwrap_or_default(),
+                launch_url.as_deref().unwrap_or_default(),
+            );
+            super::win32::best_effort(handed_over, "forward(deep link)", "the link is dropped");
+            return Ok(());
+        }
+        Some(super::single_instance::Claim::First(instance)) => Some(instance),
+        None => None,
+    };
     let instance = module_instance();
     register_window_classes(instance)?;
     // Declared before the registry so it is dropped after it: OLE must stay
@@ -69,13 +87,23 @@ pub(crate) fn run_application(application: &mut Application) -> Result<(), Error
     // structural rather than a fact about this one function's body.
     let mut registry = Box::new(unsafe { WindowRegistry::new(application) });
     registry.sync()?;
+    if let Some(url) = launch_url {
+        super::single_instance::deliver_later(url);
+    }
 
-    run_message_loop()?;
+    let looped = run_message_loop();
 
+    let mut failure = looped.err();
     for runtime in registry.runtimes.drain().map(|(_, runtime)| runtime) {
         if let Some(error) = runtime.error {
-            return Err(error);
+            failure.get_or_insert(error);
         }
     }
-    Ok(())
+    drop(registry);
+    // Every window is gone: the application is terminating. State is
+    // flushed (and components told) whether the loop ended cleanly or not,
+    // so a failure elsewhere does not also lose what the person was doing.
+    let flushed = application.lifecycle(framework_core::Lifecycle::Terminating);
+    super::win32::best_effort(flushed.is_ok(), "flush_state(exit)", "unsaved state is lost");
+    failure.map_or(Ok(()), Err)
 }

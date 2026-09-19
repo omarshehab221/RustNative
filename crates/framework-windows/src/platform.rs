@@ -9,20 +9,46 @@ use crate::Error;
 /// The Win32 backend an application hands to `framework_core::Application`
 /// to run.
 ///
-/// Carries no state: everything a running application needs
+/// Carries only configuration: everything a running application needs
 /// (`WindowRegistry`, per-window `Runtime`s, native object registries) is
 /// owned by [`Platform::run`]'s own stack frame for exactly as long as the
 /// message loop runs — see `native::context`'s module documentation for why
 /// that lifetime relationship is what makes the backend's raw-pointer
 /// bookkeeping sound.
-#[derive(Debug, Default)]
-pub struct WindowsPlatform;
+#[derive(Debug, Default, Clone)]
+pub struct WindowsPlatform {
+    app_id: Option<String>,
+}
 
 impl WindowsPlatform {
     /// Creates the backend. Equivalent to [`Default::default`].
     #[must_use]
     pub const fn new() -> Self {
-        Self
+        Self { app_id: None }
+    }
+
+    /// Identifies the application, which makes it **single-instance**.
+    ///
+    /// With an id, a second launch does not open a second copy: it hands
+    /// the URL it was launched with (the first `scheme://…` command-line
+    /// argument, which is how Windows launches an application for a
+    /// protocol it handles) to the running instance as
+    /// [`framework_core::Event::DeepLink`], brings that instance to the
+    /// front, and exits. The first launch's own URL, if any, is delivered
+    /// the same way once its windows exist.
+    ///
+    /// Use the same id as [`crate::FileStateStore::for_app`]; a reverse
+    /// domain name (`com.example.notes`) is conventional.
+    #[must_use]
+    pub fn with_app_id(mut self, app_id: impl Into<String>) -> Self {
+        self.app_id = Some(app_id.into());
+        self
+    }
+
+    /// The application id, if one was set.
+    #[must_use]
+    pub fn app_id(&self) -> Option<&str> {
+        self.app_id.as_deref()
     }
 }
 
@@ -31,7 +57,11 @@ impl Platform for WindowsPlatform {
     type Error = Error;
 
     fn run(&mut self, application: &mut Application) -> Result<(), Self::Error> {
-        crate::native::run_application(application)
+        crate::native::run_application(
+            application,
+            self.app_id.as_deref(),
+            crate::native::single_instance::launch_url(std::env::args()),
+        )
     }
 
     fn capabilities(&self) -> PlatformCapabilities {
@@ -50,6 +80,11 @@ impl Platform for WindowsPlatform {
             Capability::Ime,
             Capability::Animations,
             Capability::ReducedMotionPreference,
+            Capability::CustomDrawing,
+            Capability::NativeSurfaces,
+            Capability::StatePersistence,
+            Capability::DeepLinks,
+            Capability::Lifecycle,
         ])
     }
 
@@ -100,6 +135,14 @@ mod tests {
         // system's own reduced-motion setting.
         assert!(capabilities.supports(Capability::Animations));
         assert!(capabilities.supports(Capability::ReducedMotionPreference));
+        // Milestone 29: Direct2D canvases and raw-window-handle surfaces.
+        assert!(capabilities.supports(Capability::CustomDrawing));
+        assert!(capabilities.supports(Capability::NativeSurfaces));
+        // Milestone 30: the file state store, single-instance deep links,
+        // and session/power lifecycle notifications.
+        assert!(capabilities.supports(Capability::StatePersistence));
+        assert!(capabilities.supports(Capability::DeepLinks));
+        assert!(capabilities.supports(Capability::Lifecycle));
         // System sharing and system-appearance change notifications are
         // still only portable contracts (see PLAN.md); this backend does
         // not yet realize them.

@@ -810,3 +810,34 @@ mod virtualization {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// Routes (crate::navigation, Milestone 30).
+// ---------------------------------------------------------------------
+
+mod routes {
+    use proptest::prelude::*;
+
+    use framework_core::Route;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        /// Any parameter values — spaces, slashes, `%`, `?`, `#`, non-ASCII
+        /// — survive building a path and matching it back: encoding and
+        /// decoding are inverses, so a deep link built by one part of an
+        /// application routes correctly in another.
+        #[test]
+        fn a_built_path_matches_back_to_its_parameters(
+            user in r"\PC{1,12}",
+            rest in proptest::collection::vec(r"\PC{1,8}", 0..4),
+        ) {
+            let route = Route::parse("/users/:user/files/*rest").unwrap();
+            let rest = rest.into_iter().filter(|part| !part.contains('/')).collect::<Vec<_>>().join("/");
+            let path = route.build(&[("user", &user), ("rest", &rest)]).expect("every parameter given");
+            let matched = route.matches(&path).expect("a built path matches its own route");
+            prop_assert_eq!(matched.get("user"), Some(user.as_str()));
+            prop_assert_eq!(matched.get("rest"), Some(rest.as_str()));
+        }
+    }
+}

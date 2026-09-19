@@ -9,6 +9,7 @@ use crate::input::{
     ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, Scalar, WheelDelta,
 };
 use crate::layout::{Point, Size};
+use crate::lifecycle::Lifecycle;
 use crate::virtualization::VirtualRange;
 use crate::window::WindowPresentation;
 
@@ -233,6 +234,33 @@ pub enum Event {
         /// What was asked.
         action: AccessibleAction,
     },
+    /// The person chose tab `index` of a tab bar.
+    ///
+    /// The tab bar does not change on its own: the component renders the
+    /// new selection, exactly as a text field's value follows
+    /// `TextChanged`.
+    TabSelected {
+        /// The tab bar.
+        target: NodeId,
+        /// The chosen tab.
+        index: usize,
+    },
+    /// The application was asked to open `url` — launched with it, or
+    /// handed it by a second launch while already running.
+    ///
+    /// Delivered to the primary window's root component; route it with
+    /// [`crate::Router`] (see [`crate::url_path`]).
+    DeepLink {
+        /// The URL, exactly as received.
+        url: String,
+    },
+    /// The application is about to be suspended, resumed, or terminated.
+    ///
+    /// Persisted state is flushed to its store *before* this is delivered
+    /// for `Suspending` and `Terminating`, so a component never has to save
+    /// anything itself; it is told so it can do what is specific to it
+    /// (pause playback, close a connection).
+    Lifecycle(Lifecycle),
     /// A native surface was realized, or changed size.
     ///
     /// Delivered after layout gives the surface its first size and after
@@ -312,7 +340,8 @@ impl Event {
             | Self::AccessibilityAction { target, .. }
             | Self::AnimationFinished { target, .. }
             | Self::VisibleRangeChanged { target, .. }
-            | Self::SurfaceResized { target, .. } => Some(*target),
+            | Self::SurfaceResized { target, .. }
+            | Self::TabSelected { target, .. } => Some(*target),
             Self::KeyDown { target, .. }
             | Self::KeyUp { target, .. }
             | Self::TextInput { target, .. }
@@ -323,7 +352,9 @@ impl Event {
             | Self::WindowCloseRequested { .. }
             | Self::WindowStateChanged { .. }
             | Self::MenuAction { .. }
-            | Self::ClipboardChanged { .. } => None,
+            | Self::ClipboardChanged { .. }
+            | Self::DeepLink { .. }
+            | Self::Lifecycle(_) => None,
         }
     }
 
@@ -351,7 +382,8 @@ impl Event {
             | Self::AccessibilityAction { target: current, .. }
             | Self::AnimationFinished { target: current, .. }
             | Self::VisibleRangeChanged { target: current, .. }
-            | Self::SurfaceResized { target: current, .. } => {
+            | Self::SurfaceResized { target: current, .. }
+            | Self::TabSelected { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }
@@ -368,7 +400,9 @@ impl Event {
             | Self::WindowCloseRequested { .. }
             | Self::WindowStateChanged { .. }
             | Self::MenuAction { .. }
-            | Self::ClipboardChanged { .. } => {}
+            | Self::ClipboardChanged { .. }
+            | Self::DeepLink { .. }
+            | Self::Lifecycle(_) => {}
         }
         self
     }

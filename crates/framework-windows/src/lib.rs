@@ -88,6 +88,8 @@ pub use services::clipboard::WindowsClipboard;
 #[cfg(windows)]
 pub use services::dialogs::WindowsFileDialogs;
 #[cfg(windows)]
+pub use services::state_store::FileStateStore;
+#[cfg(windows)]
 pub use services::system::WindowsSystem;
 #[cfg(windows)]
 pub use surface::{SurfaceHandle, native_surface};

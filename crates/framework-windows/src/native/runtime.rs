@@ -155,6 +155,7 @@ impl Runtime {
             self.render()?;
         }
         self.apply_input_requests();
+        super::lifecycle::after_dispatch(self);
 
         // A component may have queued a window-open or window-close
         // request while handling that event (see `ComponentContext::windows`).
@@ -167,6 +168,7 @@ impl Runtime {
             self.render()?;
         }
         self.apply_input_requests();
+        super::lifecycle::after_dispatch(self);
         self.sync_windows()
     }
 
@@ -489,12 +491,17 @@ impl WindowRegistry {
         runtime
             .render()
             .map_err(|error| error.or_context(NativeContext::none().with_window(id)))?;
-        // SAFETY: `hwnd` was checked non-null above and is a live,
-        // just-created top-level HWND.
-        //
-        // `ShowWindow` returns whether the window was *previously* visible,
-        // not whether the call worked, so there is no status here to check.
-        ignored_by_contract(unsafe { ShowWindow(hwnd, SW_SHOW) });
+        // A primary window that was open last run comes back where it was
+        // (which also shows it); otherwise it opens at the default place.
+        if !super::lifecycle::restore_placement(runtime) {
+            // SAFETY: `hwnd` was checked non-null above and is a live,
+            // just-created top-level HWND.
+            //
+            // `ShowWindow` returns whether the window was *previously*
+            // visible, not whether the call worked, so there is no status
+            // here to check.
+            ignored_by_contract(unsafe { ShowWindow(hwnd, SW_SHOW) });
+        }
         if !owner.is_null() {
             // SAFETY: `owner` was just checked non-null and is a live
             // HWND from this registry's own `runtimes`.

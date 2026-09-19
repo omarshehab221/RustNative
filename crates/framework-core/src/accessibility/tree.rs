@@ -94,7 +94,14 @@ impl AccessibilityTree {
         let mut tree = Self::default();
         // Preorder, so every node's exposed ancestor is resolved before it.
         let mut exposed_parent: HashMap<NodeId, Option<NodeId>> = HashMap::new();
+        // A hidden node and everything inside it are not there for anyone:
+        // not on screen, so not to assistive technology either.
+        let mut hidden = std::collections::HashSet::new();
         for node in snapshot.ordered_nodes() {
+            if node.hidden || node.parent.is_some_and(|parent| hidden.contains(&parent)) {
+                hidden.insert(node.id);
+                continue;
+            }
             let inherited =
                 node.parent.and_then(|parent| exposed_parent.get(&parent).copied()).flatten();
             let exposed = node.accessibility.role() != AccessibilityRole::None;
@@ -267,5 +274,21 @@ mod tests {
             tree.resolve(NodeId::from_key("b"), Relation::DescribedBy),
             [NodeId::from_key("root")]
         );
+    }
+    #[test]
+    fn a_hidden_subtree_is_not_exposed() {
+        use crate::node::Node;
+        let tree = Node::column(
+            "root",
+            [
+                Node::button("shown", "Shown"),
+                Node::column("screen", [Node::button("inside", "Inside")]).hidden(true),
+            ],
+        );
+        let snapshot = TreeSnapshot::from_node(&tree).unwrap();
+        let accessible = AccessibilityTree::from_snapshot(&snapshot);
+        assert!(accessible.node(NodeId::from_key("shown")).is_some());
+        assert!(accessible.node(NodeId::from_key("screen")).is_none());
+        assert!(accessible.node(NodeId::from_key("inside")).is_none(), "nor anything inside it");
     }
 }

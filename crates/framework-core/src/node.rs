@@ -33,6 +33,8 @@ pub enum Node {
     /// A bare platform surface an application renders into itself (see
     /// [`crate::graphics`]).
     Surface(Surface),
+    /// A strip of tabs, one selected (see [`Node::tab_bar`]).
+    TabBar(TabBar),
     /// A container that lays its children out vertically.
     Column(Column),
     /// A container that lays its children out horizontally.
@@ -149,6 +151,46 @@ impl Node {
         Self::Surface(Surface::new(NodeId::from_key(key.as_ref()), (), layout))
     }
 
+    /// Creates a strip of tabs labelled `labels`, with `selected` chosen.
+    ///
+    /// Realized as the platform's own tab control, so it looks, sounds (to
+    /// a screen reader), and behaves like every other tab strip on the
+    /// system. Choosing a tab raises [`crate::Event::TabSelected`]; the
+    /// component answers by rendering the new selection, and — to keep every
+    /// tab's content alive while another is shown — renders each tab's
+    /// content with [`Self::hidden`] set on all but the selected one.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use framework_core::{LayoutStyle, Node};
+    ///
+    /// let tabs = Node::tab_bar("sections", ["General", "Advanced"], 1, LayoutStyle::new());
+    /// let Node::TabBar(bar) = &tabs else { panic!("a tab bar") };
+    /// assert_eq!(bar.tabs().selected(), 1);
+    /// ```
+    pub fn tab_bar(
+        key: impl AsRef<str>,
+        labels: impl IntoIterator<Item = impl Into<String>>,
+        selected: usize,
+        layout: LayoutStyle,
+    ) -> Self {
+        Self::TabBar(TabBar::new(
+            NodeId::from_key(key.as_ref()),
+            Tabs::new(labels, selected),
+            layout,
+        ))
+    }
+
+    /// Returns this node's tabs, if it is a tab bar.
+    #[must_use]
+    pub fn tabs(&self) -> Option<&Tabs> {
+        match self {
+            Self::TabBar(bar) => Some(bar.tabs()),
+            _ => None,
+        }
+    }
+
     /// Returns this node's draw list, if it is a canvas.
     #[must_use]
     pub fn draw_list(&self) -> Option<&DrawList> {
@@ -242,6 +284,10 @@ impl Node {
                 node.accessibility = accessibility;
                 Self::TextInput(node)
             }
+            Self::TabBar(mut node) => {
+                node.accessibility = accessibility;
+                Self::TabBar(node)
+            }
             Self::Canvas(mut node) => {
                 node.accessibility = accessibility;
                 Self::Canvas(node)
@@ -278,6 +324,10 @@ impl Node {
                 node.visual_style = style;
                 Self::TextInput(node)
             }
+            Self::TabBar(mut node) => {
+                node.visual_style = style;
+                Self::TabBar(node)
+            }
             Self::Canvas(mut node) => {
                 node.visual_style = style;
                 Self::Canvas(node)
@@ -304,6 +354,7 @@ impl Node {
             Self::Label(node) => &node.visual_style,
             Self::Button(node) => &node.visual_style,
             Self::TextInput(node) => &node.visual_style,
+            Self::TabBar(node) => &node.visual_style,
             Self::Canvas(node) => &node.visual_style,
             Self::Surface(node) => &node.visual_style,
             Self::Column(node) => &node.visual_style,
@@ -329,6 +380,10 @@ impl Node {
             Self::TextInput(mut node) => {
                 node.disabled = disabled;
                 Self::TextInput(node)
+            }
+            Self::TabBar(mut node) => {
+                node.disabled = disabled;
+                Self::TabBar(node)
             }
             Self::Canvas(mut node) => {
                 node.disabled = disabled;
@@ -358,6 +413,7 @@ impl Node {
             Self::Label(node) => node.input = input,
             Self::Button(node) => node.input = input,
             Self::TextInput(node) => node.input = input,
+            Self::TabBar(node) => node.input = input,
             Self::Canvas(node) => node.input = input,
             Self::Surface(node) => node.input = input,
             Self::Column(node) => node.input = input,
@@ -373,6 +429,7 @@ impl Node {
             Self::Label(node) => node.input,
             Self::Button(node) => node.input,
             Self::TextInput(node) => node.input,
+            Self::TabBar(node) => node.input,
             Self::Canvas(node) => node.input,
             Self::Surface(node) => node.input,
             Self::Column(node) => node.input,
@@ -416,6 +473,7 @@ impl Node {
             Self::Label(node) => &node.transitions,
             Self::Button(node) => &node.transitions,
             Self::TextInput(node) => &node.transitions,
+            Self::TabBar(node) => &node.transitions,
             Self::Canvas(node) => &node.transitions,
             Self::Surface(node) => &node.transitions,
             Self::Column(node) => &node.transitions,
@@ -428,6 +486,7 @@ impl Node {
             Self::Label(node) => &mut node.transitions,
             Self::Button(node) => &mut node.transitions,
             Self::TextInput(node) => &mut node.transitions,
+            Self::TabBar(node) => &mut node.transitions,
             Self::Canvas(node) => &mut node.transitions,
             Self::Surface(node) => &mut node.transitions,
             Self::Column(node) => &mut node.transitions,
@@ -456,6 +515,10 @@ impl Node {
                 node.opacity = opacity;
                 Self::TextInput(node)
             }
+            Self::TabBar(mut node) => {
+                node.opacity = opacity;
+                Self::TabBar(node)
+            }
             Self::Canvas(mut node) => {
                 node.opacity = opacity;
                 Self::Canvas(node)
@@ -482,6 +545,7 @@ impl Node {
             Self::Label(node) => node.opacity.get(),
             Self::Button(node) => node.opacity.get(),
             Self::TextInput(node) => node.opacity.get(),
+            Self::TabBar(node) => node.opacity.get(),
             Self::Canvas(node) => node.opacity.get(),
             Self::Surface(node) => node.opacity.get(),
             Self::Column(node) => node.opacity.get(),
@@ -496,6 +560,7 @@ impl Node {
             Self::Label(node) => node.disabled,
             Self::Button(node) => node.disabled,
             Self::TextInput(node) => node.disabled,
+            Self::TabBar(node) => node.disabled,
             Self::Canvas(node) => node.disabled,
             Self::Surface(node) => node.disabled,
             Self::Column(node) => node.disabled,
@@ -510,6 +575,7 @@ impl Node {
             Self::Label(node) => node.accessibility(),
             Self::Button(node) => node.accessibility(),
             Self::TextInput(node) => node.accessibility(),
+            Self::TabBar(node) => node.accessibility(),
             Self::Canvas(node) => node.accessibility(),
             Self::Surface(node) => node.accessibility(),
             Self::Column(node) => node.accessibility(),
@@ -524,6 +590,7 @@ impl Node {
             Self::Label(node) => &mut node.accessibility,
             Self::Button(node) => &mut node.accessibility,
             Self::TextInput(node) => &mut node.accessibility,
+            Self::TabBar(node) => &mut node.accessibility,
             Self::Canvas(node) => &mut node.accessibility,
             Self::Surface(node) => &mut node.accessibility,
             Self::Column(node) => &mut node.accessibility,
@@ -538,6 +605,7 @@ impl Node {
             Self::Label(label) => label.id(),
             Self::Button(button) => button.id(),
             Self::TextInput(input) => input.id(),
+            Self::TabBar(input) => input.id(),
             Self::Canvas(input) => input.id(),
             Self::Surface(input) => input.id(),
             Self::Column(column) => column.id(),
@@ -552,6 +620,7 @@ impl Node {
             Self::Label(_) => NodeKind::Label,
             Self::Button(_) => NodeKind::Button,
             Self::TextInput(_) => NodeKind::TextInput,
+            Self::TabBar(_) => NodeKind::TabBar,
             Self::Canvas(_) => NodeKind::Canvas,
             Self::Surface(_) => NodeKind::Surface,
             Self::Column(_) => NodeKind::Column,
@@ -566,6 +635,7 @@ impl Node {
             Self::Label(label) => label.layout(),
             Self::Button(button) => button.layout(),
             Self::TextInput(input) => input.layout(),
+            Self::TabBar(input) => input.layout(),
             Self::Canvas(input) => input.layout(),
             Self::Surface(input) => input.layout(),
             Self::Column(column) => column.layout(),
@@ -675,6 +745,47 @@ impl Node {
         node
     }
 
+    /// Hides this node (and everything inside it) or shows it again.
+    ///
+    /// A hidden node stays in the tree — its native objects, its component
+    /// state, and its tasks all live on — but takes no space in layout, is
+    /// skipped by keyboard focus, and is absent from the accessibility
+    /// tree. It is how a [`crate::NavigationStack`] keeps the screens below
+    /// the top one alive, and how tabs keep every tab's content mounted.
+    #[must_use]
+    pub fn hidden(mut self, hidden: bool) -> Self {
+        *self.hidden_mut() = hidden;
+        self
+    }
+
+    /// Returns whether this node is hidden (see [`Self::hidden`]).
+    #[must_use]
+    pub fn is_hidden(&self) -> bool {
+        match self {
+            Self::Label(node) => node.hidden,
+            Self::Button(node) => node.hidden,
+            Self::TextInput(node) => node.hidden,
+            Self::TabBar(node) => node.hidden,
+            Self::Canvas(node) => node.hidden,
+            Self::Surface(node) => node.hidden,
+            Self::Column(node) => node.hidden,
+            Self::Row(node) => node.hidden,
+        }
+    }
+
+    fn hidden_mut(&mut self) -> &mut bool {
+        match self {
+            Self::Label(node) => &mut node.hidden,
+            Self::Button(node) => &mut node.hidden,
+            Self::TextInput(node) => &mut node.hidden,
+            Self::TabBar(node) => &mut node.hidden,
+            Self::Canvas(node) => &mut node.hidden,
+            Self::Surface(node) => &mut node.hidden,
+            Self::Column(node) => &mut node.hidden,
+            Self::Row(node) => &mut node.hidden,
+        }
+    }
+
     /// Returns this node's virtual-list declaration, if it is one.
     #[must_use]
     pub fn virtualization(&self) -> Option<VirtualListStyle> {
@@ -698,6 +809,7 @@ impl Node {
             Self::Label(node) => node.item_index = Some(index),
             Self::Button(node) => node.item_index = Some(index),
             Self::TextInput(node) => node.item_index = Some(index),
+            Self::TabBar(node) => node.item_index = Some(index),
             Self::Canvas(node) => node.item_index = Some(index),
             Self::Surface(node) => node.item_index = Some(index),
             Self::Column(node) => node.item_index = Some(index),
@@ -713,6 +825,7 @@ impl Node {
             Self::Label(node) => node.item_index,
             Self::Button(node) => node.item_index,
             Self::TextInput(node) => node.item_index,
+            Self::TabBar(node) => node.item_index,
             Self::Canvas(node) => node.item_index,
             Self::Surface(node) => node.item_index,
             Self::Column(node) => node.item_index,
@@ -785,6 +898,7 @@ impl Node {
             Self::Label(node) => node.id = id,
             Self::Button(node) => node.id = id,
             Self::TextInput(node) => node.id = id,
+            Self::TabBar(node) => node.id = id,
             Self::Canvas(node) => node.id = id,
             Self::Surface(node) => node.id = id,
             Self::Column(node) => node.id = id,
@@ -815,6 +929,8 @@ pub enum NodeKind {
     Canvas,
     /// See [`Node::Surface`].
     Surface,
+    /// See [`Node::TabBar`].
+    TabBar,
     /// See [`Node::Column`].
     Column,
     /// See [`Node::Row`].
@@ -849,6 +965,7 @@ macro_rules! leaf_node {
             opacity: Scalar,
             transitions: Vec<NodeTransition>,
             item_index: Option<usize>,
+            hidden: bool,
         }
 
         impl $name {
@@ -885,6 +1002,7 @@ macro_rules! leaf_node {
                     opacity: Scalar::ONE,
                     transitions: Vec::new(),
                     item_index: None,
+                    hidden: false,
                 }
             }
 
@@ -911,6 +1029,44 @@ leaf_node!(Button, text: String, text, role = Button, focusable = true);
 leaf_node!(TextInput, value: String, value, role = TextInput, focusable = true);
 leaf_node!(Canvas, draw_list: DrawList, draw_list, role = Canvas, focusable = false);
 leaf_node!(Surface, reserved: (), reserved, role = Group, focusable = false);
+leaf_node!(TabBar, tabs: Tabs, tabs, role = TabList, focusable = true);
+
+/// The labels of a [`TabBar`] and which one is selected.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Tabs {
+    labels: Vec<String>,
+    selected: usize,
+}
+
+impl Tabs {
+    /// Tabs labelled `labels`, with `selected` chosen (clamped to the last).
+    #[must_use]
+    pub fn new(labels: impl IntoIterator<Item = impl Into<String>>, selected: usize) -> Self {
+        let labels = labels.into_iter().map(Into::into).collect::<Vec<_>>();
+        let selected = selected.min(labels.len().saturating_sub(1));
+        Self { labels, selected }
+    }
+
+    /// The tab labels, in order.
+    #[must_use]
+    pub fn labels(&self) -> &[String] {
+        &self.labels
+    }
+
+    /// Which tab is selected.
+    #[must_use]
+    pub const fn selected(&self) -> usize {
+        self.selected
+    }
+}
+
+impl TabBar {
+    /// Returns the tabs.
+    #[must_use]
+    pub fn tabs(&self) -> &Tabs {
+        &self.tabs
+    }
+}
 
 impl Label {
     /// Returns the label's text.
@@ -964,6 +1120,7 @@ macro_rules! container_node {
             transitions: Vec<NodeTransition>,
             item_index: Option<usize>,
             virtualization: Option<VirtualListStyle>,
+            hidden: bool,
         }
 
         impl $name {
@@ -981,6 +1138,7 @@ macro_rules! container_node {
                     transitions: Vec::new(),
                     item_index: None,
                     virtualization: None,
+                    hidden: false,
                 }
             }
 

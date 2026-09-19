@@ -191,6 +191,71 @@ impl Application {
         }
     }
 
+    /// Writes every window's buffered persisted state to the state store
+    /// (see [`crate::persistence`]).
+    ///
+    /// A platform backend calls this before suspending or exiting; an
+    /// application may call it whenever it wants a known-saved point.
+    ///
+    /// # Errors
+    ///
+    /// The first failed write. Every window is flushed regardless, and
+    /// failed writes stay buffered for the next attempt.
+    pub fn flush_state(&mut self) -> Result<(), crate::services::ServiceError> {
+        let mut first_error = None;
+        let mut ids = self.windows.keys().copied().collect::<Vec<_>>();
+        ids.sort();
+        for id in ids {
+            if let Some(entry) = self.windows.get(&id) {
+                if let Err(error) = entry.components.flush_state() {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Whether any window has persisted-state writes not yet flushed —
+    /// what a backend's idle flush waits on.
+    #[must_use]
+    pub fn has_unsaved_state(&self) -> bool {
+        self.windows.values().any(|entry| entry.components.has_unsaved_state())
+    }
+
+    /// Tells the application it is being suspended, resumed, or terminated.
+    ///
+    /// Persisted state is flushed *first* for [`Lifecycle::Suspending`] and
+    /// [`Lifecycle::Terminating`] — a platform may not wait for anything
+    /// after this returns — and then [`Event::Lifecycle`] is delivered to
+    /// the primary window's root, so a component can do what is specific
+    /// to it.
+    ///
+    /// # Errors
+    ///
+    /// The flush's error; the event is delivered either way.
+    ///
+    /// [`Lifecycle::Suspending`]: crate::Lifecycle::Suspending
+    /// [`Lifecycle::Terminating`]: crate::Lifecycle::Terminating
+    pub fn lifecycle(
+        &mut self,
+        lifecycle: crate::lifecycle::Lifecycle,
+    ) -> Result<(), crate::services::ServiceError> {
+        use crate::lifecycle::Lifecycle;
+        let flushed = match lifecycle {
+            Lifecycle::Suspending | Lifecycle::Terminating => self.flush_state(),
+            _ => Ok(()),
+        };
+        self.dispatch(Event::Lifecycle(lifecycle));
+        flushed
+    }
+
+    /// Asks the application to open `url`, delivering [`Event::DeepLink`]
+    /// to the primary window's root component. Returns whether it was
+    /// handled.
+    pub fn open_url(&mut self, url: impl Into<String>) -> bool {
+        self.dispatch(Event::DeepLink { url: url.into() })
+    }
+
     /// Returns the primary window's current rendered tree.
     ///
     /// # Panics

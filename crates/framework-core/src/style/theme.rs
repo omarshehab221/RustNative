@@ -498,7 +498,9 @@ impl Theme {
     ) -> ResolvedStyle {
         let base = match kind {
             NodeKind::Label => &self.label,
-            NodeKind::Button => &self.button,
+            // A tab strip's labels are the platform control's own; what the
+            // theme contributes is its font and colors, a button's concern.
+            NodeKind::Button | NodeKind::TabBar => &self.button,
             NodeKind::TextInput => &self.text_input,
             // A canvas paints itself and a surface is painted by the
             // application; what the theme contributes to either is the

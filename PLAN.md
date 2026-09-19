@@ -717,25 +717,46 @@ what that path is for.
 
 ---
 
+## Milestone 30 — Persistence and navigation
+
+Implemented on the managed component tree, not beside it:
+
+- **navigation stacks**: `NavigationStack<R>` is data in the showing
+  component's state; each entry's screen is that component's keyed child
+  (`EntryId::key`), and every entry is rendered with all but the top one
+  `Node::hidden`, so pushing never remounts the screens below and popping
+  finds them as they were. Screens navigate with a `Navigator`, which sends
+  `NavigationCommand`s through an ordinary child-to-parent `Callback`;
+- **routes**: `Route` patterns (`/users/:id`, trailing `*rest`) with
+  percent-decoding, typed parameters, and `build` for the reverse; a
+  `Router` of named routes;
+- **deep links**: `Event::DeepLink` to the primary root, `Application::open_url`,
+  and on Windows the launch URL from the command line plus single-instance
+  handoff (`WindowsPlatform::with_app_id`): a second launch forwards its
+  URL through `WM_COPYDATA` to the running instance and exits;
+- **state restoration / persistent state**: `StateStore` (sync; `MemoryStateStore`
+  in core, crash-safe `FileStateStore` on Windows), set on `Services` so it
+  is present from the first render; `ComponentContext::persisted` keyed by
+  the component's key path, which is stable across runs; navigation stacks
+  are `Serialize` and restore the same way; the primary window's placement
+  is saved on close and restored on open;
+- **lifecycle-aware storage**: writes are buffered and flushed after 1.5 s
+  of quiet, before `Lifecycle::Suspending` / `Terminating` are delivered
+  (`WM_POWERBROADCAST`, `WM_QUERYENDSESSION`), and when the last window
+  closes;
+- **tab/navigation containers**: `Node::tab_bar` realized as the system
+  `SysTabControl32` (`Event::TabSelected`, controlled selection), with every
+  tab's content kept mounted and hidden unless selected; `Node::hidden`
+  removes a subtree from layout, focus traversal, and the accessibility
+  tree while keeping its native objects and state.
+
+---
+
 # 6. Rendering and interaction milestones
 
 All three (Milestones 27–29) are complete; see section 3.
 
 # 7. Application architecture milestones
-
-## Milestone 30 — Persistence and navigation
-
-Add framework-level application infrastructure for:
-
-- navigation stacks;
-- routes;
-- deep links;
-- state restoration;
-- persistent component/application state;
-- lifecycle-aware storage;
-- tab/navigation containers.
-
-Navigation must integrate with the managed component tree and component identity.
 
 ## Milestone 31 — Developer CLI and project tooling
 

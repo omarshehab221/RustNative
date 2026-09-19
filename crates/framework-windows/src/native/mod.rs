@@ -18,12 +18,16 @@ pub(crate) mod input;
 mod input_integration;
 #[cfg(test)]
 mod integration;
+mod lifecycle;
 mod measure;
 mod menu;
 mod message_loop;
+#[cfg(test)]
+mod navigation_integration;
 mod registry;
 pub(crate) mod rendering;
 mod runtime;
+pub(crate) mod single_instance;
 #[cfg(test)]
 mod test_support;
 pub(crate) mod uia;

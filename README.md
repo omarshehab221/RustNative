@@ -12,9 +12,10 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 29 — Graphics escape hatch**
-(Direct2D canvases and native GPU surfaces beside native controls), after
-Milestone 28's virtualized lists, Milestone 27's animations and transitions,
+The latest completed milestone is **Milestone 30 — Persistence and
+navigation** (navigation stacks and tabs on the managed component tree,
+state that outlives the process), after Milestone 29's graphics escape
+hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
 Milestone 26's accessibility bridge,
 Milestone 25's advanced input system, and the standards-audit remediation
 pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
@@ -533,6 +534,44 @@ if let Event::SurfaceResized { surface, size, .. } = event {
 }
 ```
 
+## Navigation and persistence
+
+Screens are components; a navigation stack is data in the component that
+shows them:
+
+```rust
+struct App { stack: NavigationStack<String> }
+// type Message = NavigationCommand<String>;
+
+fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+    let navigator = Navigator::new(context.callback());
+    self.stack.view("stack", |entry| {
+        context.child_with_props(entry.id().key(), ScreenProps { navigator: navigator.clone() }, Screen::new)
+    })
+}
+fn message(&mut self, command: NavigationCommand<String>) { self.stack.apply(command) }
+```
+
+Every entry stays rendered, all but the top one `hidden`, so a screen
+pushed on top of another never rebuilds it. Tabs work the same way:
+`Node::tab_bar` is the system tab control, and each tab's content stays
+mounted. `Route`/`Router` turn paths (and `Event::DeepLink` URLs) into
+named routes with typed parameters.
+
+State that should outlive the process is a `Persisted<T>`:
+
+```rust
+let count = context.persisted("count", 0u32); // keyed by this component's key path
+count.update(|count| *count += 1);            // buffered; flushed when it matters
+```
+
+The store is set once, on `Services` (`FileStateStore::for_app(id)` on
+Windows: crash-safe, atomic writes under `%LOCALAPPDATA%`). Writes are
+flushed after a moment of quiet, before `Lifecycle::Suspending` and
+`Lifecycle::Terminating` are delivered, and when the last window closes.
+`WindowsPlatform::new().with_app_id(id)` makes the application
+single-instance: a second launch hands its URL to the running one.
+
 ## Text input
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
@@ -601,6 +640,6 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 30 — Persistence and
-navigation**. The roadmap then proceeds through CLI/packaging and additional
-native backends.
+The next implementation target is **Milestone 31 — Developer CLI and
+project tooling**. The roadmap then proceeds through packaging and
+additional native backends.

@@ -39,8 +39,8 @@ use windows_sys::Win32::Foundation::{HWND, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetParent, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW, SetParent, SetWindowPos,
-    WM_SETFONT,
+    GWL_STYLE, GetClientRect, GetParent, GetWindowLongPtrW, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE,
+    SWP_NOZORDER, SendMessageW, SetParent, SetWindowPos, ShowWindow, WM_SETFONT, WS_VISIBLE,
 };
 
 use super::super::EnableWindow;
@@ -419,6 +419,7 @@ impl Renderer {
             NodeKind::Label
             | NodeKind::Button
             | NodeKind::TextInput
+            | NodeKind::TabBar
             | NodeKind::Canvas
             | NodeKind::Surface => None,
         }
@@ -499,6 +500,7 @@ impl Renderer {
     fn apply_semantics_and_style(&mut self, node: &TreeNode) {
         if let Some(object) = self.registry.get(node.id) {
             self.accessibility.apply(object.hwnd(), node);
+            set_visible(object.hwnd(), !node.hidden);
         }
         self.apply_control_style(node);
         self.apply_opacity(node.id);
@@ -629,7 +631,11 @@ impl Renderer {
                 hwnd,
                 Some(colorref_to_color(background)),
             ),
-            NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::Surface => {}
+            NodeKind::Label
+            | NodeKind::Button
+            | NodeKind::TextInput
+            | NodeKind::TabBar
+            | NodeKind::Surface => {}
         }
 
         // SAFETY: `hwnd` is a live HWND owned by this renderer's registry;
@@ -922,6 +928,30 @@ impl Renderer {
             .and_then(|parent_id| self.registry.get(parent_id))
             .map_or(window, |object| object.content_hwnd().unwrap_or_else(|| object.hwnd()))
     }
+}
+
+/// Shows or hides a node's native window.
+///
+/// Hiding the window hides everything inside it with no further calls —
+/// Win32 does not draw a child of an invisible window — which is why a
+/// hidden node's descendants need no flag of their own.
+///
+/// Decided by the window's *own* `WS_VISIBLE` bit, not `IsWindowVisible`,
+/// which also answers "no" for every child of a window not yet shown — as
+/// every window is during its first render, which is exactly when a hidden
+/// screen most needs hiding.
+fn set_visible(hwnd: HWND, visible: bool) {
+    // SAFETY: `hwnd` is a live window owned by the renderer's registry;
+    // `GWL_STYLE` is a documented index.
+    let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
+    #[allow(clippy::cast_possible_wrap, reason = "a single fixed style bit")]
+    let already = style & (WS_VISIBLE as isize) != 0;
+    if already == visible {
+        return;
+    }
+    // SAFETY: as above; `ShowWindow` returns the previous visibility, not
+    // a status.
+    informational(unsafe { ShowWindow(hwnd, if visible { SW_SHOWNA } else { SW_HIDE }) });
 }
 
 /// A native surface's new size, waiting to be reported to its component.

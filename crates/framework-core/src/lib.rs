@@ -104,6 +104,9 @@
 //! | [`scheduler`] | Structured concurrency: [`Scheduler`], [`TaskScope`], the pluggable [`Executor`] backend |
 //! | [`services`] | Platform-independent service contracts (HTTP, storage, clipboard, ...) |
 //! | [`virtualization`] | Realizing only the visible window of a very long list |
+//! | [`navigation`] | Routes, navigation stacks, and tabs over the managed component tree |
+//! | [`lifecycle`] | Suspend, resume, and terminate, as the platform reports them |
+//! | [`persistence`] | Component state kept across runs, buffered and flushed at lifecycle points |
 //! | [`window`]/[`menu`] | Window-domain state and native menu definitions |
 //! | [`mod@panic`] | What an application does when a component panics |
 //! | [`application`] | Multi-window orchestration |
@@ -143,9 +146,12 @@ pub mod graphics;
 pub mod identity;
 pub mod input;
 pub mod layout;
+pub mod lifecycle;
 pub mod menu;
+pub mod navigation;
 pub mod node;
 pub mod panic;
+pub mod persistence;
 pub mod platform;
 pub mod reconcile;
 pub mod scheduler;
@@ -187,12 +193,18 @@ pub use layout::{
     LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, MeasuredItem, Overflow, Point,
     Rect, RowStyle, Size, SizeMode,
 };
+pub use lifecycle::Lifecycle;
 pub use menu::{MenuBar, MenuItem};
+pub use navigation::{
+    EntryId, NavigationCommand, NavigationEntry, NavigationStack, Navigator, Route, RouteError,
+    RouteParams, Router, url_path,
+};
 pub use node::{
-    Button, Canvas, Column, Label, Node, NodeKind, NodeTransition, Row, Surface, TextInput,
-    TreeError,
+    Button, Canvas, Column, Label, Node, NodeKind, NodeTransition, Row, Surface, TabBar, Tabs,
+    TextInput, TreeError,
 };
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
+pub use persistence::{MemoryStateStore, Persisted, StateStore};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};
 pub use scheduler::{

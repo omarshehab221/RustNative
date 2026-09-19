@@ -27,8 +27,9 @@ use parking_lot::Mutex;
 use crate::identity::ComponentId;
 
 /// Stable identity for one spawned task.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct TaskId(u64);
 
 impl TaskId {

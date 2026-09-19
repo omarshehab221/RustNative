@@ -6,6 +6,7 @@ use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     COLOR_WINDOW, GetSysColorBrush, HDC, SetBkColor, SetBkMode, SetTextColor, TRANSPARENT,
 };
+use windows_sys::Win32::UI::Controls::{NMHDR, TCN_SELCHANGE};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
 };
@@ -13,12 +14,12 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     BN_CLICKED, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW, DestroyWindow,
     DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PostMessageW, PostQuitMessage,
     RegisterClassW, TranslateMessage, WM_CAPTURECHANGED, WM_CHAR, WM_CLOSE, WM_COMMAND,
-    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP,
-    WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_POINTERDOWN,
-    WM_POINTERUP, WM_POINTERUPDATE, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK,
-    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
+    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_ENDSESSION, WM_KEYDOWN,
+    WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN,
+    WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_NOTIFY,
+    WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE, WM_POWERBROADCAST, WM_QUERYENDSESSION, WM_QUIT,
+    WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN,
+    WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
 };
 
 use super::container::container_proc;
@@ -617,6 +618,20 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             });
             0
         }
+        super::single_instance::WM_FRAMEWORK_DEEP_LINK
+        | WM_QUERYENDSESSION
+        | WM_ENDSESSION
+        | WM_POWERBROADCAST => session_message(hwnd, message, wparam),
+        WM_NOTIFY => {
+            // SAFETY: `WM_NOTIFY`'s `lParam` is a pointer to an `NMHDR`
+            // (the header every notification structure starts with), valid
+            // for the duration of this sent message.
+            let header = unsafe { &*(lparam as *const NMHDR) };
+            if header.code == TCN_SELCHANGE {
+                with_runtime(hwnd, |runtime| tab_selected(runtime, header.hwndFrom));
+            }
+            default()
+        }
         WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
             with_runtime(hwnd, |runtime| control_color(runtime, wparam, lparam))
                 .flatten()
@@ -707,6 +722,9 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                 LONG_PRESS_TIMER_ID => {
                     with_runtime(hwnd, input::pointer::long_press_timer);
                 }
+                super::lifecycle::FLUSH_TIMER_ID => {
+                    with_runtime(hwnd, |runtime| super::lifecycle::idle_flush(runtime));
+                }
                 input::gamepad::GAMEPAD_TIMER_ID => {
                     with_runtime(hwnd, input::gamepad::poll);
                 }
@@ -761,6 +779,8 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             0
         }
         WM_DESTROY => {
+            // Saved while the window still has a placement to read.
+            with_runtime(hwnd, |runtime| super::lifecycle::save_placement(runtime));
             // UI Automation is released first, and its disconnections raised
             // outside the runtime borrow, like every other call into it.
             if let Some(ready) = with_runtime(hwnd, super::uia::release_window) {
@@ -771,7 +791,11 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                 super::animation::release(runtime);
                 input::drop_target::revoke(runtime);
                 clipboard::stop_listening(runtime);
-                for timer in [LONG_PRESS_TIMER_ID, input::gamepad::GAMEPAD_TIMER_ID] {
+                for timer in [
+                    LONG_PRESS_TIMER_ID,
+                    input::gamepad::GAMEPAD_TIMER_ID,
+                    super::lifecycle::FLUSH_TIMER_ID,
+                ] {
                     // SAFETY: `hwnd` is live inside its own `WM_DESTROY`;
                     // killing a timer that was never set is harmless.
                     ignored_by_contract(unsafe { KillTimer(hwnd, timer) });
@@ -821,6 +845,72 @@ fn menu_command(runtime: &mut Runtime, command_id: u16) {
 
 /// Routes a native control's notification (a button click, an edit
 /// control's text change) back to the component that owns the control.
+/// Messages about the application's life rather than about one window:
+/// deep links handed over by a second launch, the session ending, and the
+/// machine sleeping or waking (see `native::lifecycle`).
+fn session_message(hwnd: HWND, message: u32, wparam: WPARAM) -> LRESULT {
+    match message {
+        super::single_instance::WM_FRAMEWORK_DEEP_LINK => {
+            with_runtime(hwnd, |runtime| {
+                for url in super::single_instance::take_pending() {
+                    if !runtime.dispatch_or_quit(Event::DeepLink { url }) {
+                        return;
+                    }
+                }
+            });
+            0
+        }
+        WM_QUERYENDSESSION => {
+            // The person is signing out or shutting down. Windows may end
+            // the process at any moment after this returns, so state is
+            // written now, and the application told.
+            with_runtime(hwnd, |runtime| {
+                if super::lifecycle::is_primary(runtime) {
+                    super::lifecycle::notify(runtime, framework_core::Lifecycle::Terminating);
+                }
+            });
+            1
+        }
+        WM_ENDSESSION => {
+            // Anything written in answer to `Terminating` is flushed too.
+            if wparam != 0 {
+                with_runtime(hwnd, |runtime| super::lifecycle::idle_flush(runtime));
+            }
+            0
+        }
+        WM_POWERBROADCAST => {
+            with_runtime(hwnd, |runtime| {
+                if super::lifecycle::is_primary(runtime) {
+                    super::lifecycle::power_broadcast(runtime, u32::try_from(wparam).unwrap_or(0));
+                }
+            });
+            1
+        }
+        _ => 0,
+    }
+}
+
+/// The person chose a tab: report it, then make the control show whatever
+/// the component decided (see `rendering::tabs` on why the control is
+/// controlled).
+fn tab_selected(runtime: &mut Runtime, control: HWND) {
+    let Some(id) = runtime.renderer.registry.id_for_hwnd(control) else {
+        return;
+    };
+    let Some(index) = super::rendering::tabs::selection(control) else {
+        return;
+    };
+    if !runtime.dispatch_or_quit(Event::TabSelected { target: id, index }) {
+        return;
+    }
+    let selected = runtime.renderer.snapshot.get(id).and_then(|node| node.tabs.as_ref());
+    if let Some(tabs) = selected {
+        if tabs.selected() != index {
+            super::rendering::tabs::select(control, tabs.selected());
+        }
+    }
+}
+
 fn control_notification(
     runtime: &mut Runtime,
     id: framework_core::NodeId,

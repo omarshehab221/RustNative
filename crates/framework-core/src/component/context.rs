@@ -315,11 +315,18 @@ impl AnimationRequests {
 
 /// A typed child-to-parent message sender. Clones are cheap and represent
 /// the same framework-managed channel endpoint.
-#[derive(Clone)]
 pub struct Callback<M: 'static> {
     target: ComponentId,
     sink: Rc<RefCell<VecDeque<QueuedMessage>>>,
     _marker: std::marker::PhantomData<fn(M)>,
+}
+
+// Written out rather than derived: a derive would require `M: Clone`, but
+// cloning a callback copies an endpoint, never a message.
+impl<M: 'static> Clone for Callback<M> {
+    fn clone(&self) -> Self {
+        Self { target: self.target, sink: Rc::clone(&self.sink), _marker: std::marker::PhantomData }
+    }
 }
 
 impl<M: 'static> PartialEq for Callback<M> {
@@ -509,6 +516,22 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
     #[must_use]
     pub fn motion_preference(&self) -> MotionPreference {
         self.tree.motion_preference()
+    }
+
+    /// A value this component keeps across runs, under `key`, starting as
+    /// `default` (see [`crate::persistence`] and [`crate::Persisted`]).
+    ///
+    /// The value is found again on the next launch because it is keyed by
+    /// this component's *key path* — the child keys from its window's root
+    /// down to it — which the same program rebuilds the same way every run.
+    /// Two components with the same `key` in different places never share
+    /// a value; a component that moves to a different parent starts from
+    /// its default there.
+    pub fn persisted<T>(&self, key: &str, default: T) -> crate::persistence::Persisted<T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Clone,
+    {
+        self.tree.persisted(self.parent, key, default)
     }
 
     /// Returns the active theme.

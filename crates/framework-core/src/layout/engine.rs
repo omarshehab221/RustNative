@@ -238,7 +238,14 @@ impl LayoutEngine {
         result.rects.insert(node.id, rect);
         let content_rect = Rect::new(0, 0, rect.width, rect.height);
 
-        let children = snapshot.children_of(node.id).collect::<Vec<_>>();
+        // Hidden children keep their native objects and component state but
+        // give up their space: they are laid out at zero size, apart from
+        // the flow their visible siblings share.
+        let (hidden, children): (Vec<_>, Vec<_>) =
+            snapshot.children_of(node.id).partition(|child| child.hidden);
+        for child in hidden {
+            self.layout_node(snapshot, child, Rect::new(0, 0, 0, 0), result, measurer, extents);
+        }
 
         match node.kind {
             NodeKind::Column => {
@@ -318,6 +325,7 @@ impl LayoutEngine {
             NodeKind::Label
             | NodeKind::Button
             | NodeKind::TextInput
+            | NodeKind::TabBar
             | NodeKind::Canvas
             | NodeKind::Surface => {}
         }
@@ -724,7 +732,7 @@ impl LayoutEngine {
         measurer: &M,
     ) -> i32 {
         let base = match node.kind {
-            NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {
+            NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar => {
                 measurer.measure(node.kind, node.text.as_deref(), None).width as i32
             }
             // A picture has no natural size: it is as big as layout makes
@@ -767,7 +775,7 @@ impl LayoutEngine {
             return 0;
         }
         match node.kind {
-            NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {
+            NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar => {
                 measurer.measure(node.kind, node.text.as_deref(), max_width).height as i32
             }
             NodeKind::Canvas | NodeKind::Surface => 0,

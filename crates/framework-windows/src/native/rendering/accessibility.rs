@@ -171,7 +171,10 @@ impl AccessibilityBridge {
     /// container, canvas, and surface windows answer it in their own window
     /// procedures).
     pub(crate) fn attach(hwnd: HWND, kind: NodeKind) {
-        if matches!(kind, NodeKind::Label | NodeKind::Button | NodeKind::TextInput) {
+        if matches!(
+            kind,
+            NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar
+        ) {
             crate::native::uia::subclass::install(hwnd);
         }
     }

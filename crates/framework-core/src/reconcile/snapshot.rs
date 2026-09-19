@@ -16,7 +16,7 @@ use crate::identity::NodeId;
 use crate::input::{InputInterest, Scalar};
 use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
 use crate::node::NodeTransition;
-use crate::node::{Node, TreeError};
+use crate::node::{Node, Tabs, TreeError};
 #[cfg(test)]
 use crate::style::VisualStyle;
 use crate::style::{ControlState, ResolvedStyle, StyleOverride, Theme};
@@ -94,6 +94,12 @@ pub struct TreeNode {
     /// What this node draws, if it is a canvas (see
     /// [`crate::Node::canvas`]). Shared with the node tree, not copied.
     pub draw_list: Option<DrawList>,
+    /// This node's tabs, if it is a tab bar (see [`crate::Node::tab_bar`]).
+    pub tabs: Option<Tabs>,
+    /// Whether this node is hidden (see [`crate::Node::hidden`]). Only the
+    /// node's own flag: a node inside a hidden container is hidden too,
+    /// which [`TreeSnapshot::is_effectively_hidden`] answers.
+    pub hidden: bool,
 }
 
 impl TreeNode {
@@ -102,6 +108,8 @@ impl TreeNode {
             Node::Label(label) => Some(label.text().to_owned()),
             Node::Button(button) => Some(button.text().to_owned()),
             Node::TextInput(input) => Some(input.value().to_owned()),
+            // A tab strip measures like the text of its labels side by side.
+            Node::TabBar(bar) => Some(bar.tabs().labels().join("     ")),
             Node::Column(_) | Node::Row(_) | Node::Canvas(_) | Node::Surface(_) => None,
         };
 
@@ -127,6 +135,8 @@ impl TreeNode {
             item_index: node.item_index(),
             virtualization: node.virtualization(),
             draw_list: node.draw_list().cloned(),
+            tabs: node.tabs().cloned(),
+            hidden: node.is_hidden(),
         }
     }
 }
@@ -257,6 +267,19 @@ impl TreeSnapshot {
     #[must_use]
     pub fn get(&self, id: NodeId) -> Option<&TreeNode> {
         self.nodes.get(&id)
+    }
+
+    /// Whether `id` is hidden, by its own flag or by any ancestor's.
+    #[must_use]
+    pub fn is_effectively_hidden(&self, id: NodeId) -> bool {
+        let mut current = self.nodes.get(&id);
+        while let Some(node) = current {
+            if node.hidden {
+                return true;
+            }
+            current = node.parent.and_then(|parent| self.nodes.get(&parent));
+        }
+        false
     }
 
     /// Returns whether `id` names a node in this snapshot.

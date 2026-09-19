@@ -140,6 +140,12 @@ pub struct ComponentTree {
     last_render_error: Option<RenderError>,
     services: Services,
     theme: Theme,
+    /// Each component's key path — the chain of child keys from this tree's
+    /// root — which is what persisted state is keyed by (see
+    /// [`crate::persistence`]).
+    paths: HashMap<ComponentId, String>,
+    /// Buffered persisted state for this window.
+    state: Rc<RefCell<crate::persistence::StateCache>>,
 }
 
 impl ComponentTree {
@@ -161,6 +167,7 @@ impl ComponentTree {
         theme: Theme,
     ) -> Self {
         root.mounted();
+        let state = crate::persistence::StateCache::new(services.state_store().cloned());
         let mut tree = Self {
             components: HashMap::new(),
             pending_children: HashMap::new(),
@@ -180,6 +187,10 @@ impl ComponentTree {
             last_render_error: None,
             services,
             theme,
+            // The root's path is its type's name: stable across runs of the
+            // same program, and distinct for windows of different kinds.
+            paths: HashMap::from([(ComponentId::ROOT, std::any::type_name::<C>().to_owned())]),
+            state: Rc::new(RefCell::new(state)),
         };
         let root_scope = TaskScope::new(tree.scheduler.clone(), ComponentId::ROOT);
         tree.components.insert(
@@ -476,6 +487,42 @@ impl ComponentTree {
         }
     }
 
+    /// A persisted value for component `owner` under `key` (see
+    /// [`crate::ComponentContext::persisted`]).
+    pub(crate) fn persisted<T>(
+        &self,
+        owner: ComponentId,
+        key: &str,
+        default: T,
+    ) -> crate::persistence::Persisted<T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Clone,
+    {
+        let path = self.paths.get(&owner).map_or("", String::as_str);
+        crate::persistence::Persisted::new(
+            format!("{path}#{}", escape_key(key)),
+            default,
+            Rc::clone(&self.state),
+        )
+    }
+
+    /// Writes this window's buffered persisted state to its store.
+    ///
+    /// # Errors
+    ///
+    /// The first store write that failed; every other buffered write was
+    /// still attempted, and the failed ones stay buffered for the next
+    /// flush.
+    pub fn flush_state(&self) -> Result<(), crate::services::ServiceError> {
+        self.state.borrow_mut().flush()
+    }
+
+    /// Whether this window has persisted-state writes not yet flushed.
+    #[must_use]
+    pub fn has_unsaved_state(&self) -> bool {
+        self.state.borrow().is_dirty()
+    }
+
     /// Composes/reuses a keyed child component and returns its rendered
     /// view. `key` is consumed as an owned `String` (rather than `&str`)
     /// because it is stored as-is in `pending_children`'s key set below on
@@ -518,6 +565,12 @@ impl ComponentTree {
                 self.remove_component(existing_id);
             }
 
+            let path = format!(
+                "{}/{}",
+                self.paths.get(&parent).map_or("", String::as_str),
+                escape_key(&key)
+            );
+            self.paths.insert(id, path);
             let mut component = constructor(props);
             component.mounted();
             self.components.insert(
@@ -738,6 +791,7 @@ impl ComponentTree {
         let Some(mut entry) = self.components.remove(&id) else {
             return;
         };
+        self.paths.remove(&id);
 
         // Structured ownership ends with the component lifetime: its tasks
         // are cancelled here, and its animations are queued for the backend
@@ -793,6 +847,7 @@ impl ComponentTree {
 
         for child in children {
             self.remove_component_children(child);
+            self.paths.remove(&child);
             if let Some(mut entry) = self.components.remove(&child) {
                 entry.task_scope.cancel_all();
                 Self::dispose_effects(&mut entry);
@@ -860,9 +915,25 @@ fn scope_component_node_ids(
         | Node::Button(_)
         | Node::TextInput(_)
         | Node::Canvas(_)
-        | Node::Surface(_) => {}
+        | Node::Surface(_)
+        | Node::TabBar(_) => {}
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+/// Escapes a component key for use as one segment of a key path, so a key
+/// containing `/` or `#` cannot impersonate a deeper path or a value key.
+fn escape_key(key: &str) -> String {
+    let mut escaped = String::with_capacity(key.len());
+    for character in key.chars() {
+        match character {
+            '%' => escaped.push_str("%25"),
+            '/' => escaped.push_str("%2F"),
+            '#' => escaped.push_str("%23"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
+}

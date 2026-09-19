@@ -235,6 +235,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -245,6 +246,8 @@ dependencies = [
  "async-trait",
  "framework-core",
  "raw-window-handle",
+ "serde",
+ "serde_json",
  "tokio",
  "windows",
  "windows-core",

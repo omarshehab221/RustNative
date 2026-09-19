@@ -34,6 +34,7 @@
 //! | [`scrolling`] | Scroll offsets, ranges, and the viewport transform | Scroll behavior changes |
 //! | [`virtual_list`] | Each virtual list's measured extents and visible range | Virtualization changes |
 //! | [`pool`] | Native windows a virtual list's rows recycle through | Recycling changes |
+//! | [`tabs`] | The system tab control behind a tab bar | Tab bar behavior changes |
 //!
 //! # Dependency direction
 //!
@@ -51,6 +52,7 @@ pub(crate) mod pool;
 pub(crate) mod realization;
 pub(crate) mod scrolling;
 pub(crate) mod styling;
+pub(crate) mod tabs;
 pub(crate) mod virtual_list;
 
 pub(crate) use realization::Renderer;

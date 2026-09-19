@@ -46,6 +46,17 @@ pub enum Capability {
     Animations,
     /// Reporting the system's reduced-motion preference.
     ReducedMotionPreference,
+    /// Canvas nodes drawn from a portable display list.
+    CustomDrawing,
+    /// Native surfaces handed to an application's own GPU renderer.
+    NativeSurfaces,
+    /// Durable storage for persisted component state.
+    StatePersistence,
+    /// Opening the application for a URL, and handing a second launch's
+    /// URL to the running instance.
+    DeepLinks,
+    /// Reporting suspend, resume, and termination.
+    Lifecycle,
 }
 
 /// The set of [`Capability`]s one platform adapter actually realizes.

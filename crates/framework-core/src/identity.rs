@@ -58,8 +58,9 @@ use std::collections::HashMap;
 /// intentional: a component's local key is the only part an application
 /// author has to reason about, while the runtime-assigned global identity is
 /// what backends and reconciliation actually key native/tree state by.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct NodeId(u128);
 
 thread_local! {
@@ -148,8 +149,9 @@ impl NodeId {
 /// Allocated sequentially by `ComponentId::next` and never reused within
 /// one [`crate::ComponentTree`]'s lifetime, which is what lets
 /// `NodeId::scoped` guarantee no two live components' nodes can alias.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct ComponentId(u64);
 
 impl ComponentId {
@@ -192,8 +194,9 @@ impl ComponentId {
 }
 
 /// Stable identity for one native top-level window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct WindowId(u64);
 
 impl WindowId {

@@ -50,6 +50,10 @@ impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
         let text_wide = super::util::wide(text);
         let padding = match kind {
             NodeKind::Button | NodeKind::TextInput => 24,
+            // Each tab has its own padding; the labels arrive joined with
+            // wide gaps (see the core snapshot), so a little more covers
+            // the strip's own frame.
+            NodeKind::TabBar => 32,
             NodeKind::Label
             | NodeKind::Column
             | NodeKind::Row

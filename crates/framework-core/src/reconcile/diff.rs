@@ -119,6 +119,8 @@ fn node_changed(previous: &TreeNode, next: &TreeNode) -> bool {
         // Redraws the canvas; never a layout change, since a canvas is as
         // big as layout makes it, whatever it draws.
         || previous.draw_list != next.draw_list
+        || previous.tabs != next.tabs
+        || previous.hidden != next.hidden
 }
 
 /// Classifies whether the difference between two versions of the same node
@@ -139,6 +141,8 @@ fn is_layout_relevant_change(previous: &TreeNode, next: &TreeNode) -> bool {
         // changed has a different length and a different scroll range.
         || previous.item_index != next.item_index
         || previous.virtualization != next.virtualization
+        // A hidden node gives up its space, and a shown one takes it back.
+        || previous.hidden != next.hidden
         || typography_changed(previous, next)
 }
 

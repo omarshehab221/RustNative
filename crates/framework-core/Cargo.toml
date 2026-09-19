@@ -22,14 +22,19 @@ workspace = true
 tokio.workspace = true
 parking_lot.workspace = true
 async-trait.workspace = true
-serde = { version = "1", features = ["derive"], optional = true }
+# Milestone 30's persistence serializes component state and navigation
+# stacks; `serde_json` is the on-disk format (readable when debugging a
+# state file, and forgiving of fields added in a later version).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [features]
 default = []
-# Enables `serde::{Serialize, Deserialize}` on the newtype IDs and other
-# persistence-relevant types ahead of the roadmap's persistence milestone
-# (see PLAN.md). Off by default so embedders don't pay for it unused.
-serde = ["dep:serde"]
+# Before Milestone 30 this enabled `Serialize`/`Deserialize` on the id
+# types, ahead of persistence. Persistence is now part of the core, so
+# serde always is; the feature is kept, empty, so a manifest that asks for
+# it still builds.
+serde = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "test-util"] }

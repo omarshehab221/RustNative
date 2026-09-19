@@ -22,6 +22,9 @@ pub(crate) fn focus_next(runtime: &mut Runtime, backwards: bool) {
         .filter(|node| {
             node.accessibility.is_focusable()
                 && !node.disabled
+                // A hidden screen's controls still exist, but Tab must not
+                // wander into a screen nobody can see.
+                && !runtime.renderer.snapshot.is_effectively_hidden(node.id)
                 && runtime.renderer.registry.get(node.id).is_some()
         })
         .collect::<Vec<_>>();

@@ -1,5 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use framework_core::{
@@ -7,10 +8,11 @@ use framework_core::{
     AnimatedProperty, AnimatedValue, Animation, AnimationRequests, Application, Callback,
     CheckedState, Color, ColumnStyle, Component, ComponentContext, DrawList, DropEffect,
     EdgeInsets, Event, InputInterest, InputRequests, ItemExtent, LayoutStyle, LiveRegion, MenuBar,
-    MenuItem, Node, NodeId, Overflow, Paint, PanicPolicy, Platform, Point, RectF, RowStyle, Size,
-    SizeMode, TaskHandle, Transition, Vec2, VirtualListStyle, VirtualRange, Window,
+    MenuItem, NavigationCommand, NavigationStack, Navigator, Node, NodeId, Overflow, Paint,
+    PanicPolicy, Persisted, Platform, Point, RectF, RowStyle, Services, Size, SizeMode, TaskHandle,
+    Transition, Vec2, VirtualListStyle, VirtualRange, Window,
 };
-use framework_windows::WindowsPlatform;
+use framework_windows::{FileStateStore, WindowsPlatform};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum AppMessage {
@@ -266,6 +268,7 @@ struct AppShell {
     settings_opened_count: u32,
     input_lab_requested: bool,
     long_list_requested: bool,
+    preferences_requested: bool,
 }
 
 /// A separate root used to exercise the native multi-window host. It has no
@@ -455,6 +458,148 @@ impl Component for LongList {
                 self.prepended += 10;
             }
             _ => {}
+        }
+    }
+}
+
+/// Milestone 30: tabs, a navigation stack, and state that outlives the
+/// process.
+///
+/// Both tabs' pages stay mounted — the hidden one keeps its state — and
+/// the "Guide" tab is a navigation stack whose screens are child
+/// components, so going back finds the page as it was left. The press
+/// count is persisted: it is still there the next time the example runs.
+struct Preferences {
+    tab: usize,
+    guide: NavigationStack<String>,
+    presses: Option<Persisted<u32>>,
+}
+
+impl Component for Preferences {
+    type Props = ();
+    type Message = NavigationCommand<String>;
+
+    fn new((): Self::Props) -> Self {
+        Self { tab: 0, guide: NavigationStack::new("Welcome".to_owned()), presses: None }
+    }
+
+    fn props(&self) -> &Self::Props {
+        static PROPS: () = ();
+        &PROPS
+    }
+
+    fn set_props(&mut self, (): Self::Props) {}
+
+    fn view(&self) -> Node {
+        Node::label("prefs-unused", "")
+    }
+
+    fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+        let presses = context.persisted("presses", 0u32);
+        let count = presses.get();
+        self.presses = Some(presses);
+        let navigator = Navigator::new(context.callback());
+        let guide = self.guide.view("prefs-guide", |entry| {
+            context.child_with_props(
+                entry.id().key(),
+                GuidePageProps { title: entry.route().clone(), navigator: navigator.clone() },
+                GuidePage::new,
+            )
+        });
+        Node::column(
+            "prefs-root",
+            [
+                Node::tab_bar(
+                    "prefs-tabs",
+                    ["General", "Guide"],
+                    self.tab,
+                    LayoutStyle::new().height(SizeMode::Fixed(28)),
+                ),
+                Node::column(
+                    "prefs-general",
+                    [
+                        Node::label(
+                            "prefs-count",
+                            format!("Pressed {count} times (kept across runs)"),
+                        ),
+                        Node::button("prefs-press", "Press"),
+                    ],
+                )
+                .hidden(self.tab != 0),
+                guide.hidden(self.tab != 1),
+            ],
+        )
+    }
+
+    fn update(&mut self, event: Event) {
+        match event {
+            Event::TabSelected { index, .. } => self.tab = index,
+            Event::Click { target } if target == NodeId::from_key("prefs-press") => {
+                if let Some(presses) = &self.presses {
+                    presses.update(|count| *count += 1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn message(&mut self, command: NavigationCommand<String>) {
+        self.guide.apply(command);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct GuidePageProps {
+    title: String,
+    navigator: Navigator<String>,
+}
+
+/// One screen of the guide, with its own counter — which survives pushing
+/// another screen on top and popping back to it.
+struct GuidePage {
+    props: GuidePageProps,
+    clicks: u32,
+}
+
+impl Component for GuidePage {
+    type Props = GuidePageProps;
+    type Message = ();
+
+    fn new(props: Self::Props) -> Self {
+        Self { props, clicks: 0 }
+    }
+
+    fn props(&self) -> &Self::Props {
+        &self.props
+    }
+
+    fn set_props(&mut self, props: Self::Props) {
+        self.props = props;
+    }
+
+    fn view(&self) -> Node {
+        Node::column(
+            "guide-page",
+            [
+                Node::label(
+                    "guide-title",
+                    format!("{} (clicked {})", self.props.title, self.clicks),
+                ),
+                Node::button("guide-click", "Click"),
+                Node::button("guide-next", "Next page"),
+                Node::button("guide-back", "Back"),
+            ],
+        )
+    }
+
+    fn update(&mut self, event: Event) {
+        let Event::Click { target } = event else { return };
+        if target == NodeId::from_key("guide-click") {
+            self.clicks += 1;
+        } else if target == NodeId::from_key("guide-next") {
+            self.props.navigator.push(format!("{} \u{2192} next", self.props.title));
+        } else if target == NodeId::from_key("guide-back") {
+            self.props.navigator.pop();
         }
     }
 }
@@ -717,6 +862,7 @@ impl AppShell {
             settings_opened_count: 0,
             input_lab_requested: false,
             long_list_requested: false,
+            preferences_requested: false,
         }
     }
 
@@ -755,6 +901,15 @@ impl Component for AppShell {
             context.windows().open(
                 SettingsWindow::new(self.settings_opened_count),
                 Window::new("Rust Native UI — Settings", Size::new(360, 160)),
+                None,
+            );
+        }
+
+        if self.preferences_requested {
+            self.preferences_requested = false;
+            context.windows().open(
+                Preferences::new(()),
+                Window::new("Rust Native UI — Preferences", Size::new(420, 320)),
                 None,
             );
         }
@@ -848,6 +1003,8 @@ impl Component for AppShell {
                     self.input_lab_requested = true;
                 } else if item == NodeId::from_key("file.long-list") {
                     self.long_list_requested = true;
+                } else if item == NodeId::from_key("file.preferences") {
+                    self.preferences_requested = true;
                 }
             }
             _ => {}
@@ -862,6 +1019,11 @@ impl Component for AppShell {
     }
 }
 
+/// Milestone 30: state that outlives the process lives under
+/// `%LOCALAPPDATA%\dev.rustnative.hello-label\state`, and the same id makes
+/// the example single-instance (a second launch hands over its link).
+const APP_ID: &str = "dev.rustnative.hello-label";
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let menu = MenuBar::new([
         MenuItem::submenu(
@@ -871,14 +1033,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 MenuItem::action("file.new-settings-window", "New Settings Window"),
                 MenuItem::action("file.input-lab", "Input Lab"),
                 MenuItem::action("file.long-list", "100,000 Rows"),
+                MenuItem::action("file.preferences", "Preferences"),
             ],
         ),
         MenuItem::submenu("view", "View", [MenuItem::action("view.toggle-panel", "Toggle Panel")]),
     ]);
 
-    let mut application = Application::new(
+    let services = Services::default().with_state_store(Arc::new(FileStateStore::for_app(APP_ID)?));
+    let mut application = Application::with_services(
         AppShell::new(),
         Window::new("Rust Native UI", Size::new(640, 360)).with_menu(menu),
+        services,
     );
     // A component panic is caught at the Win32 callback boundary regardless
     // (unwinding across `extern "system"` is undefined behavior, so that
@@ -898,7 +1063,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None,
     );
 
-    WindowsPlatform::new().run(&mut application)?;
+    WindowsPlatform::new().with_app_id(APP_ID).run(&mut application)?;
 
     Ok(())
 }

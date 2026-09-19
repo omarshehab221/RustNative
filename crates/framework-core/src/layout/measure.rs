@@ -39,6 +39,7 @@ impl IntrinsicMeasurer for DefaultIntrinsicMeasurer {
             .saturating_mul(8)
             .saturating_add(match kind {
                 NodeKind::Button | NodeKind::TextInput => 24,
+                NodeKind::TabBar => 48,
                 NodeKind::Label
                 | NodeKind::Column
                 | NodeKind::Row

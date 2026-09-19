@@ -2,7 +2,101 @@
 
 ## Current milestone
 
-**Milestone 29 — Graphics / custom rendering escape hatch — complete.**
+**Milestone 30 — Persistence and navigation — complete.**
+
+### What was built
+
+Core: `navigation` (`Route`, `Router`, `url_path`, `NavigationStack`,
+`NavigationCommand`, `Navigator`), `persistence` (`StateStore`,
+`MemoryStateStore`, `Persisted`, and the per-window write buffer),
+`Lifecycle`, `Node::hidden`, `Node::tab_bar`, `Event::{TabSelected,
+DeepLink, Lifecycle}`, component **key paths** in the component tree, and
+`Application::{flush_state, has_unsaved_state, lifecycle, open_url}`. serde
+is now a normal dependency of the core (the old optional `serde` feature is
+kept, empty, so manifests that name it still build).
+
+Windows: hidden nodes realized with `ShowWindow` and skipped by Tab;
+`SysTabControl32` tab bars with controlled selection; `FileStateStore`;
+`native::lifecycle` (idle flush timer, `WM_QUERYENDSESSION`,
+`WM_ENDSESSION`, `WM_POWERBROADCAST`, final `Terminating` after the loop,
+primary-window placement save/restore); `native::single_instance` (named
+mutex, message-only listener, `WM_COPYDATA` handoff, launch URL from the
+command line); `WindowsPlatform::with_app_id`. New capabilities:
+`StatePersistence`, `DeepLinks`, `Lifecycle` — and `CustomDrawing` /
+`NativeSurfaces`, which Milestone 29 realized but did not advertise.
+
+### Deviations from the plan, and why
+
+- **No `ComponentContext::navigator()`.** Navigation commands travel through
+  the existing child-to-parent `Callback`, which already delivers after the
+  requesting event and needs no new runtime machinery. A `Navigator` wraps
+  one.
+- **No separate `TabHost` type.** A tab host is a tab bar plus pages marked
+  `hidden` — a pattern three lines long, shown in the README and example,
+  rather than a type that would hide it.
+- **Deep-link scheme registration** is packaging's job (Milestone 32).
+
+### What it found
+
+1. **Hiding did nothing on a window's first render.** `IsWindowVisible`
+   answers "no" for every child of a window not yet shown, so the check
+   "already hidden?" skipped hiding exactly when a hidden page is first
+   created. The tab-bar test caught the second page visible; visibility is
+   now decided by the window's own `WS_VISIBLE` bit.
+2. **An inserted method stole an `#[allow]`.** New `ComponentTree` methods
+   were placed between an existing function's attributes and its
+   signature, so the `expect_used` exemption silently moved to the wrong
+   function; clippy caught it, and the methods now sit above the doc
+   comment.
+3. **`Callback` could not be cloned for non-`Clone` messages.** Its derived
+   `Clone` required `M: Clone`, though cloning a callback copies an
+   endpoint, never a message. It is now implemented by hand.
+
+### Verified, and how
+
+Core: route tables and a property test that any parameters survive
+`build` then `matches`; navigation stacks keep entry identity across
+push/pop/replace/reset and round-trip through serde; black-box tests that a
+pushed screen leaves the one below mounted with its state (mount counts),
+that a deep link is routed by the root, that persisted state survives a
+whole `Application` being dropped and rebuilt, that it follows component
+keys rather than positions, and that `Suspending` flushes before the
+component hears it; hidden subtrees are absent from the accessibility tree.
+
+Windows: `FileStateStore` round-trips, survives a forged half-written
+temporary file (reads the committed value, deletes the debris on reopen),
+detects a forged hash collision, and stores long keys with reserved
+characters. Six integration tests in real windows: choosing a tab by
+mouse reports `TabSelected` and swaps the visible page without destroying
+the hidden one; Tab traversal never focuses a hidden page's button;
+`WM_QUERYENDSESSION` writes buffered state before the component hears
+`Terminating`; the idle-flush timer writes buffered state; a second claim
+of the same app id sees the first, and a `WM_COPYDATA` handoff delivers
+`DeepLink` to the running window; and the primary window reopens exactly
+where it was closed.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+### Not verified on this machine
+
+A real sign-out, shutdown, or sleep (the tests send the messages Windows
+would); a genuine second process (the handoff is exercised in one process
+through the same mutex, listener window, and `WM_COPYDATA`); restoring a
+placement whose monitor has since been disconnected (the
+`MonitorFromRect` guard is in place but no monitor was unplugged); and a
+screen reader's view of hidden pages beyond the accessibility tree's own
+test.
+
+---
+
+## Previous: Milestone 29 — Graphics / custom rendering escape hatch — complete.
 
 ### What was built
 

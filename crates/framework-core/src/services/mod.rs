@@ -333,6 +333,7 @@ pub struct Services {
     clipboard: Option<Arc<dyn ClipboardService>>,
     file_dialogs: Option<Arc<dyn FileDialogService>>,
     system: Option<Arc<dyn SystemService>>,
+    state: Option<Arc<dyn crate::persistence::StateStore>>,
 }
 
 impl fmt::Debug for Services {
@@ -343,6 +344,7 @@ impl fmt::Debug for Services {
             .field("clipboard", &self.clipboard.is_some())
             .field("file_dialogs", &self.file_dialogs.is_some())
             .field("system", &self.system.is_some())
+            .field("state", &self.state.is_some())
             .finish()
     }
 }
@@ -393,6 +395,20 @@ impl Services {
     #[must_use]
     pub fn storage(&self) -> Option<&Arc<dyn StorageService>> {
         self.storage.as_ref()
+    }
+
+    /// Returns `self` with the store persisted component state is kept in
+    /// (see [`crate::persistence`]).
+    #[must_use]
+    pub fn with_state_store(mut self, store: Arc<dyn crate::persistence::StateStore>) -> Self {
+        self.state = Some(store);
+        self
+    }
+
+    /// Returns the configured state store, if any.
+    #[must_use]
+    pub fn state_store(&self) -> Option<&Arc<dyn crate::persistence::StateStore>> {
+        self.state.as_ref()
     }
 
     /// Returns the configured clipboard service, if any.
