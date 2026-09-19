@@ -1,10 +1,10 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use framework_core::{
-    AccessibilityInfo, AccessibilityRole, Alignment, Application, Callback, ColumnStyle, Component,
-    ComponentContext, DropEffect, EdgeInsets, Event, InputInterest, InputRequests, LayoutStyle,
-    MenuBar, MenuItem, Node, NodeId, Overflow, PanicPolicy, Platform, RowStyle, Size, SizeMode,
-    TaskHandle, Window,
+    AccessibilityInfo, AccessibilityRole, AccessibleAction, AccessibleActionKind, Alignment,
+    Application, Callback, CheckedState, ColumnStyle, Component, ComponentContext, DropEffect,
+    EdgeInsets, Event, InputInterest, InputRequests, LayoutStyle, LiveRegion, MenuBar, MenuItem,
+    Node, NodeId, Overflow, PanicPolicy, Platform, RowStyle, Size, SizeMode, TaskHandle, Window,
 };
 use framework_windows::WindowsPlatform;
 
@@ -345,6 +345,10 @@ struct InputLab {
     dropped: String,
     keyboard: String,
     gamepad: String,
+    // Milestone 26: custom controls with no native equivalent, fully
+    // described to assistive technology (see `view`).
+    muted: bool,
+    volume: f32,
 }
 
 impl Component for InputLab {
@@ -361,6 +365,8 @@ impl Component for InputLab {
             dropped: "Drop files here".to_owned(),
             keyboard: idle(),
             gamepad: "No controller input yet".to_owned(),
+            muted: false,
+            volume: 40.0,
         }
     }
 
@@ -398,6 +404,47 @@ impl Component for InputLab {
                 line("lab-wheel", format!("Wheel: {}", self.wheel)),
                 line("lab-keyboard", format!("Keyboard/IME/clipboard: {}", self.keyboard)),
                 line("lab-gamepad", format!("Gamepad: {}", self.gamepad)),
+                // Two custom-drawn controls, one native window each. On
+                // Windows these are real UI Automation elements — a check
+                // box with a Toggle pattern, a slider with a RangeValue
+                // pattern — that Narrator reads and operates; what it asks
+                // for arrives in `update` as `AccessibilityAction`.
+                Node::column_with_layout(
+                    "lab-mute",
+                    [line(
+                        "lab-mute-text",
+                        format!("[{}] Mute", if self.muted { "x" } else { " " }),
+                    )],
+                    LayoutStyle::new().width(SizeMode::Fixed(160)).height(SizeMode::Fixed(28)),
+                    ColumnStyle::new(),
+                )
+                .with_input(InputInterest::new().pointer())
+                .with_accessibility(
+                    AccessibilityInfo::new(AccessibilityRole::CheckBox)
+                        .name("Mute")
+                        .checked(if self.muted {
+                            CheckedState::Checked
+                        } else {
+                            CheckedState::Unchecked
+                        })
+                        .action(AccessibleActionKind::Toggle)
+                        .focusable(true),
+                ),
+                Node::column_with_layout(
+                    "lab-volume",
+                    [line("lab-volume-text", format!("Volume: {:.0}", self.volume))],
+                    LayoutStyle::new().width(SizeMode::Fixed(160)).height(SizeMode::Fixed(28)),
+                    ColumnStyle::new(),
+                )
+                // Announced when it changes, wherever the person is.
+                .with_accessibility(
+                    AccessibilityInfo::new(AccessibilityRole::Slider)
+                        .name("Volume")
+                        .range(0.0, 100.0, self.volume, 5.0)
+                        .action(AccessibleActionKind::SetValue)
+                        .live(LiveRegion::Polite)
+                        .focusable(true),
+                ),
                 Node::column_with_layout(
                     "lab-drop",
                     [line("lab-drop-text", self.dropped.clone())],
@@ -421,6 +468,17 @@ impl Component for InputLab {
             return;
         };
         match event {
+            Event::PointerDown { target, .. } if target == NodeId::from_key("lab-mute") => {
+                self.muted = !self.muted;
+            }
+            Event::AccessibilityAction { action: AccessibleAction::Toggle, .. } => {
+                self.muted = !self.muted;
+            }
+            Event::AccessibilityAction {
+                action: AccessibleAction::SetRangeValue(value), ..
+            } => {
+                self.volume = value.get();
+            }
             Event::PointerDown { pointer, .. } => {
                 input.capture_pointer("lab-pad", pointer.pointer_id());
                 self.pointer = format!("{:?} down at {:?}", pointer.kind(), pointer.position());
@@ -519,7 +577,7 @@ impl Component for AppShell {
             self.input_lab_requested = false;
             context.windows().open(
                 InputLab::new(()),
-                Window::new("Rust Native UI — Input Lab", Size::new(520, 440)),
+                Window::new("Rust Native UI — Input Lab", Size::new(520, 520)),
                 None,
             );
         }

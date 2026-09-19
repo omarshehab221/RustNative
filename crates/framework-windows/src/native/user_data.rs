@@ -23,10 +23,31 @@
 //! module becomes a plain, safe-looking function call instead of a
 //! bespoke `unsafe` cast.
 
+use std::sync::atomic::{AtomicU16, Ordering};
+
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GWLP_USERDATA, GetWindowLongPtrW, SetWindowLongPtrW,
+    GCW_ATOM, GWLP_USERDATA, GetClassWord, GetWindowLongPtrW, SetWindowLongPtrW,
 };
+
+/// The class atom of this crate's top-level window class, recorded when the
+/// class is registered (`message_loop::register_window_classes`), or `0`
+/// before that.
+static TOP_LEVEL_CLASS_ATOM: AtomicU16 = AtomicU16::new(0);
+
+/// Records the atom identifying this crate's top-level window class, so
+/// [`RuntimeSlot::get`] can tell this crate's windows from everyone else's.
+pub(crate) fn set_top_level_class_atom(atom: u16) {
+    TOP_LEVEL_CLASS_ATOM.store(atom, Ordering::Release);
+}
+
+/// Whether `hwnd` is a window of this crate's top-level class.
+fn is_top_level_window(hwnd: HWND) -> bool {
+    let ours = TOP_LEVEL_CLASS_ATOM.load(Ordering::Acquire);
+    // SAFETY: `GetClassWord` accepts any handle value, returning `0` for a
+    // null or invalid one; `GCW_ATOM` is a documented index.
+    ours != 0 && !hwnd.is_null() && unsafe { GetClassWord(hwnd, GCW_ATOM) } == ours
+}
 
 use super::runtime::Runtime;
 
@@ -63,7 +84,22 @@ impl RuntimeSlot {
     /// as always safe to pass and simply returns `0` for) — every caller
     /// is expected to null-check the result before dereferencing it, since
     /// this accessor itself performs no dereference and cannot fail.
+    ///
+    /// Returns null, too, for any window that is not of this crate's
+    /// top-level class, *whatever* its slot holds. The message loop resolves
+    /// the root window of every message it sees, and the thread also owns
+    /// windows this crate did not create — the system's default IME window,
+    /// OLE's hidden `OleMainThreadWndClass` window (present since the drag
+    /// and drop target needs OLE), UI Automation's own windows. Their
+    /// `GWLP_USERDATA` belongs to them. Reading it as a `*mut Runtime` —
+    /// which is what this function did until Milestone 26 — would hand
+    /// `with_runtime` an arbitrary integer to dereference the first time one
+    /// of them stored a non-zero value there. Checking the class atom makes
+    /// "this is one of ours" a fact rather than an assumption.
     pub(crate) fn get(hwnd: HWND) -> *mut Runtime {
+        if !is_top_level_window(hwnd) {
+            return std::ptr::null_mut();
+        }
         // SAFETY: `GetWindowLongPtrW` is documented as safe to call with
         // any `HWND` value, including a null or otherwise invalid one (it
         // simply returns `0` in that case); this call reads a
@@ -126,7 +162,7 @@ mod tests {
 
     #[test]
     fn runtime_slot_round_trips_through_a_real_hwnd() {
-        let window = TestWindow::new();
+        let window = TestWindow::top_level_class();
         // Not a real `Runtime` — this test only exercises the storage
         // slot itself (a pointer-sized integer round-trip through real
         // `SetWindowLongPtrW`/`GetWindowLongPtrW` calls against a real
@@ -146,6 +182,29 @@ mod tests {
             RuntimeSlot::get(window.hwnd),
             sentinel,
             "RuntimeSlot::get must read back exactly what RuntimeSlot::set stored"
+        );
+        // This window is of the crate's own class, so its window procedure
+        // *would* resolve the sentinel as a runtime while being destroyed.
+        // SAFETY: as above; null is always a valid value for the slot.
+        unsafe {
+            RuntimeSlot::set(window.hwnd, std::ptr::null_mut());
+        }
+    }
+
+    #[test]
+    fn a_foreign_windows_slot_is_never_read_as_a_runtime() {
+        // A window of some other class whose `GWLP_USERDATA` holds a value
+        // — as OLE's, the IME's, or any other window on this thread may.
+        let foreign = TestWindow::new();
+        let sentinel = std::ptr::without_provenance_mut::<Runtime>(0x3000);
+        // SAFETY: `foreign.hwnd` is a live HWND this test owns; the slot is
+        // written but never dereferenced.
+        unsafe {
+            RuntimeSlot::set(foreign.hwnd, sentinel);
+        }
+        assert!(
+            RuntimeSlot::get(foreign.hwnd).is_null(),
+            "only a window of this crate's top-level class may resolve to a runtime"
         );
     }
 

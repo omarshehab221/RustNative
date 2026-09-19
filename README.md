@@ -12,10 +12,10 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 25 — Advanced Input System**
-(pointers, capture, touch, pen, gestures, wheels, IME, clipboard events,
-drag-and-drop, and game controllers), on top of the standards-audit
-remediation pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
+The latest completed milestone is **Milestone 26 — Full Accessibility
+Bridge** (a portable accessibility model realized as real UI Automation
+providers), after Milestone 25's advanced input system and the
+standards-audit remediation pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
 verified, what it found while doing so, and what is still open.
 
 ## Architecture
@@ -385,12 +385,13 @@ touch and pen, top-level mouse capture with lost capture reported as
 
 The core exposes semantic input events instead of Win32 virtual-key constants. The Windows backend translates native input to those events.
 
-Accessibility semantics currently include:
-
-- role;
-- name;
-- description;
-- focusability.
+The portable accessibility model (`framework_core::accessibility`) covers
+roles (29, including headings with levels), names, descriptions, text and
+range values, checked/expanded/selected/read-only/required/busy states,
+declared and invoked actions, labelled-by/described-by/controls
+relationships, live regions, position-in-set for virtualized children,
+automation ids, focusability, and *virtual elements* — semantic children with
+no native object of their own, for custom-drawn content.
 
 Every node kind defaults to the role and focusability that describe it — a
 button is an activatable control and a keyboard stop, a label is static text
@@ -398,19 +399,18 @@ and is not — so the model carries real information without an application
 filling it in node by node. `Node::with_accessibility` replaces it wholesale
 where that default is wrong.
 
-The Windows backend realizes all four through a single adapter
-(`native::rendering::accessibility`):
+The Windows backend realizes it as **UI Automation server-side providers**
+(`native::uia`): every realized node's window answers `WM_GETOBJECT`, and its
+provider is merged with the control's native proxy so only what the model
+states is overridden. Virtual elements are fragments; control patterns
+(Invoke, Value, RangeValue, Toggle, ExpandCollapse, SelectionItem,
+ScrollItem) turn into `Event::AccessibilityAction` for the component to
+honor; property, structure, and live-region changes are announced.
+Focusability is also realized as `WS_TABSTOP`, and MSAA-only clients still get
+names and roles through the Dynamic Annotation API.
 
-- **focusability** as the `WS_TABSTOP` window style, applied symmetrically,
-  so a node that stops being focusable leaves the tab order rather than
-  merely stopping being added to it;
-- **name, description, and role** through Microsoft's Dynamic Annotation API
-  (`IAccPropServices`), which overrides those properties on a standard
-  control without replacing its own implementation. Where the annotation
-  service is unavailable, controls fall back to their native defaults.
-
-A full UI Automation provider — needed for custom, non-`HWND`-backed semantic
-nodes — remains future work, as does a cross-platform bridge.
+Every UIA test runs a real `IUIAutomation` client on another thread, the way a
+screen reader in another process reaches the application.
 
 ## Text input
 
@@ -480,7 +480,7 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 26 — Full Accessibility
-Bridge** (a real UI Automation provider). The roadmap then proceeds through
-animations, virtualization, custom rendering, persistence/navigation,
-CLI/packaging, and additional native backends.
+The next implementation target is **Milestone 27 — Animations and
+Transitions**. The roadmap then proceeds through virtualization, custom
+rendering, persistence/navigation, CLI/packaging, and additional native
+backends.

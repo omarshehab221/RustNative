@@ -304,6 +304,11 @@ mod tests {
         // failure a real application meets first.
         const ITEMS: u32 = 1_500;
         const ATTEMPTS: u32 = 64;
+        // The USER-object count is process-wide; window tests running
+        // concurrently (the UI Automation ones create and release windows
+        // on their own threads) would move it for reasons unrelated to
+        // menus.
+        let _exclusive = crate::native::harness::exclusive();
 
         let items = (0..ITEMS)
             .map(|index| MenuItem::action(format!("item-{index}"), "x"))

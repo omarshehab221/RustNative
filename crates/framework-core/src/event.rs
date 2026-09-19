@@ -1,5 +1,7 @@
 //! Semantic input events delivered from a platform backend to a component.
 
+use crate::accessibility::AccessibleAction;
+pub use crate::accessibility::{AccessibilityInfo, AccessibilityRole};
 use crate::identity::{NodeId, WindowId};
 use crate::input::{
     ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, WheelDelta,
@@ -216,6 +218,18 @@ pub enum Event {
         /// Drop position in `target`'s local coordinates.
         position: Point,
     },
+    /// Assistive technology asked `target` (or one of its virtual
+    /// elements) to perform an operation it declared support for — see
+    /// [`crate::AccessibleAction`] for why this is not a synthesized click.
+    AccessibilityAction {
+        /// The node whose semantics were acted on.
+        target: NodeId,
+        /// The virtual element acted on, if it was one of the node's
+        /// [`crate::VirtualElement`]s rather than the node itself.
+        element: Option<NodeId>,
+        /// What was asked.
+        action: AccessibleAction,
+    },
     /// A game controller changed, delivered to the first node (in
     /// declarative order) of the active window that declared gamepad
     /// interest.
@@ -252,7 +266,8 @@ impl Event {
             | Self::DragOver { target, .. }
             | Self::DragLeave { target }
             | Self::Drop { target, .. }
-            | Self::Gamepad { target, .. } => Some(*target),
+            | Self::Gamepad { target, .. }
+            | Self::AccessibilityAction { target, .. } => Some(*target),
             Self::KeyDown { target, .. }
             | Self::KeyUp { target, .. }
             | Self::TextInput { target, .. }
@@ -287,7 +302,8 @@ impl Event {
             | Self::DragOver { target: current, .. }
             | Self::DragLeave { target: current }
             | Self::Drop { target: current, .. }
-            | Self::Gamepad { target: current, .. } => {
+            | Self::Gamepad { target: current, .. }
+            | Self::AccessibilityAction { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }
@@ -372,105 +388,9 @@ pub struct KeyModifiers {
     pub meta: bool,
 }
 
-/// A portable accessibility role. Mirrors the small set of controls this
-/// crate's declarative `Node` API currently exposes; see `PLAN.md`'s
-/// accessibility-bridge milestone for the custom-semantic-node roadmap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum AccessibilityRole {
-    /// No specific role; the node is not exposed as a distinct
-    /// accessibility element.
-    None,
-    /// A static, non-interactive text label.
-    Label,
-    /// An activatable control (e.g. a push button).
-    Button,
-    /// An editable text field.
-    TextInput,
-    /// A container grouping other accessible elements.
-    Group,
-}
-
-/// Portable accessibility metadata attached to a node.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccessibilityInfo {
-    role: AccessibilityRole,
-    name: Option<String>,
-    description: Option<String>,
-    focusable: bool,
-}
-
-impl AccessibilityInfo {
-    /// Creates accessibility metadata for `role`, with no name or
-    /// description yet and not focusable.
-    #[must_use]
-    pub fn new(role: AccessibilityRole) -> Self {
-        Self { role, name: None, description: None, focusable: false }
-    }
-
-    /// Sets the accessible name (the primary label assistive technology
-    /// announces for this node).
-    #[must_use]
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
-    }
-
-    /// Sets the accessible description (supplementary detail announced
-    /// after the name).
-    #[must_use]
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-
-    /// Sets whether this node can receive keyboard focus.
-    #[must_use]
-    pub const fn focusable(mut self, focusable: bool) -> Self {
-        self.focusable = focusable;
-        self
-    }
-
-    /// Returns the accessible role.
-    #[must_use]
-    pub const fn role(&self) -> AccessibilityRole {
-        self.role
-    }
-
-    /// Returns the accessible name, if one was set.
-    #[must_use]
-    pub fn name_hint(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// Returns the accessible description, if one was set.
-    #[must_use]
-    pub fn description_hint(&self) -> Option<&str> {
-        self.description.as_deref()
-    }
-
-    /// Returns whether this node can receive keyboard focus.
-    #[must_use]
-    pub const fn is_focusable(&self) -> bool {
-        self.focusable
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn accessibility_info_builder_round_trips() {
-        let info = AccessibilityInfo::new(AccessibilityRole::Button)
-            .name("Submit")
-            .description("Submits the form")
-            .focusable(true);
-        assert_eq!(info.role(), AccessibilityRole::Button);
-        assert_eq!(info.name_hint(), Some("Submit"));
-        assert_eq!(info.description_hint(), Some("Submits the form"));
-        assert!(info.is_focusable());
-    }
 
     #[test]
     fn event_target_is_none_for_window_and_menu_events() {

@@ -580,35 +580,36 @@ Deliberately not done: mouse input is not moved into the pointer stack
 behavior); Windows' own `WM_GESTURE` is not used (it is mutually exclusive
 with `WM_POINTER`).
 
----
-
-# 4. Immediate next milestones
-
 ## Milestone 26 — Full accessibility bridge
 
-Move beyond native-control defaults and expose framework semantics to platform accessibility systems.
+Implemented:
 
-Targets include:
+- a portable model in `framework-core::accessibility`: 29 roles (including
+  headings with levels), text and range values, checked/expanded/selected/
+  read-only/required/busy states, declared actions (`AccessibleActionKind`)
+  and invoked ones (`AccessibleAction`, delivered as
+  `Event::AccessibilityAction`), labelled-by/described-by/controls
+  relationships scoped per component like node keys, live regions,
+  position-in-set for virtualized children, stable automation ids, and
+  **virtual elements** — semantic children with no native object of their
+  own, for custom-drawn content;
+- `AccessibilityTree`, the portable projection every backend needs:
+  role-less structure flattened away, relationships resolved to nodes that
+  exist, and accessible names computed (explicit name, then the labelling
+  node, then visible text) with label cycles terminated;
+- Windows: real UI Automation server-side providers for every realized node
+  (containers answer `WM_GETOBJECT` directly; `BUTTON`/`EDIT`/`STATIC` are
+  subclassed), merged with each control's native proxy so only what the
+  model states is overridden; fragment roots and fragments for virtual
+  elements; Invoke, Value, RangeValue, Toggle, ExpandCollapse,
+  SelectionItem, and ScrollItem patterns that turn into component events;
+  property-changed, structure-changed, and live-region events raised from a
+  posted message, never inside a runtime borrow; providers disconnected
+  when their node or element goes away. The MSAA annotations from the
+  standards-audit pass remain, for MSAA-only clients.
 
-- Windows UI Automation;
-- macOS Accessibility / NSAccessibility;
-- iOS accessibility;
-- Android accessibility;
-- Linux accessibility technologies.
-
-Requirements:
-
-- roles;
-- names;
-- descriptions;
-- value/state;
-- actions;
-- ranges;
-- relationships;
-- focus;
-- virtualized children where necessary.
-
-The core accessibility model must be platform-independent while each backend maps it into the native accessibility system.
+Planned platform targets not built here (macOS, iOS, Android, Linux) consume
+the same portable model when their backends exist (Milestones 33–36).
 
 ---
 

@@ -68,7 +68,9 @@ pub(crate) struct Renderer {
     pub(crate) suppress_text_change: HashSet<NodeId>,
     layout: HashMap<NodeId, Rect>,
     scroll: ScrollState,
-    accessibility: AccessibilityBridge,
+    /// The semantic projection onto Win32 (tab stops, MSAA annotations) and
+    /// UI Automation — see `rendering::accessibility` and `native::uia`.
+    pub(crate) accessibility: AccessibilityBridge,
     layout_engine: LayoutEngine,
 }
 
@@ -109,6 +111,9 @@ impl Renderer {
 
         let layout_invalidated = diff.invalidates_layout();
         self.snapshot = next;
+        if self.accessibility.commit(window, &self.snapshot, &self.registry) {
+            crate::native::uia::schedule(window);
+        }
         // Interaction state (hover, press, focus) for nodes that no longer
         // exist would otherwise accumulate for the life of the window.
         let snapshot = &self.snapshot;
@@ -259,6 +264,9 @@ impl Renderer {
     fn insert_node(&mut self, node: &TreeNode, window: HWND) -> Result<(), Error> {
         let parent = self.native_parent(node, window);
         controls::create(&mut self.registry, node, parent)?;
+        if let Some(object) = self.registry.get(node.id) {
+            AccessibilityBridge::attach(object.hwnd(), node.kind);
+        }
         self.apply_semantics_and_style(node);
         Ok(())
     }

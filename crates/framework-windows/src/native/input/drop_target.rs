@@ -303,7 +303,13 @@ mod com {
     /// The COM object OLE calls. Holds only its window's handle (as an integer,
     /// since a COM object must not assume which thread drops it) and resolves
     /// everything else through the runtime on each call.
-    #[implement(IDropTarget)]
+    // `Agile = false`: `#[implement]` objects are agile by default —
+    // they answer `IAgileObject` and aggregate the free-threaded marshaler,
+    // so COM hands callers in *other* apartments a direct pointer and they
+    // call in on their own threads. This object reaches the window's
+    // `Runtime`, which belongs to the UI thread alone, so it must be
+    // marshaled into the UI thread's single-threaded apartment instead.
+    #[implement(IDropTarget, Agile = false)]
     pub(crate) struct DropTarget {
         pub(crate) window: usize,
     }

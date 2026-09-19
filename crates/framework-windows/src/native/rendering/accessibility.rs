@@ -55,7 +55,7 @@
 //! and no control ever fails to appear, because an annotation could not be
 //! applied.
 
-use framework_core::{AccessibilityRole, TreeNode};
+use framework_core::{AccessibilityRole, AccessibilityTree, NodeKind, TreeNode, TreeSnapshot};
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWL_STYLE, GetWindowLongPtrW, SetWindowLongPtrW, WS_TABSTOP,
@@ -162,9 +162,40 @@ const fn msaa_role(role: AccessibilityRole) -> Option<u32> {
 #[derive(Debug, Default)]
 pub(crate) struct AccessibilityBridge {
     annotations: annotation::Annotator,
+    uia: crate::native::uia::UiaState,
 }
 
 impl AccessibilityBridge {
+    /// Gives a newly created native object its UI Automation provider hook:
+    /// system controls are subclassed for `WM_GETOBJECT` (this crate's own
+    /// container windows answer it in `container_proc`).
+    pub(crate) fn attach(hwnd: HWND, kind: NodeKind) {
+        if matches!(kind, NodeKind::Label | NodeKind::Button | NodeKind::TextInput) {
+            crate::native::uia::subclass::install(hwnd);
+        }
+    }
+
+    /// Adopts a freshly rendered tree for UI Automation; returns whether
+    /// notifications were queued (see `native::uia`).
+    pub(crate) fn commit(
+        &mut self,
+        window: HWND,
+        snapshot: &TreeSnapshot,
+        registry: &crate::native::registry::NativeObjectRegistry,
+    ) -> bool {
+        self.uia.commit(window as usize, snapshot, registry)
+    }
+
+    /// The accessible projection of the most recent render.
+    pub(crate) fn tree(&self) -> &AccessibilityTree {
+        self.uia.tree()
+    }
+
+    /// The window's UI Automation state.
+    pub(crate) fn uia_mut(&mut self) -> &mut crate::native::uia::UiaState {
+        &mut self.uia
+    }
+
     /// Synchronizes `hwnd`'s accessible state with `node`'s semantics.
     pub(crate) fn apply(&mut self, hwnd: HWND, node: &TreeNode) {
         let projection = AccessibleProjection::of(node);

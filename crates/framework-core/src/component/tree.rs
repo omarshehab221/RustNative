@@ -805,8 +805,14 @@ fn scope_component_node_ids(
     // platform sees an opaque component-scoped identity. This keeps
     // reusable components composable: two children can each have a
     // `"submit"` node — see `crate::identity` for the full identity model.
-    let global = if owner == ComponentId::ROOT { local } else { NodeId::scoped(owner, local) };
+    let scope =
+        |id: NodeId| if owner == ComponentId::ROOT { id } else { NodeId::scoped(owner, id) };
+    let global = scope(local);
     node.set_id(global);
+    // Relationship targets are local keys of the same component, so they
+    // take the same scoping as the node's own key (see
+    // `crate::accessibility`'s "Relationship keys").
+    node.accessibility_mut().scope_relationships(&scope);
     if node_ids.insert(global, local).is_some() {
         errors.push(RenderError::DuplicateNodeKey { component: owner });
     }

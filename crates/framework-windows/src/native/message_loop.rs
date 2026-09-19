@@ -330,15 +330,19 @@ fn character(runtime: &mut Runtime, message: &MSG) {
 }
 
 pub(crate) fn register_window_classes(instance: HINSTANCE) -> Result<(), Error> {
-    register_window_class(instance, WINDOW_CLASS_NAME, window_proc)?;
-    register_window_class(instance, CONTAINER_CLASS_NAME, container_proc)
+    let top_level = register_window_class(instance, WINDOW_CLASS_NAME, window_proc)?;
+    super::user_data::set_top_level_class_atom(top_level);
+    register_window_class(instance, CONTAINER_CLASS_NAME, container_proc).map(|_| ())
 }
 
+/// Registers one class, returning its atom — also when an earlier call in
+/// this process already registered it.
 fn register_window_class(
     instance: HINSTANCE,
     class_name: &str,
     window_proc: unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT,
-) -> Result<(), Error> {
+) -> Result<u16, Error> {
+    const ERROR_CLASS_ALREADY_EXISTS: u32 = 1410;
     let class_name = super::util::wide(class_name);
 
     let class = WNDCLASSW {
@@ -362,26 +366,49 @@ fn register_window_class(
     // `class.lpszClassName`) is a NUL-terminated wide buffer that
     // outlives this call.
     let atom = unsafe { RegisterClassW(&raw const class) };
-    if atom == 0 {
-        const ERROR_CLASS_ALREADY_EXISTS: u32 = 1410;
-        // SAFETY: `GetLastError` takes no arguments and is called
-        // immediately after `RegisterClassW` reported failure, on the
-        // same thread, before any other call could overwrite the
-        // thread-local error code.
-        let error = unsafe { windows_sys::Win32::Foundation::GetLastError() };
-        if error != ERROR_CLASS_ALREADY_EXISTS {
-            return Err(Error::WindowsApi {
-                operation: "RegisterClassW",
-                code: error,
-                category: Win32Category::of(error),
-                // Class registration happens once, before any window
-                // exists, so there is no window or node to name.
-                context: NativeContext::none(),
-            });
-        }
+    if atom != 0 {
+        return Ok(atom);
+    }
+    // SAFETY: `GetLastError` takes no arguments and is called immediately
+    // after `RegisterClassW` reported failure, on the same thread, before
+    // any other call could overwrite the thread-local error code.
+    let error = unsafe { windows_sys::Win32::Foundation::GetLastError() };
+    if error != ERROR_CLASS_ALREADY_EXISTS {
+        return Err(Error::WindowsApi {
+            operation: "RegisterClassW",
+            code: error,
+            category: Win32Category::of(error),
+            // Class registration happens once, before any window exists,
+            // so there is no window or node to name.
+            context: NativeContext::none(),
+        });
     }
 
-    Ok(())
+    // Already registered (an earlier `run_application`, or a test harness,
+    // in this process): `GetClassInfoExW` returns the existing class's atom.
+    // `WNDCLASSEXW` is a fixed-size Win32 struct, far below `u32::MAX`.
+    #[allow(clippy::cast_possible_truncation)]
+    let mut existing = windows_sys::Win32::UI::WindowsAndMessaging::WNDCLASSEXW {
+        cbSize: std::mem::size_of::<windows_sys::Win32::UI::WindowsAndMessaging::WNDCLASSEXW>()
+            as u32,
+        ..Default::default()
+    };
+    // SAFETY: `class_name` is the NUL-terminated name registered above;
+    // `existing` is a valid, exclusively borrowed `WNDCLASSEXW` with
+    // `cbSize` set as the call requires.
+    let found = unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::GetClassInfoExW(
+            instance,
+            class_name.as_ptr(),
+            &raw mut existing,
+        )
+    };
+    // The documented return value of `GetClassInfoExW` on success *is* the
+    // class atom (typed `BOOL` in the header), so it fits a `u16`.
+    u16::try_from(found)
+        .ok()
+        .filter(|atom| *atom != 0)
+        .ok_or_else(|| Error::windows_api_in("GetClassInfoExW", NativeContext::none()))
 }
 
 /// Wraps the body of a Win32 `WNDPROC` callback so a panic inside user
@@ -683,6 +710,15 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             best_effort(posted, "PostMessageW(capture lost)", "a lost capture ends at release");
             0
         }
+        super::uia::WM_FRAMEWORK_UIA => {
+            // Drained inside the borrow, raised after it ends — see
+            // `native::uia`'s module docs for why raising must not happen
+            // while the runtime is borrowed.
+            if let Some(ready) = with_runtime(hwnd, super::uia::take_ready) {
+                super::uia::raise(ready);
+            }
+            0
+        }
         WM_FRAMEWORK_CAPTURE_LOST => {
             with_runtime(hwnd, input::pointer::capture_lost);
             0
@@ -701,6 +737,11 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             0
         }
         WM_DESTROY => {
+            // UI Automation is released first, and its disconnections raised
+            // outside the runtime borrow, like every other call into it.
+            if let Some(ready) = with_runtime(hwnd, super::uia::release_window) {
+                super::uia::raise(ready);
+            }
             with_runtime(hwnd, |runtime| {
                 runtime.destroyed = true;
                 input::drop_target::revoke(runtime);

@@ -80,6 +80,43 @@ impl TestWindow {
         Self::create(std::ptr::null_mut(), WS_VISIBLE)
     }
 
+    /// Creates a message-only window of this crate's own top-level class —
+    /// for tests of code that must recognize this crate's windows (and only
+    /// them). Its `WM_NCCREATE` receives no runtime, so its slot starts
+    /// null.
+    ///
+    /// # Panics
+    ///
+    /// As [`Self::new`], or if the crate's window classes cannot be
+    /// registered.
+    pub(crate) fn top_level_class() -> Self {
+        super::message_loop::register_window_classes(module_instance())
+            .expect("registering this backend's window classes");
+        let class_name = wide(super::WINDOW_CLASS_NAME);
+        // SAFETY: the class was registered just above; `class_name`
+        // outlives the call; `HWND_MESSAGE` makes a message-only window; a
+        // null `lpParam` is what `window_proc`'s `WM_NCCREATE` handles as
+        // "no runtime".
+        let hwnd = unsafe {
+            CreateWindowExW(
+                0,
+                class_name.as_ptr(),
+                std::ptr::null(),
+                WS_OVERLAPPEDWINDOW,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                HWND_MESSAGE,
+                std::ptr::null_mut(),
+                module_instance(),
+                std::ptr::null_mut(),
+            )
+        };
+        assert!(!hwnd.is_null(), "CreateWindowExW failed for a top-level-class test window");
+        Self { hwnd }
+    }
+
     fn create(parent: HWND, extra_style: u32) -> Self {
         let class_name = wide(format!(
             "framework-test-window-{}",

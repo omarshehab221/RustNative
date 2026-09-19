@@ -6,7 +6,7 @@ use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{FillRect, HDC};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetClientRect, SendMessageW, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
-    WM_CTLCOLORSTATIC, WM_ERASEBKGND,
+    WM_CTLCOLORSTATIC, WM_ERASEBKGND, WM_GETOBJECT,
 };
 
 use super::context::{root_window, with_runtime};
@@ -70,6 +70,12 @@ fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM)
             // shape.
             unsafe { SendMessageW(root, message, wparam, lparam) }
         }
+        WM_GETOBJECT => super::uia::get_object(
+            hwnd,
+            windows::Win32::Foundation::WPARAM(wparam),
+            windows::Win32::Foundation::LPARAM(lparam),
+        )
+        .map_or_else(default, |result| result.0),
         ime::WM_IME_STARTCOMPOSITION | ime::WM_IME_COMPOSITION | ime::WM_IME_ENDCOMPOSITION => {
             // A focusable container composes IME text itself; see
             // `native::input::ime`.

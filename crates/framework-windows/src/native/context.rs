@@ -159,6 +159,26 @@ impl<T> HostRef<T> {
 /// result, and write its own `unsafe { &mut *runtime_ptr }` now calls this
 /// instead, so the dereference exists in exactly one place.
 pub(crate) fn with_runtime<R>(hwnd: HWND, f: impl FnOnce(&mut Runtime) -> R) -> Option<R> {
+    // Point 4 below — "the loop is single-threaded" — is only true of calls
+    // made *on the loop's thread*. Anything else that can reach a window
+    // handle (a COM object called from another apartment, a service on a
+    // worker) must not get a `&mut Runtime`, however it came by the handle.
+    // Checked rather than assumed since Milestone 26 found COM objects this
+    // crate implemented being called on UI Automation's threads (they were
+    // agile by default; see `native::uia::provider`).
+    match window_thread(hwnd) {
+        owner if owner == current_thread() => {}
+        // A null or destroyed handle belongs to no thread: nothing to
+        // resolve, and nothing wrong with having asked.
+        0 => return None,
+        _ => {
+            debug_assert!(
+                false,
+                "a runtime was resolved from a thread that does not own its window"
+            );
+            return None;
+        }
+    }
     let runtime = RuntimeSlot::get(hwnd);
     if runtime.is_null() {
         return None;
@@ -172,6 +192,25 @@ pub(crate) fn with_runtime<R>(hwnd: HWND, f: impl FnOnce(&mut Runtime) -> R) -> 
     // the borrow handed to `f` ends when `f` returns rather than escaping
     // to overlap a later nested dispatch.
     Some(f(unsafe { &mut *runtime }))
+}
+
+/// The id of the thread that created `hwnd`, or `0` for a null or
+/// destroyed handle.
+fn window_thread(hwnd: HWND) -> u32 {
+    // SAFETY: `GetWindowThreadProcessId` accepts any handle value,
+    // returning 0 for an invalid one, and a null process-id pointer is
+    // documented as "not requested".
+    unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+            hwnd,
+            std::ptr::null_mut(),
+        )
+    }
+}
+
+fn current_thread() -> u32 {
+    // SAFETY: takes no arguments.
+    unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() }
 }
 
 /// The top-level ancestor of `hwnd`, or a null handle if there is none.
@@ -214,6 +253,23 @@ mod tests {
             with_runtime(window.hwnd, |_| ()).is_none(),
             "a window whose GWLP_USERDATA was never set must resolve to no runtime"
         );
+    }
+
+    #[test]
+    fn a_runtime_is_never_resolved_from_a_thread_that_does_not_own_the_window() {
+        // A window of the crate's own class, owned by this thread. From any
+        // other thread it must never resolve — in a debug build that is a
+        // loud programming error, in release a quiet `None`; never a
+        // `&mut Runtime` on the wrong thread.
+        let window = super::super::test_support::TestWindow::top_level_class();
+        let hwnd = window.hwnd as usize;
+        let outcome =
+            std::thread::spawn(move || with_runtime(hwnd as HWND, |_| ()).is_none()).join();
+        if cfg!(debug_assertions) {
+            assert!(outcome.is_err(), "a debug build reports the misuse");
+        } else {
+            assert_eq!(outcome.ok(), Some(true));
+        }
     }
 
     #[test]

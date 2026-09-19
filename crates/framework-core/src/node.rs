@@ -320,6 +320,18 @@ impl Node {
         }
     }
 
+    /// Mutable access for the component runtime's scoping pass, which
+    /// rewrites relationship keys exactly as it rewrites node keys.
+    pub(crate) fn accessibility_mut(&mut self) -> &mut AccessibilityInfo {
+        match self {
+            Self::Label(node) => &mut node.accessibility,
+            Self::Button(node) => &mut node.accessibility,
+            Self::TextInput(node) => &mut node.accessibility,
+            Self::Column(node) => &mut node.accessibility,
+            Self::Row(node) => &mut node.accessibility,
+        }
+    }
+
     /// Returns this node's identity.
     #[must_use]
     pub fn id(&self) -> NodeId {

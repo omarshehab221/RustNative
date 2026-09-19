@@ -78,6 +78,13 @@ fn harness_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+/// Holds the harness lock without a harness — for a test that measures a
+/// process-wide quantity (the USER-object count) that any concurrently
+/// running window test would disturb.
+pub(crate) fn exclusive() -> MutexGuard<'static, ()> {
+    harness_lock().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Drives an [`Application`] through the real Win32 backend for a bounded
 /// number of messages.
 pub(crate) struct NativeHarness {

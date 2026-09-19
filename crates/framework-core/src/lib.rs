@@ -90,6 +90,7 @@
 //!
 //! | Module | Owns |
 //! |---|---|
+//! | [`accessibility`] | The portable accessibility model and its [`AccessibilityTree`] projection |
 //! | [`identity`] | [`NodeId`]/[`ComponentId`]/[`WindowId`] allocation and the collision-free key interner |
 //! | [`event`] | [`Event`], keyboard/accessibility types |
 //! | [`input`] | Pointer/wheel/gesture/IME/clipboard/drag/gamepad payloads, [`GestureRecognizer`], [`GamepadPoller`] |
@@ -129,6 +130,7 @@
 //! and the lint is now `deny` rather than `warn` so it cannot silently
 //! regress).
 #![deny(missing_docs)]
+pub mod accessibility;
 pub mod application;
 pub mod capability;
 pub mod component;
@@ -146,6 +148,10 @@ pub mod services;
 pub mod style;
 pub mod window;
 
+pub use accessibility::{
+    AccessibilityTree, AccessibleAction, AccessibleActionKind, AccessibleNode, AccessibleValue,
+    CheckedState, LiveRegion, Relation, VirtualElement,
+};
 pub use application::Application;
 pub use capability::{Capability, PlatformCapabilities};
 pub use component::{

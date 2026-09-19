@@ -20,6 +20,9 @@ pub(crate) mod rendering;
 mod runtime;
 #[cfg(test)]
 mod test_support;
+pub(crate) mod uia;
+#[cfg(test)]
+mod uia_integration;
 mod user_data;
 mod util;
 pub(crate) mod win32;

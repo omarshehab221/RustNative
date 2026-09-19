@@ -2,7 +2,81 @@
 
 ## Current milestone
 
-**Milestone 25 — Advanced input system — complete.**
+**Milestone 26 — Full accessibility bridge — complete.**
+
+### What was built
+
+`framework-core::accessibility`: the full portable model the milestone lists
+(roles, names, descriptions, values and ranges, states, actions,
+relationships, focus, virtualized children) plus live regions, automation
+ids, and virtual elements, and `AccessibilityTree`, the portable projection
+(flattened structure, resolved relationships, computed names). On Windows,
+`native::uia`: real UI Automation server-side providers for every realized
+node, fragments for virtual elements, seven control patterns routed to the
+component as `Event::AccessibilityAction`, and property/structure/live-region
+events.
+
+### What it found
+
+1. **The runtime lookup trusted any window's `GWLP_USERDATA`.** The message
+   loop resolves the root window of *every* message it sees, and the UI
+   thread also owns windows this crate never created — the system IME
+   window, OLE's hidden window (since Milestone 25), UI Automation's own.
+   `RuntimeSlot::get` read their slot as a `*mut Runtime`. It now checks the
+   window's class atom first; `a_foreign_windows_slot_is_never_read_as_a_runtime`
+   pins it.
+2. **COM objects this crate implemented were agile.** The `windows` crate's
+   `#[implement]` makes objects agile by default (`IAgileObject` plus the
+   free-threaded marshaler), so a caller in another apartment calls them
+   directly on its own thread. The providers — and Milestone 25's drop
+   target — reach the window's `Runtime`, which belongs to the UI thread
+   alone. The first UIA tests "passed" with calls arriving on UI Automation's
+   threads. Every such object is now `Agile = false`, so COM marshals calls
+   into the UI thread's apartment, and `with_runtime` refuses (and in debug
+   builds asserts) when called on a thread that does not own the window, so
+   the mistake cannot come back silently.
+   `a_runtime_is_never_resolved_from_a_thread_that_does_not_own_the_window`
+   pins the guard.
+3. **Every container exposed a meaningless pane.** A container is two
+   windows (a viewport and an inner content window that makes scrolling a
+   window move), and the inner one appeared to assistive technology as an
+   unlabeled child. With virtual elements it was worse: a client asking for
+   the canvas's children got the pane. The inner window now reports itself
+   as neither a control nor a content element, so the control view presents
+   a node's real children directly.
+
+### Verified, and how
+
+The four UIA tests (`native::uia_integration`) run a real `IUIAutomation`
+client in a multithreaded apartment on another thread while the test thread
+pumps the production message loop — the arrangement a screen reader in
+another process produces. They read names, descriptions, control types,
+automation ids, LabeledBy, and set position; toggle a custom check box and
+set a custom slider through their patterns and read back the state the
+*component* rendered; navigate, invoke, and outlive a canvas' virtual
+elements (a removed element answers `UIA_E_ELEMENTNOTAVAILABLE`); and
+receive a live-region announcement through a registered event handler.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+### Not verified on this machine
+
+Narrator and NVDA themselves were not driven: the client used is UI
+Automation's own, which is what they are built on, but a screen reader's
+speech output is not something a test here can observe. The macOS, iOS,
+Android, and Linux accessibility bridges belong to backends that do not exist
+yet.
+
+---
+
+## Previous: Milestone 25 — Advanced input system — complete.
 
 ### What was built
 
@@ -633,6 +707,7 @@ Application
 23. Native dialogs, menus, and system integration — realized (file dialogs, notifications, native menu bar), not just contracts
 24. Window lifecycle + multi-window support, including opening/closing windows at runtime
 25. Advanced input: pointers/touch/pen with capture, wheels, portable gestures, IME, clipboard events, OLE drag-and-drop, XInput controllers
+26. Full accessibility bridge: portable model and projection, UI Automation providers, patterns, events, virtual elements
 
 ## Structured task-scope guarantees
 
