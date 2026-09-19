@@ -650,20 +650,41 @@ render count does not move while values animate.
 
 ---
 
-# 6. Rendering and interaction milestones
-
 ## Milestone 28 — Virtualized lists and large data sets
 
-Add virtualization for large collections:
+Implemented, reusing identity, layout, scrolling, and components rather than
+a second list runtime — a virtual list is an ordinary scrollable column or
+row (`Node::virtual_list`) that also declares how many items it logically
+has:
 
-- visible-range calculation;
-- recycling/reuse;
-- stable item keys;
-- incremental measurement;
-- scroll position preservation;
-- efficient insertion/removal/reordering.
+- **visible-range calculation**: `VirtualRange::compute` from the scroll
+  offset, viewport, per-item extents, and overscan (counted in items);
+  `Event::VisibleRangeChanged` reaches the component only when the range
+  changes, so scrolling inside a range renders nothing;
+- **recycling/reuse**: on Windows, a render that removes rows of a virtual
+  list and inserts others parks the removed `HWND`s and realizes the new rows
+  on them (`rendering::pool`), whole item subtrees included; anything not
+  reused is destroyed before the render ends;
+- **stable item keys**: rows keep ordinary node keys, so a row that stays in
+  range keeps its native window; `Node::with_item_index` says which item a
+  row realizes, independent of its position among realized siblings;
+- **incremental measurement**: `ItemExtent::Estimated` lists measure the rows
+  they realize, report them as `LayoutResult::measured_items`, and record
+  them in an `ExtentCache` (a Fenwick tree: `O(log n)` offsets and lookups);
+  the backend lays out once more when a measurement moved an offset, then
+  settles;
+- **scroll position preservation**: `ScrollAnchor` holds the item at the top
+  of the viewport across a render, so items inserted or removed above it do
+  not move what is on screen;
+- **efficient insertion/removal/reordering**: the existing keyed diff; only
+  rows that entered or left the range are inserted or removed.
 
-This milestone should reuse the existing identity, layout, scrolling, and component infrastructure rather than invent a second list runtime.
+Virtual-list items announce their position in the whole list to assistive
+technology ("5,012 of 100,000") automatically.
+
+---
+
+# 6. Rendering and interaction milestones
 
 ## Milestone 29 — Graphics / custom rendering escape hatch
 

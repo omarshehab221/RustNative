@@ -114,6 +114,8 @@ fn node_changed(previous: &TreeNode, next: &TreeNode) -> bool {
         || previous.input != next.input
         || previous.opacity != next.opacity
         || previous.transitions != next.transitions
+        || previous.item_index != next.item_index
+        || previous.virtualization != next.virtualization
 }
 
 /// Classifies whether the difference between two versions of the same node
@@ -129,6 +131,11 @@ fn is_layout_relevant_change(previous: &TreeNode, next: &TreeNode) -> bool {
         || previous.layout != next.layout
         || previous.column_style != next.column_style
         || previous.row_style != next.row_style
+        // An item that changed which index it realizes moves to that
+        // index's offset, and a list whose item count or extent policy
+        // changed has a different length and a different scroll range.
+        || previous.item_index != next.item_index
+        || previous.virtualization != next.virtualization
         || typography_changed(previous, next)
 }
 

@@ -123,7 +123,9 @@ pub struct TaskScope {
 struct TaskScopeInner {
     scheduler: Scheduler,
     target: ComponentId,
-    tasks: Arc<Mutex<HashMap<TaskId, TaskHandle>>>,
+    /// Live tasks, plus — transiently — a `None` tombstone for a task that
+    /// settled before `spawn` got to register it (see [`TaskScope::spawn`]).
+    tasks: Arc<Mutex<HashMap<TaskId, Option<TaskHandle>>>>,
 }
 
 impl fmt::Debug for TaskScope {
@@ -160,22 +162,35 @@ impl TaskScope {
             self.inner.target,
             future,
             Arc::new(move |id| {
-                tasks.lock().remove(&id);
+                let mut tasks = tasks.lock();
+                // Registered already: the ordinary case, remove it. Not
+                // registered yet: the task settled on another thread
+                // before `spawn` below got the lock, so leave a tombstone
+                // telling `spawn` not to register it at all.
+                if tasks.remove(&id).is_none() {
+                    tasks.insert(id, None);
+                }
             }),
         );
-        self.inner.tasks.lock().insert(handle.id(), handle.clone());
-        // A trivially-ready future can settle between spawning and registry
-        // insertion. Its settlement callback cannot remove an entry that did
-        // not exist yet, so close that small race explicitly.
-        if handle.is_finished() {
-            self.inner.tasks.lock().remove(&handle.id());
+        // Decided under the same lock the settlement callback takes, so the
+        // two can interleave in either order and the registry still ends up
+        // without the task once it has settled. An earlier revision inserted
+        // unconditionally and then checked `handle.is_finished()`, which
+        // leaked the entry forever whenever settlement ran *before* the
+        // insert but the executor had not yet marked the task finished — a
+        // window the settlement callback, as the task's last statement,
+        // always sits inside.
+        let mut tasks = self.inner.tasks.lock();
+        if tasks.remove(&handle.id()).is_none() {
+            tasks.insert(handle.id(), Some(handle.clone()));
         }
+        drop(tasks);
         handle
     }
 
     /// Cancels all currently owned tasks. This is idempotent.
     pub fn cancel_all(&self) {
-        let tasks = self.inner.tasks.lock().values().cloned().collect::<Vec<_>>();
+        let tasks = self.inner.tasks.lock().values().flatten().cloned().collect::<Vec<_>>();
         for task in tasks {
             task.cancel();
         }
@@ -185,7 +200,7 @@ impl TaskScope {
     /// (spawned but not yet completed, cancelled, or drained).
     #[must_use]
     pub fn task_count(&self) -> usize {
-        self.inner.tasks.lock().len()
+        self.inner.tasks.lock().values().flatten().count()
     }
 
     /// The scheduler backing this scope, e.g. so a delay can be created
@@ -199,7 +214,7 @@ impl TaskScope {
 
 impl Drop for TaskScopeInner {
     fn drop(&mut self) {
-        let tasks = self.tasks.lock().values().cloned().collect::<Vec<_>>();
+        let tasks = self.tasks.lock().values().flatten().cloned().collect::<Vec<_>>();
         for task in tasks {
             task.cancel();
         }
@@ -318,6 +333,17 @@ impl Scheduler {
         F: Future<Output = M> + Send + 'static,
     {
         let id = TaskId::next(&self.inner.next_id);
+        // A task settles by completing, by being cancelled, or both (a
+        // cancel that races completion, or `cancel` called twice). The
+        // callback must see exactly one of those: `TaskScope` reads a second
+        // settlement of a task it already removed as "settled before it was
+        // registered" and would strand a tombstone for it.
+        let fired = AtomicBool::new(false);
+        let settled: Arc<dyn Fn(TaskId) + Send + Sync> = Arc::new(move |id| {
+            if !fired.swap(true, Ordering::AcqRel) {
+                settled(id);
+            }
+        });
         let cancelled = Arc::new(AtomicBool::new(false));
         let inner = Arc::clone(&self.inner);
         let task_cancelled = Arc::clone(&cancelled);
@@ -384,6 +410,31 @@ mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
     use std::time::Duration as StdDuration;
+
+    #[test]
+    fn a_task_settles_exactly_once_however_it_ends() {
+        use std::sync::atomic::AtomicUsize;
+
+        let executor = ManualExecutor::new();
+        let scheduler = Scheduler::with_executor(Arc::new(executor.clone()));
+        let settlements = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&settlements);
+        let handle = scheduler.spawn_with_settlement(
+            ComponentId::next(&mut 1),
+            async { 1usize },
+            Arc::new(move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
+        handle.cancel();
+        handle.cancel();
+        executor.run_until_stalled();
+        assert_eq!(
+            settlements.load(Ordering::SeqCst),
+            1,
+            "cancelled twice and run: one settlement"
+        );
+    }
 
     #[test]
     fn task_scope_removes_completed_tasks_from_its_registry() {
@@ -491,8 +542,14 @@ mod tests {
                 std::thread::sleep(StdDuration::from_millis(1));
             }
             // The settlement callback that removes a finished task from the
-            // registry runs just after `is_finished` becomes observable.
-            std::thread::sleep(StdDuration::from_millis(20));
+            // registry runs just *after* `is_finished` becomes observable,
+            // so this waits for the registry itself to drain rather than
+            // for a fixed interval — under a loaded machine that callback
+            // can be scheduled arbitrarily late, and a sleep long enough to
+            // be reliable would be one nobody wants to sit through.
+            while std::time::Instant::now() < deadline && scope.task_count() > 0 {
+                std::thread::sleep(StdDuration::from_millis(1));
+            }
             high_water = high_water.max(scope.task_count());
         }
 

@@ -13,8 +13,9 @@ use crate::event::AccessibilityInfo;
 use crate::identity::NodeId;
 use crate::input::InputInterest;
 use crate::input::Scalar;
-use crate::layout::{ColumnStyle, LayoutStyle, RowStyle};
+use crate::layout::{ColumnStyle, EdgeInsets, LayoutStyle, Overflow, RowStyle, SizeMode};
 use crate::style::VisualStyle;
+use crate::virtualization::{Axis, VirtualListStyle};
 
 /// The framework's declarative UI tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -483,6 +484,131 @@ impl Node {
         }
     }
 
+    /// Creates a scrollable container that realizes only the items
+    /// currently in view.
+    ///
+    /// The container itself is an ordinary [`Column`] (or [`Row`], for
+    /// [`Axis::Horizontal`]) with [`Overflow::Scroll`] and no padding or
+    /// gap — see [`crate::virtualization`] for why a virtual list is a
+    /// container with an item count rather than a list runtime of its own.
+    ///
+    /// `children` are the items realized right now, each tagged with
+    /// [`Self::with_item_index`]. A backend recomputes which items those
+    /// should be as the list scrolls and reports the change as
+    /// [`Event::VisibleRangeChanged`](crate::Event::VisibleRangeChanged).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use framework_core::{ItemExtent, Node, Overflow, VirtualListStyle, VirtualRange};
+    ///
+    /// let range = VirtualRange { first: 40, last_exclusive: 52 };
+    /// let rows = range.indices().map(|index| {
+    ///     Node::label(&format!("row-{index}"), format!("Row {index}")).with_item_index(index)
+    /// });
+    ///
+    /// let list = Node::virtual_list(
+    ///     "rows",
+    ///     VirtualListStyle::new(100_000, ItemExtent::Fixed(24)),
+    ///     rows,
+    /// );
+    ///
+    /// // 100,000 items, twelve nodes.
+    /// assert_eq!(list.virtualization().expect("a virtual list").item_count, 100_000);
+    /// assert_eq!(list.column_style().expect("a vertical list is a column").overflow,
+    ///            Overflow::Scroll);
+    /// ```
+    pub fn virtual_list(
+        key: impl AsRef<str>,
+        style: VirtualListStyle,
+        children: impl IntoIterator<Item = Self>,
+    ) -> Self {
+        Self::virtual_list_with_layout(
+            key,
+            style,
+            LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Fill),
+            children,
+        )
+    }
+
+    /// Creates a virtual list with an explicit layout, for a list that
+    /// should be a fixed size rather than fill its parent.
+    ///
+    /// A virtual list is sized by its parent, never by its items (that is
+    /// what lets it hold more items than fit on screen), so an `Auto`
+    /// size along its axis gives it no length at all: give it `Fill` or
+    /// `Fixed`.
+    pub fn virtual_list_with_layout(
+        key: impl AsRef<str>,
+        style: VirtualListStyle,
+        layout: LayoutStyle,
+        children: impl IntoIterator<Item = Self>,
+    ) -> Self {
+        let id = NodeId::from_key(key.as_ref());
+        let children = children.into_iter().collect::<Vec<_>>();
+        let mut node = match style.axis {
+            Axis::Vertical => Self::Column(Column::new(
+                id,
+                children,
+                ColumnStyle::new().padding(EdgeInsets::all(0)).gap(0).overflow(Overflow::Scroll),
+                layout,
+            )),
+            Axis::Horizontal => Self::Row(Row::new(
+                id,
+                children,
+                RowStyle::new().padding(EdgeInsets::all(0)).gap(0).overflow(Overflow::Scroll),
+                layout,
+            )),
+        };
+        match &mut node {
+            Self::Column(column) => column.virtualization = Some(style),
+            Self::Row(row) => row.virtualization = Some(style),
+            _ => unreachable!("a virtual list is built as a column or a row above"),
+        }
+        node
+    }
+
+    /// Returns this node's virtual-list declaration, if it is one.
+    #[must_use]
+    pub fn virtualization(&self) -> Option<VirtualListStyle> {
+        match self {
+            Self::Column(column) => column.virtualization,
+            Self::Row(row) => row.virtualization,
+            _ => None,
+        }
+    }
+
+    /// Tags this node as the realization of item `index` of the virtual
+    /// list containing it.
+    ///
+    /// This is what lets a list place an item at the offset its index
+    /// implies rather than at the position it happens to occupy among its
+    /// realized siblings, and what lets scroll anchoring find an item again
+    /// after the data under it changed.
+    #[must_use]
+    pub fn with_item_index(mut self, index: usize) -> Self {
+        match &mut self {
+            Self::Label(node) => node.item_index = Some(index),
+            Self::Button(node) => node.item_index = Some(index),
+            Self::TextInput(node) => node.item_index = Some(index),
+            Self::Column(node) => node.item_index = Some(index),
+            Self::Row(node) => node.item_index = Some(index),
+        }
+        self
+    }
+
+    /// Returns which item of its virtual list this node realizes.
+    #[must_use]
+    pub fn item_index(&self) -> Option<usize> {
+        match self {
+            Self::Label(node) => node.item_index,
+            Self::Button(node) => node.item_index,
+            Self::TextInput(node) => node.item_index,
+            Self::Column(node) => node.item_index,
+            Self::Row(node) => node.item_index,
+        }
+    }
+
     /// Walks this node and every descendant depth-first, calling `visitor`
     /// with each node, its parent's id (`None` for the root), and its index
     /// among its siblings.
@@ -564,7 +690,7 @@ pub struct NodeTransition {
 }
 
 /// A UI node's realization kind, independent of any single node instance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeKind {
     /// See [`Node::Label`].
     Label,
@@ -605,6 +731,7 @@ macro_rules! leaf_node {
             input: InputInterest,
             opacity: Scalar,
             transitions: Vec<NodeTransition>,
+            item_index: Option<usize>,
         }
 
         impl $name {
@@ -640,6 +767,7 @@ macro_rules! leaf_node {
                     input: InputInterest::new(),
                     opacity: Scalar::ONE,
                     transitions: Vec::new(),
+                    item_index: None,
                 }
             }
 
@@ -707,6 +835,8 @@ macro_rules! container_node {
             input: InputInterest,
             opacity: Scalar,
             transitions: Vec<NodeTransition>,
+            item_index: Option<usize>,
+            virtualization: Option<VirtualListStyle>,
         }
 
         impl $name {
@@ -722,12 +852,20 @@ macro_rules! container_node {
                     input: InputInterest::new(),
                     opacity: Scalar::ONE,
                     transitions: Vec::new(),
+                    item_index: None,
+                    virtualization: None,
                 }
             }
 
             /// Returns this node's identity.
             pub fn id(&self) -> NodeId {
                 self.id
+            }
+
+            /// Returns this container's virtual-list declaration, if it has
+            /// one (see [`Node::virtual_list`]).
+            pub fn virtualization(&self) -> Option<VirtualListStyle> {
+                self.virtualization
             }
 
             /// Returns this container's children.

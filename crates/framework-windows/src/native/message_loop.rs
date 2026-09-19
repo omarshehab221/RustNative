@@ -266,6 +266,9 @@ fn wheel(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
     #[allow(clippy::cast_possible_wrap)]
     let delta = super::util::hiword(message.wParam) as i16;
     runtime.renderer.scroll_container(id, 0, -(i32::from(delta) / 3).clamp(-120, 120));
+    // Scrolling past the edge of a virtual list's realized items is the
+    // one thing a scroll *does* reach a component for.
+    super::virtual_list::after_render(runtime);
     // A scroll is a viewport transform this framework owns; letting the
     // native control also act on the same wheel event would double-scroll.
     MessageFlow::Consumed

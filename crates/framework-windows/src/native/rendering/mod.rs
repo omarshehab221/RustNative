@@ -32,6 +32,8 @@
 //! | [`styling`] | Resolved styles as owned GDI resources, and the shared brush cache | Theming, painting, or GDI ownership changes |
 //! | [`accessibility`] | The portable semantic model's projection onto Win32 | Accessibility semantics change |
 //! | [`scrolling`] | Scroll offsets, ranges, and the viewport transform | Scroll behavior changes |
+//! | [`virtual_list`] | Each virtual list's measured extents and visible range | Virtualization changes |
+//! | [`pool`] | Native windows a virtual list's rows recycle through | Recycling changes |
 //!
 //! # Dependency direction
 //!
@@ -45,8 +47,10 @@
 pub(crate) mod accessibility;
 pub(crate) mod animated;
 pub(crate) mod controls;
+pub(crate) mod pool;
 pub(crate) mod realization;
 pub(crate) mod scrolling;
 pub(crate) mod styling;
+pub(crate) mod virtual_list;
 
 pub(crate) use realization::Renderer;

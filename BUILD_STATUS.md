@@ -2,7 +2,95 @@
 
 ## Current milestone
 
-**Milestone 27 — Animations and transitions — complete.**
+**Milestone 28 — Virtualized lists and large data sets — complete.**
+
+### What was built
+
+`framework_core::virtualization`: `VirtualListStyle` (item count, `ItemExtent`
+fixed or estimated, overscan, axis), `ExtentCache` (arithmetic for fixed
+items, a Fenwick tree for measured ones), `VirtualRange::compute`, and
+`ScrollAnchor`. `Node::virtual_list`/`virtual_list_with_layout` build a
+scrollable column or row carrying the declaration; `Node::with_item_index`
+tags each realized row. The layout engine places rows at their item offsets,
+reports a content size covering every item, and reports what estimated rows
+measured (`LayoutResult::measured_items`). Snapshots give virtual-list items
+their position in the whole list for accessibility.
+
+On Windows: `rendering::virtual_list` (per-list caches, ranges, anchors),
+`rendering::pool` (recycling native windows between a removal and an
+insertion in the same render), and `native::virtual_list`, which reports
+range changes to components in a bounded loop so a range change answered by
+new rows never nests one dispatch inside another.
+
+**API change.** `LayoutEngine::layout_result_with` took an unused
+`_scroll_offsets` map "for API symmetry"; it now takes the virtual lists'
+`ExtentCache`s, which layout genuinely needs. Scroll offsets remain a
+viewport transform, not a layout input.
+
+### What it found
+
+1. **A virtual list sized itself to its data.** A `Fill` child is given its
+   preferred size plus a share of the free space, and a container's preferred
+   size was the sum of its children — so the realized rows made the list
+   taller, which made the viewport taller, which realized more rows: the
+   first native run realized 11,087 of them. A virtual list now reports no
+   preferred size of its own; it is sized by its parent, as a list that is
+   shorter than its content has to be.
+2. **Estimated rows ignored their own declared size.** Intrinsic measurement
+   of a container ignores its `Fixed` height (containers are sized by their
+   parents), so an estimated row that declared 50 px measured 0. A row's
+   declared main-axis size is now what it measures as.
+3. **A scheduler task could stay registered forever** (pre-existing, found
+   because this milestone's larger test binary shifted timing). `TaskScope`
+   inserted a task after spawning it and removed it again only if
+   `is_finished()` was already true — but the settlement callback that
+   removes a finished task runs as the task's *last statement*, before the
+   executor marks it finished, so a task that settled before the insert was
+   never removed. Registration and settlement now decide under one lock,
+   with a tombstone for "settled before registered", and a task settles
+   exactly once however it ends (a cancel racing completion used to settle
+   twice). `a_task_settles_exactly_once_however_it_ends` pins the second;
+   the registry test now waits on the registry itself instead of a fixed
+   20 ms sleep.
+
+### Verified, and how
+
+Five integration tests (`native::virtual_list_integration`) drive a real
+window through the production message loop, scrolling with posted
+`WM_MOUSEWHEEL` messages aimed inside the list: 100,000 items realize exactly
+12 native rows for a 210 px viewport; a scroll inside the range renders
+nothing and crossing one renders exactly once; rows that stay in range keep
+their `HWND`, and rows that scroll in are realized on the windows of rows
+that scrolled out (only rows beyond the old range's size are created);
+inserting ten items above the viewport leaves the anchored row at the same
+screen position (`GetWindowRect`); and estimated rows are measured and move
+every later offset. Core has unit tests for extents, ranges, anchors, and
+virtual layout, and property tests that Fenwick offsets equal naive prefix
+sums, that `index_at` finds the containing item, that a range always covers
+its viewport within overscan, that ranges are monotone in the offset, and
+that anchoring survives any number of insertions above. Benchmarks
+`virtual_list/range_100k` and `layout/virtual_10k` are in
+`core_benchmarks.rs`.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+### Not verified on this machine
+
+Scrolling with a physical wheel or touchpad (the tests post the same
+message a wheel produces), and a screen reader announcing a row's position.
+Recycling is limited to rows of a virtual list, by design: anywhere else a
+reused window would change which node it belongs to for no measured benefit.
+
+---
+
+## Previous: Milestone 27 — Animations and transitions — complete.
 
 ### What was built
 

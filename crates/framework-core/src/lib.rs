@@ -102,6 +102,7 @@
 //! | [`style`] | [`Theme`] and per-node [`VisualStyle`] resolution |
 //! | [`scheduler`] | Structured concurrency: [`Scheduler`], [`TaskScope`], the pluggable [`Executor`] backend |
 //! | [`services`] | Platform-independent service contracts (HTTP, storage, clipboard, ...) |
+//! | [`virtualization`] | Realizing only the visible window of a very long list |
 //! | [`window`]/[`menu`] | Window-domain state and native menu definitions |
 //! | [`mod@panic`] | What an application does when a component panics |
 //! | [`application`] | Multi-window orchestration |
@@ -148,6 +149,7 @@ pub mod reconcile;
 pub mod scheduler;
 pub mod services;
 pub mod style;
+pub mod virtualization;
 pub mod window;
 
 pub use accessibility::{
@@ -176,8 +178,8 @@ pub use input::{
 };
 pub use layout::{
     Alignment, ColumnStyle, Constraints, DefaultIntrinsicMeasurer, EdgeInsets, IntrinsicMeasurer,
-    LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, Overflow, Point, Rect, RowStyle,
-    Size, SizeMode,
+    LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, MeasuredItem, Overflow, Point,
+    Rect, RowStyle, Size, SizeMode,
 };
 pub use menu::{MenuBar, MenuItem};
 pub use node::{Button, Column, Label, Node, NodeKind, NodeTransition, Row, TextInput, TreeError};
@@ -196,5 +198,8 @@ pub use services::{
 pub use style::{
     Color, ComponentStyle, ControlState, ResolvedStyle, StyleOverride, Theme, Typography,
     VisualStyle,
+};
+pub use virtualization::{
+    Axis, ExtentCache, ItemExtent, ScrollAnchor, VirtualListStyle, VirtualRange,
 };
 pub use window::{Window, WindowPresentation, WindowState};

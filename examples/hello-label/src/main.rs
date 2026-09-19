@@ -6,9 +6,9 @@ use framework_core::{
     AccessibilityInfo, AccessibilityRole, AccessibleAction, AccessibleActionKind, Alignment,
     AnimatedProperty, AnimatedValue, Animation, AnimationRequests, Application, Callback,
     CheckedState, ColumnStyle, Component, ComponentContext, DropEffect, EdgeInsets, Event,
-    InputInterest, InputRequests, LayoutStyle, LiveRegion, MenuBar, MenuItem, Node, NodeId,
-    Overflow, PanicPolicy, Platform, Point, RowStyle, Size, SizeMode, TaskHandle, Transition,
-    Window,
+    InputInterest, InputRequests, ItemExtent, LayoutStyle, LiveRegion, MenuBar, MenuItem, Node,
+    NodeId, Overflow, PanicPolicy, Platform, Point, RowStyle, Size, SizeMode, TaskHandle,
+    Transition, VirtualListStyle, VirtualRange, Window,
 };
 use framework_windows::WindowsPlatform;
 
@@ -253,6 +253,10 @@ impl Component for CounterPanel {
     }
 }
 
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent one-shot menu requests, each consumed by the next render"
+)]
 struct AppShell {
     panel_visible: bool,
     title_index: usize,
@@ -261,6 +265,7 @@ struct AppShell {
     settings_requested: bool,
     settings_opened_count: u32,
     input_lab_requested: bool,
+    long_list_requested: bool,
 }
 
 /// A separate root used to exercise the native multi-window host. It has no
@@ -357,6 +362,99 @@ struct InputLab {
     // described to assistive technology (see `view`).
     muted: bool,
     volume: f32,
+}
+
+/// Milestone 28: a hundred thousand rows, of which only the visible dozen
+/// or so exist as native windows at any moment.
+///
+/// The component holds the *data* (here, computed on demand) and the range
+/// the backend last asked for; it renders exactly that range. Scrolling
+/// inside the range costs nothing; crossing out of it arrives as one
+/// `Event::VisibleRangeChanged`, and the rows that scroll in are realized
+/// on the windows of the rows that scrolled out. "Add 10 above" inserts
+/// data at the top without moving what is on screen.
+struct LongList {
+    range: VirtualRange,
+    /// Rows inserted at the top since the window opened; row keys name the
+    /// datum, so a row keeps its identity (and its place on screen) when
+    /// data arrives above it.
+    prepended: usize,
+}
+
+impl LongList {
+    const ROWS: usize = 100_000;
+
+    /// The datum at item `index`: rows added above the original first row
+    /// count down from -1.
+    fn datum(&self, index: usize) -> String {
+        match index.checked_sub(self.prepended) {
+            Some(datum) => datum.to_string(),
+            None => format!("-{}", self.prepended - index),
+        }
+    }
+}
+
+impl Component for LongList {
+    type Props = ();
+    type Message = ();
+
+    fn new((): Self::Props) -> Self {
+        Self { range: VirtualRange::EMPTY, prepended: 0 }
+    }
+
+    fn props(&self) -> &Self::Props {
+        static PROPS: () = ();
+        &PROPS
+    }
+
+    fn set_props(&mut self, (): Self::Props) {}
+
+    fn view(&self) -> Node {
+        let rows = self.range.indices().map(|index| {
+            let datum = self.datum(index);
+            Node::label_with_layout(
+                format!("datum-{datum}"),
+                format!("Row {datum}"),
+                LayoutStyle::new().height(SizeMode::Fixed(24)),
+            )
+            .with_item_index(index)
+        });
+        Node::column(
+            "long-root",
+            [
+                Node::button_with_layout(
+                    "long-prepend",
+                    "Add 10 above",
+                    LayoutStyle::new().width(SizeMode::Fixed(140)).height(SizeMode::Fixed(30)),
+                ),
+                Node::label_with_layout(
+                    "long-range",
+                    format!(
+                        "Realized rows {}..{} of {}",
+                        self.range.first,
+                        self.range.last_exclusive,
+                        Self::ROWS + self.prepended
+                    ),
+                    LayoutStyle::new().height(SizeMode::Fixed(24)),
+                ),
+                Node::virtual_list(
+                    "long-list",
+                    VirtualListStyle::new(Self::ROWS + self.prepended, ItemExtent::Fixed(24)),
+                    rows,
+                ),
+            ],
+        )
+    }
+
+    fn update(&mut self, event: Event) {
+        match event {
+            Event::VisibleRangeChanged { range, .. } => self.range = range,
+            Event::Click { target } if target == NodeId::from_key("long-prepend") => {
+                self.prepended += 10;
+            }
+            _ => {}
+        }
+    }
 }
 
 /// How long the pad takes to dim and to come back.
@@ -581,6 +679,7 @@ impl AppShell {
             settings_requested: false,
             settings_opened_count: 0,
             input_lab_requested: false,
+            long_list_requested: false,
         }
     }
 
@@ -619,6 +718,15 @@ impl Component for AppShell {
             context.windows().open(
                 SettingsWindow::new(self.settings_opened_count),
                 Window::new("Rust Native UI — Settings", Size::new(360, 160)),
+                None,
+            );
+        }
+
+        if self.long_list_requested {
+            self.long_list_requested = false;
+            context.windows().open(
+                LongList::new(()),
+                Window::new("Rust Native UI — 100,000 rows", Size::new(420, 560)),
                 None,
             );
         }
@@ -701,6 +809,8 @@ impl Component for AppShell {
                     self.settings_requested = true;
                 } else if item == NodeId::from_key("file.input-lab") {
                     self.input_lab_requested = true;
+                } else if item == NodeId::from_key("file.long-list") {
+                    self.long_list_requested = true;
                 }
             }
             _ => {}
@@ -723,6 +833,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             [
                 MenuItem::action("file.new-settings-window", "New Settings Window"),
                 MenuItem::action("file.input-lab", "Input Lab"),
+                MenuItem::action("file.long-list", "100,000 Rows"),
             ],
         ),
         MenuItem::submenu("view", "View", [MenuItem::action("view.toggle-panel", "Toggle Panel")]),

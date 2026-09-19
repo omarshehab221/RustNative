@@ -8,6 +8,7 @@ use crate::input::{
     ClipboardAction, Composition, DragData, GamepadInput, Gesture, PointerEvent, WheelDelta,
 };
 use crate::layout::{Point, Size};
+use crate::virtualization::VirtualRange;
 use crate::window::WindowPresentation;
 
 /// Input produced by a platform backend and delivered to the active
@@ -231,6 +232,19 @@ pub enum Event {
         /// What was asked.
         action: AccessibleAction,
     },
+    /// A virtual list needs a different window of items realized.
+    ///
+    /// Raised when scrolling (or a resize, or newly measured item extents)
+    /// moves the visible range, and **only** then: scrolling within a range
+    /// is a native viewport transform no component hears about. A component
+    /// answers this by rendering the items in `range`, each tagged with
+    /// [`Node::with_item_index`](crate::Node::with_item_index).
+    VisibleRangeChanged {
+        /// The virtual list whose visible range changed.
+        target: NodeId,
+        /// The items it should now realize.
+        range: VirtualRange,
+    },
     /// An animation on `target` ended — because it ran out, not because
     /// it was cancelled. Delivered to the component that owns the node, so
     /// one animation can lead to the next.
@@ -278,7 +292,8 @@ impl Event {
             | Self::Drop { target, .. }
             | Self::Gamepad { target, .. }
             | Self::AccessibilityAction { target, .. }
-            | Self::AnimationFinished { target, .. } => Some(*target),
+            | Self::AnimationFinished { target, .. }
+            | Self::VisibleRangeChanged { target, .. } => Some(*target),
             Self::KeyDown { target, .. }
             | Self::KeyUp { target, .. }
             | Self::TextInput { target, .. }
@@ -315,7 +330,8 @@ impl Event {
             | Self::Drop { target: current, .. }
             | Self::Gamepad { target: current, .. }
             | Self::AccessibilityAction { target: current, .. }
-            | Self::AnimationFinished { target: current, .. } => {
+            | Self::AnimationFinished { target: current, .. }
+            | Self::VisibleRangeChanged { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }

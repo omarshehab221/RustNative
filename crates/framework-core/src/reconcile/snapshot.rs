@@ -19,6 +19,7 @@ use crate::node::{Node, TreeError};
 #[cfg(test)]
 use crate::style::VisualStyle;
 use crate::style::{ControlState, ResolvedStyle, StyleOverride, Theme};
+use crate::virtualization::VirtualListStyle;
 
 /// A resolved, backend-facing view of one node.
 ///
@@ -83,6 +84,12 @@ pub struct TreeNode {
     /// How this node's properties move when they change (see
     /// [`crate::animation`]).
     pub transitions: Vec<NodeTransition>,
+    /// Which item of its virtual list this node realizes, if it is inside
+    /// one (see [`crate::Node::with_item_index`]).
+    pub item_index: Option<usize>,
+    /// This node's virtual-list declaration, if it is one (see
+    /// [`crate::Node::virtual_list`]).
+    pub virtualization: Option<VirtualListStyle>,
 }
 
 impl TreeNode {
@@ -113,6 +120,8 @@ impl TreeNode {
             input: node.input(),
             opacity: Scalar::new(node.opacity()),
             transitions: node.transitions().to_vec(),
+            item_index: node.item_index(),
+            virtualization: node.virtualization(),
         }
     }
 }
@@ -179,6 +188,30 @@ impl TreeSnapshot {
             children.entry(parent).or_default().push(id);
             depths.insert(id, depth);
         });
+
+        // A virtual list's items announce their true place in the whole
+        // list ("row 5,012 of 100,000"), not among the dozen realized
+        // siblings — unless an item already said where it is.
+        let lists = nodes
+            .values()
+            .filter_map(|node| node.virtualization.map(|style| (node.id, style.item_count)))
+            .collect::<HashMap<_, _>>();
+        if !lists.is_empty() {
+            let saturate = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+            for node in nodes.values_mut() {
+                let Some(count) = node.parent.and_then(|parent| lists.get(&parent)) else {
+                    continue;
+                };
+                if node.accessibility.position().is_some() {
+                    continue;
+                }
+                let index = node.item_index.unwrap_or(node.index);
+                node.accessibility = node
+                    .accessibility
+                    .clone()
+                    .position_in_set(saturate(index.saturating_add(1)), saturate(*count));
+            }
+        }
 
         Ok(Self { nodes, children, depths })
     }
@@ -280,6 +313,25 @@ mod tests {
         let node = Node::label("a", "hello").disabled(true);
         let snapshot = TreeSnapshot::from_node(&node).unwrap();
         assert!(snapshot.get(NodeId::from_key("a")).unwrap().disabled);
+    }
+
+    #[test]
+    fn a_virtual_list_item_announces_its_place_in_the_whole_list() {
+        let list = Node::virtual_list(
+            "list",
+            crate::VirtualListStyle::new(100_000, crate::ItemExtent::Fixed(20)),
+            [
+                Node::label("row-5011", "row").with_item_index(5011),
+                Node::label("row-5012", "row").with_item_index(5012).with_accessibility(
+                    AccessibilityInfo::new(crate::AccessibilityRole::Label).position_in_set(1, 1),
+                ),
+            ],
+        );
+        let snapshot = TreeSnapshot::from_node(&list).unwrap();
+        let position =
+            |key: &str| snapshot.get(NodeId::from_key(key)).unwrap().accessibility.position();
+        assert_eq!(position("row-5011"), Some((5012, 100_000)), "1-based, out of the whole list");
+        assert_eq!(position("row-5012"), Some((1, 1)), "an explicit position is not overridden");
     }
 
     #[test]

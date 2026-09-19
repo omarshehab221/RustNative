@@ -28,6 +28,9 @@ pub(crate) mod uia;
 mod uia_integration;
 mod user_data;
 mod util;
+mod virtual_list;
+#[cfg(test)]
+mod virtual_list_integration;
 pub(crate) mod win32;
 pub(crate) mod window_handles;
 

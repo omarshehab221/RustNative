@@ -31,9 +31,9 @@
 use std::collections::{HashMap, HashSet};
 
 use framework_core::{
-    AnimatedProperty, AnimatedValue, ControlState, Frame, LayoutEngine, NodeId, NodeKind, Overflow,
-    Point, Rect, Scalar, Size, StyleOverride, Theme, Transition, TreeDiff, TreeNode, TreeOp,
-    TreeSnapshot, VisualStyle,
+    AnimatedProperty, AnimatedValue, ControlState, Frame, LayoutEngine, LayoutResult, NodeId,
+    NodeKind, Overflow, Point, Rect, Scalar, Size, StyleOverride, Theme, Transition, TreeDiff,
+    TreeNode, TreeOp, TreeSnapshot, VirtualRange, VisualStyle,
 };
 use windows_sys::Win32::Foundation::{HWND, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::InvalidateRect;
@@ -50,8 +50,10 @@ use super::super::win32::{best_effort, ignored_by_contract, informational};
 use super::accessibility::AccessibilityBridge;
 use super::animated::AnimatedOverrides;
 use super::controls;
+use super::pool::ControlPool;
 use super::scrolling::{ScrollState, dimension_to_u32};
 use super::styling::StyleCache;
+use super::virtual_list::VirtualLists;
 use crate::Error;
 
 /// Reconciles one window's native Win32 objects against the framework's
@@ -77,6 +79,12 @@ pub(crate) struct Renderer {
     /// Nodes removed since the last time animation state was reconciled.
     removed_nodes: Vec<NodeId>,
     scroll: ScrollState,
+    /// Each virtual list's measured extents and current visible range — see
+    /// `rendering::virtual_list`.
+    pub(crate) virtual_lists: VirtualLists,
+    /// Native windows a removal parked for an insertion in the same render
+    /// to take back — see `rendering::pool`.
+    pool: ControlPool,
     /// The semantic projection onto Win32 (tab stops, MSAA annotations) and
     /// UI Automation — see `rendering::accessibility` and `native::uia`.
     pub(crate) accessibility: AccessibilityBridge,
@@ -95,6 +103,8 @@ impl Renderer {
             pending_transitions: Vec::new(),
             removed_nodes: Vec::new(),
             scroll: ScrollState::default(),
+            virtual_lists: VirtualLists::default(),
+            pool: ControlPool::default(),
             accessibility: AccessibilityBridge::default(),
             layout_engine: LayoutEngine,
         }
@@ -117,13 +127,25 @@ impl Renderer {
 
         let diff = TreeDiff::between(&self.snapshot, &next);
         self.styles.set_theme(theme.clone());
+        // Which item each list is scrolled to, captured against the tree
+        // that is still on screen: once the operations below have run, the
+        // items that answered that question may be gone.
+        let layout_invalidated = diff.invalidates_layout();
+        if layout_invalidated {
+            self.capture_anchors();
+        }
         for operation in diff.operations() {
             self.apply_operation(operation, window)?;
         }
+        // Whatever no insertion took back is not coming back (see
+        // `rendering::pool`).
+        if !self.pool.is_empty() {
+            self.pool.drain();
+        }
 
-        let layout_invalidated = diff.invalidates_layout();
         self.collect_appearance_transitions(&next);
         self.snapshot = next;
+        self.virtual_lists.sync(&self.snapshot);
         if self.accessibility.commit(window, &self.snapshot, &self.registry) {
             crate::native::uia::schedule(window);
         }
@@ -160,14 +182,17 @@ impl Renderer {
             dimension_to_u32(client.bottom - client.top),
         );
         let measurer = WindowsIntrinsicMeasurer { window };
-        let output =
-            self.layout_engine.layout_result_with(&self.snapshot, size, &measurer, &HashMap::new());
+        let output = self.measure_and_lay_out(size, &measurer);
 
         self.collect_geometry_transitions(&output.rects);
         self.layout = output.rects;
         let snapshot = &self.snapshot;
         self.scroll
             .adopt_layout(output.scroll_ranges, output.content_sizes, |id| snapshot.contains(id));
+        if !self.virtual_lists.is_empty() {
+            self.resolve_anchors();
+            self.update_visible_ranges();
+        }
 
         // Layout is a distinct phase: only after the native tree is fully
         // reconciled do we apply geometry to every object. This makes layout
@@ -175,6 +200,83 @@ impl Renderer {
         for id in self.snapshot.nodes().map(|node| node.id).collect::<Vec<_>>() {
             self.position_node(id);
         }
+    }
+
+    /// Runs layout, and runs it once more if measuring the realized items
+    /// of a virtual list moved any of that list's offsets.
+    ///
+    /// The second pass is bounded, not a loop: an item's measured extent
+    /// does not depend on where the list decided to put it, so once those
+    /// measurements are recorded, laying out again produces the same ones
+    /// and the pass is idempotent. See
+    /// [`framework_core::MeasuredItem`](framework_core::MeasuredItem).
+    fn measure_and_lay_out(
+        &mut self,
+        size: Size,
+        measurer: &WindowsIntrinsicMeasurer,
+    ) -> LayoutResult {
+        let output = self.layout_engine.layout_result_with(
+            &self.snapshot,
+            size,
+            measurer,
+            self.virtual_lists.extents(),
+        );
+        if !self.virtual_lists.record(&output.measured_items) {
+            return output;
+        }
+        self.layout_engine.layout_result_with(
+            &self.snapshot,
+            size,
+            measurer,
+            self.virtual_lists.extents(),
+        )
+    }
+
+    /// Remembers which item sits at the top of each virtual list's
+    /// viewport, so the render about to run can be made to leave it there.
+    fn capture_anchors(&mut self) {
+        if self.virtual_lists.is_empty() {
+            return;
+        }
+        let Self { virtual_lists, scroll, snapshot, .. } = self;
+        virtual_lists
+            .capture_anchors(|id| scroll.offset(id), |list, index| item_at(snapshot, list, index));
+    }
+
+    /// Puts each virtual list back where its anchored item is, now that the
+    /// new tree is laid out.
+    ///
+    /// This is what makes an insertion above the viewport grow the list
+    /// upward instead of sliding its content: the anchored node keeps its
+    /// identity across the render, so the offset follows it to whatever
+    /// item index it now occupies.
+    fn resolve_anchors(&mut self) {
+        let Self { virtual_lists, snapshot, .. } = self;
+        let offsets = virtual_lists.resolve_anchors(|node| index_of(snapshot, node));
+        for (id, offset) in offsets {
+            if self.scroll.scroll_to(id, offset) {
+                if let Some(rect) = self.layout.get(&id).copied() {
+                    self.scroll.apply(id, &self.registry, rect);
+                }
+            }
+        }
+    }
+
+    /// Recomputes every virtual list's visible range from where it is now
+    /// scrolled and how big its viewport now is.
+    fn update_visible_ranges(&mut self) {
+        let Self { virtual_lists, scroll, layout, .. } = self;
+        virtual_lists.update_ranges(|id| layout.get(&id).copied(), |id| scroll.offset(id));
+    }
+
+    /// Virtual lists that need a different window of items realized, for
+    /// the runtime to report to their components.
+    ///
+    /// Detecting this here is deliberate, for the same reason transitions
+    /// are: this is the only place that knows both the scroll offsets and
+    /// the laid-out viewports. Dispatching belongs to `native::virtual_list`.
+    pub(crate) fn take_range_changes(&mut self) -> Vec<(NodeId, VirtualRange)> {
+        self.virtual_lists.take_changes()
     }
 
     /// Scrolls a container by a wheel/keyboard delta, without rerendering.
@@ -187,6 +289,11 @@ impl Renderer {
                 return;
             };
             self.scroll.apply(id, &self.registry, rect);
+            // Scrolling inside a range changes nothing here; crossing out
+            // of one queues the change the runtime then reports.
+            if !self.virtual_lists.is_empty() {
+                self.update_visible_ranges();
+            }
         }
     }
 
@@ -269,7 +376,7 @@ impl Renderer {
                 Ok(())
             }
             TreeOp::Remove(node) => {
-                self.remove_node(node.id);
+                self.remove_or_park(node, window);
                 Ok(())
             }
         }
@@ -277,12 +384,43 @@ impl Renderer {
 
     fn insert_node(&mut self, node: &TreeNode, window: HWND) -> Result<(), Error> {
         let parent = self.native_parent(node, window);
+        if self.reuse_node(node, parent)? {
+            return Ok(());
+        }
         controls::create(&mut self.registry, node, parent)?;
         if let Some(object) = self.registry.get(node.id) {
             AccessibilityBridge::attach(object.hwnd(), node.kind);
         }
         self.apply_semantics_and_style(node);
         Ok(())
+    }
+
+    /// Realizes `node` on a native window a removal in this same render
+    /// parked, if one of the right kind lived under the same parent.
+    ///
+    /// The window keeps everything that is a property of the *window* — its
+    /// class, its accessibility subclass, its UI Automation provider — and
+    /// is given everything that is a property of the *node*: its text, its
+    /// semantics, its style. Only the registry's idea of which node it
+    /// belongs to changes, which is what makes a recycled row answer as the
+    /// row it now is.
+    fn reuse_node(&mut self, node: &TreeNode, parent: HWND) -> Result<bool, Error> {
+        let Some(object) = self.pool.take(parent, node.kind) else {
+            return Ok(false);
+        };
+        if let Err(error) = self.registry.insert(node.id, object) {
+            // The id is already taken, which a diff cannot produce; the
+            // window is this method's to destroy rather than leak.
+            if let Some(object) = self.registry.remove(node.id) {
+                object.destroy();
+            }
+            return Err(error);
+        }
+        self.apply_semantics_and_style(node);
+        if controls::update_text(&self.registry, node)? {
+            self.suppress_text_change.insert(node.id);
+        }
+        Ok(true)
     }
 
     fn update_node(&mut self, node: &TreeNode, window: HWND) -> Result<(), Error> {
@@ -309,16 +447,58 @@ impl Renderer {
         self.apply_opacity(node.id);
     }
 
+    /// Removes `id`'s native object, destroying it.
     fn remove_node(&mut self, id: NodeId) {
+        self.forget_node(id);
+        if let Some(object) = self.registry.remove(id) {
+            self.accessibility.forget(object.hwnd());
+            object.destroy();
+        }
+    }
+
+    /// Removes `node`, parking its native object for reuse when `node` is
+    /// part of a virtual list and destroying it otherwise.
+    ///
+    /// A parked window keeps its accessibility subclass and provider, so
+    /// this deliberately does not `forget` them: the same window is about
+    /// to answer for a different row, and tearing that down only to build
+    /// it again is the churn recycling exists to avoid.
+    fn remove_or_park(&mut self, node: &TreeNode, window: HWND) {
+        if !self.is_virtual_item(node) {
+            self.remove_node(node.id);
+            return;
+        }
+        let parent = self.native_parent(node, window);
+        self.forget_node(node.id);
+        if let Some(object) = self.registry.remove(node.id) {
+            self.pool.put(parent, node.kind, object);
+        }
+    }
+
+    /// Everything the renderer holds about a node that is leaving,
+    /// independent of what happens to its native window.
+    fn forget_node(&mut self, id: NodeId) {
         self.animated.forget(id);
         self.removed_nodes.push(id);
         self.styles.forget(id);
         self.suppress_text_change.remove(&id);
         self.layout.remove(&id);
-        if let Some(object) = self.registry.remove(id) {
-            self.accessibility.forget(object.hwnd());
-            object.destroy();
+    }
+
+    /// Whether `node` is inside a virtual list, and so interchangeable with
+    /// the rows around it.
+    fn is_virtual_item(&self, node: &TreeNode) -> bool {
+        let mut parent = node.parent;
+        while let Some(id) = parent {
+            let Some(ancestor) = self.snapshot.get(id) else {
+                return false;
+            };
+            if ancestor.virtualization.is_some() {
+                return true;
+            }
+            parent = ancestor.parent;
         }
+        false
     }
 
     fn reparent(&mut self, id: NodeId, parent: Option<NodeId>, window: HWND) {
@@ -679,6 +859,20 @@ impl Renderer {
             .and_then(|parent_id| self.registry.get(parent_id))
             .map_or(window, |object| object.content_hwnd().unwrap_or_else(|| object.hwnd()))
     }
+}
+
+/// The node realizing item `index` of the virtual list `list`, if it is
+/// realized at all.
+fn item_at(snapshot: &TreeSnapshot, list: NodeId, index: usize) -> Option<NodeId> {
+    snapshot
+        .children_of(list)
+        .find(|child| child.item_index.unwrap_or(child.index) == index)
+        .map(|child| child.id)
+}
+
+/// Which item of its virtual list `node` realizes.
+fn index_of(snapshot: &TreeSnapshot, node: NodeId) -> Option<usize> {
+    snapshot.get(node).map(|node| node.item_index.unwrap_or(node.index))
 }
 
 /// A transition the renderer found and `native::animation` will start.

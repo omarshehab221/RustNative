@@ -15,6 +15,6 @@ mod geometry;
 mod measure;
 
 pub use constraints::{ColumnStyle, Constraints, LayoutStyle, RowStyle};
-pub use engine::{LayoutEngine, LayoutInvalidation, LayoutResult};
+pub use engine::{LayoutEngine, LayoutInvalidation, LayoutResult, MeasuredItem};
 pub use geometry::{Alignment, EdgeInsets, Overflow, Point, Rect, Size, SizeMode};
 pub use measure::{DefaultIntrinsicMeasurer, IntrinsicMeasurer};

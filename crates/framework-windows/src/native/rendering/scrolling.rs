@@ -84,6 +84,25 @@ impl ScrollState {
         self.offsets.get(&id).copied().unwrap_or_default()
     }
 
+    /// Puts `id` at `offset`, clamped to its scroll range, and reports
+    /// whether the offset actually changed.
+    ///
+    /// Used by scroll anchoring, which computes where a container has to be
+    /// for the item a person is looking at to stay where it is (see
+    /// `rendering::virtual_list`).
+    pub(crate) fn scroll_to(&mut self, id: NodeId, offset: Point) -> bool {
+        let range = self.ranges.get(&id).copied().unwrap_or(Size::new(0, 0));
+        let next = Point::new(
+            offset.x.clamp(0, dimension_to_i32(range.width)),
+            offset.y.clamp(0, dimension_to_i32(range.height)),
+        );
+        if next == self.offset(id) {
+            return false;
+        }
+        self.offsets.insert(id, next);
+        true
+    }
+
     /// Moves `id` by `(delta_x, delta_y)`, clamped to its scroll range,
     /// and reports whether the offset actually changed.
     pub(crate) fn scroll_by(&mut self, id: NodeId, delta_x: i32, delta_y: i32) -> bool {

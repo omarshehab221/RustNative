@@ -698,3 +698,115 @@ mod animation {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+// Virtualization (crate::virtualization, Milestone 28).
+// ---------------------------------------------------------------------
+
+mod virtualization {
+    use proptest::prelude::*;
+
+    use framework_core::{ExtentCache, ItemExtent, NodeId, ScrollAnchor, VirtualRange};
+
+    /// A measured cache and the plain extents it should agree with.
+    fn measured() -> impl Strategy<Value = (ExtentCache, Vec<u32>)> {
+        (1usize..300, 1u32..60).prop_flat_map(|(count, estimate)| {
+            proptest::collection::vec((0..count, 0u32..120), 0..64).prop_map(move |measurements| {
+                let mut cache = ExtentCache::new(count, ItemExtent::Estimated(estimate));
+                let mut plain = vec![estimate; count];
+                for (index, extent) in measurements {
+                    cache.record(index, extent);
+                    plain[index] = extent;
+                }
+                (cache, plain)
+            })
+        })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        /// The Fenwick tree's offsets are exactly the prefix sums a naive
+        /// scan would compute, after any sequence of measurements — the
+        /// structure is an optimization, never a different answer.
+        #[test]
+        fn fenwick_offsets_equal_naive_prefix_sums((cache, plain) in measured()) {
+            let mut sum = 0u32;
+            for (index, extent) in plain.iter().enumerate() {
+                prop_assert_eq!(cache.offset_of(index), sum);
+                sum += extent;
+            }
+            prop_assert_eq!(cache.total(), sum);
+        }
+
+        /// `index_at` finds the item that actually contains an offset.
+        #[test]
+        fn the_item_at_an_offset_contains_it((cache, _) in measured(), fraction in 0.0f64..1.0) {
+            let total = cache.total();
+            prop_assume!(total > 0);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let offset = (f64::from(total - 1) * fraction) as u32;
+            let index = cache.index_at(offset);
+            prop_assert!(cache.offset_of(index) <= offset);
+            prop_assert!(offset < cache.offset_of(index) + cache.extent_of(index));
+        }
+
+        /// Whatever the scroll position and viewport, the range realizes
+        /// every item the viewport touches, and no more than overscan
+        /// beyond it.
+        #[test]
+        fn a_range_always_covers_its_viewport(
+            (cache, _) in measured(),
+            offset in 0u32..20_000,
+            viewport in 1u32..600,
+            overscan in 0usize..5,
+        ) {
+            let range = VirtualRange::compute(offset, viewport, &cache, overscan);
+            let count = cache.count();
+            prop_assert!(range.last_exclusive <= count);
+            let first_visible = cache.index_at(offset);
+            let last_visible = cache.index_at(offset.saturating_add(viewport - 1));
+            for index in first_visible..=last_visible {
+                prop_assert!(range.contains(index), "item {} is visible but not realized", index);
+            }
+            prop_assert!(range.first + overscan >= first_visible);
+            prop_assert!(range.last_exclusive <= last_visible + 1 + overscan);
+        }
+
+        /// Scrolling further down never moves the range up.
+        #[test]
+        fn ranges_are_monotone_in_the_scroll_offset(
+            (cache, _) in measured(),
+            offset in 0u32..20_000,
+            delta in 0u32..500,
+            viewport in 1u32..600,
+        ) {
+            let before = VirtualRange::compute(offset, viewport, &cache, 2);
+            let after = VirtualRange::compute(offset + delta, viewport, &cache, 2);
+            prop_assert!(after.first >= before.first);
+            prop_assert!(after.last_exclusive >= before.last_exclusive);
+        }
+
+        /// However many items are inserted above the viewport, the
+        /// anchored item resolves to the same distance into itself.
+        #[test]
+        fn anchoring_survives_insertions_above(
+            count in 10usize..500,
+            offset in 0u32..5_000,
+            inserted in 0usize..200,
+        ) {
+            let row = |datum: usize| NodeId::from_key(&format!("row-{datum}"));
+            let before = ExtentCache::new(count, ItemExtent::Fixed(20));
+            let anchor = ScrollAnchor::capture(offset, &before, |index| Some(row(index)))
+                .expect("the list has items");
+            let anchored_index = before.index_at(offset);
+            let within = offset - before.offset_of(anchored_index);
+
+            let after = ExtentCache::new(count + inserted, ItemExtent::Fixed(20));
+            let resolved = anchor
+                .resolve(&after, |node| (node == row(anchored_index)).then_some(anchored_index + inserted))
+                .expect("the anchored row still exists");
+            prop_assert_eq!(resolved - after.offset_of(anchored_index + inserted), within);
+        }
+    }
+}

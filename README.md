@@ -12,9 +12,9 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 27 — Animations and
-Transitions** (a portable timeline whose frames touch native properties
-alone, never the component tree), after Milestone 26's accessibility bridge,
+The latest completed milestone is **Milestone 28 — Virtualized Lists**
+(a hundred thousand items on a screenful of recycled native windows), after
+Milestone 27's animations and transitions, Milestone 26's accessibility bridge,
 Milestone 25's advanced input system, and the standards-audit remediation
 pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
 verified, what it found while doing so, and what is still open.
@@ -464,6 +464,37 @@ reduced-motion preference is read at startup and tracked live; each animation
 says whether it is skipped (jump straight to the target) or still run when
 motion is reduced.
 
+## Virtualized lists
+
+A list of a hundred thousand items realizes a screenful of native windows:
+
+```rust
+Node::virtual_list(
+    "rows",
+    VirtualListStyle::new(100_000, ItemExtent::Fixed(24)),
+    self.range.indices().map(|index| {
+        Node::label(format!("row-{index}"), format!("Row {index}")).with_item_index(index)
+    }),
+)
+```
+
+The component renders only `self.range`, which it learns from
+`Event::VisibleRangeChanged`. That event arrives when scrolling (or a resize,
+or newly measured item sizes) moves the range, and never otherwise: a
+scroll inside the realized range is the same native viewport transform any
+scrollable container uses. A virtual list is sized by its parent (give it
+`Fill` or a fixed size), and its content length is every item's, so the
+scroll range covers the whole list.
+
+Items are either `ItemExtent::Fixed`, which costs nothing per item, or
+`ItemExtent::Estimated`, in which case the rows that are realized are
+measured and every later offset moves with what was learned
+(`ExtentCache`, a Fenwick tree). Row keys that name the *data* rather than
+the index keep the item a person is looking at still when items are
+inserted above it (`ScrollAnchor`). On Windows, rows that scroll out hand
+their native windows to rows that scroll in, so scrolling end to end creates
+a screenful of controls once.
+
 ## Text input
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
@@ -532,6 +563,6 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 28 — Virtualized lists and
-large data sets**. The roadmap then proceeds through custom rendering,
+The next implementation target is **Milestone 29 — Graphics / custom
+rendering escape hatch**. The roadmap then proceeds through
 persistence/navigation, CLI/packaging, and additional native backends.

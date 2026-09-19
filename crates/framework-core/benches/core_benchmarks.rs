@@ -21,8 +21,9 @@ use criterion::{
 };
 
 use framework_core::{
-    Component, ComponentContext, ComponentTree, Event, LayoutEngine, LayoutStyle, Node, RowStyle,
-    Size, SizeMode, TreeDiff, TreeSnapshot,
+    Component, ComponentContext, ComponentTree, Event, ExtentCache, ItemExtent, LayoutEngine,
+    LayoutStyle, Node, RowStyle, Size, SizeMode, TreeDiff, TreeSnapshot, VirtualListStyle,
+    VirtualRange,
 };
 
 /// Builds a moderately wide-and-deep tree: `width` labelled children per
@@ -303,6 +304,48 @@ fn bench_deep_tree_scaling(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_virtual_range(c: &mut Criterion) {
+    let mut extents = ExtentCache::new(100_000, ItemExtent::Estimated(24));
+    for index in (0..100_000).step_by(7) {
+        extents.record(index, 30);
+    }
+    c.bench_function("virtual_list/range_100k", |b| {
+        b.iter(|| {
+            black_box(VirtualRange::compute(
+                black_box(1_200_000),
+                black_box(800),
+                black_box(&extents),
+                2,
+            ))
+        });
+    });
+}
+
+fn bench_layout_virtual(c: &mut Criterion) {
+    // 10,000 items, 40 of them realized: layout must cost the realized
+    // items, not the list's length.
+    let rows = (5_000..5_040)
+        .map(|index| Node::label(format!("row-{index}"), "row").with_item_index(index));
+    let tree =
+        Node::virtual_list("list", VirtualListStyle::new(10_000, ItemExtent::Estimated(24)), rows);
+    let snapshot = TreeSnapshot::from_node(&tree).unwrap();
+    let engine = LayoutEngine::new();
+    let extents = std::collections::HashMap::from([(
+        framework_core::NodeId::from_key("list"),
+        ExtentCache::new(10_000, ItemExtent::Estimated(24)),
+    )]);
+    c.bench_function("layout/virtual_10k", |b| {
+        b.iter(|| {
+            black_box(engine.layout_result_with(
+                black_box(&snapshot),
+                Size::new(400, 800),
+                &framework_core::DefaultIntrinsicMeasurer,
+                &extents,
+            ))
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_snapshot_construction,
@@ -316,5 +359,7 @@ criterion_group!(
     bench_diff_scaling,
     bench_layout_scaling,
     bench_deep_tree_scaling,
+    bench_virtual_range,
+    bench_layout_virtual,
 );
 criterion_main!(benches);

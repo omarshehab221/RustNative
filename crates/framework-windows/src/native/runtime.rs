@@ -17,6 +17,7 @@ use super::input::{self, InputState};
 use super::menu::build_native_menu;
 use super::rendering::Renderer;
 use super::util::{module_instance, wide};
+use super::virtual_list;
 use super::win32::{best_effort, ignored_by_contract, must_succeed};
 use super::{EnableWindow, WINDOW_CLASS_NAME, WM_FRAMEWORK_SCHEDULE};
 use crate::Error;
@@ -78,6 +79,9 @@ impl Runtime {
         self.renderer.render(&tree, self.window, &theme)?;
         input::after_render(self);
         animation::after_render(self);
+        // A render can change how many items a list has, or how large they
+        // measured, either of which moves the window of items it needs.
+        virtual_list::after_render(self);
         Ok(())
     }
 
@@ -86,6 +90,8 @@ impl Runtime {
         // Layout is where a node's position and size change, so it is
         // where their transitions begin.
         animation::after_render(self);
+        // A resized window shows a different number of items.
+        virtual_list::after_render(self);
     }
 
     /// [`Runtime::dispatch`], with this backend's uniform failure handling:

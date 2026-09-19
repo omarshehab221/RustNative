@@ -36,11 +36,12 @@
 use std::collections::HashMap;
 
 use super::constraints::ResolvedContainerStyle;
-use super::geometry::{Alignment, EdgeInsets, Overflow, Point, Rect, Size, SizeMode};
+use super::geometry::{Alignment, EdgeInsets, Overflow, Rect, Size, SizeMode};
 use super::measure::{DefaultIntrinsicMeasurer, IntrinsicMeasurer};
 use crate::identity::NodeId;
 use crate::node::NodeKind;
 use crate::reconcile::{TreeNode, TreeSnapshot};
+use crate::virtualization::{Axis, ExtentCache, ItemExtent, VirtualListStyle};
 
 /// Whether the most recent tree diff requires a full relayout.
 ///
@@ -83,6 +84,33 @@ pub struct LayoutResult {
     /// `content_size - viewport_size` (floored at zero) for every
     /// container, i.e. how far it can scroll along each axis.
     pub scroll_ranges: HashMap<NodeId, Size>,
+    /// What each realized virtual-list item actually measured, for a
+    /// backend to feed back into that list's [`ExtentCache`] (see
+    /// [`MeasuredItem`]).
+    ///
+    /// Empty unless the tree contains a virtual list whose items are
+    /// [`ItemExtent::Estimated`]: a list that states its item size has
+    /// nothing to learn from measuring one.
+    pub measured_items: Vec<MeasuredItem>,
+}
+
+/// One realized virtual-list item's measured extent along its list's axis.
+///
+/// Layout places items at the offsets the list's [`ExtentCache`] currently
+/// implies, and reports what each one measured. A backend records those
+/// measurements and lays out again if any of them moved an offset — one
+/// extra pass, after which the cache and the measurements agree and the
+/// pass is idempotent. This is what "incremental measurement" means here:
+/// a list of a hundred thousand items learns the size of the twenty it
+/// realized, not of the rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MeasuredItem {
+    /// The virtual list the item belongs to.
+    pub list: NodeId,
+    /// Which item of that list it realizes.
+    pub index: usize,
+    /// How long it measured along the list's axis.
+    pub extent: u32,
 }
 
 /// Computes absolute-within-parent geometry for a [`TreeSnapshot`]; see
@@ -156,18 +184,27 @@ impl LayoutEngine {
         self.layout_result_with(snapshot, size, measurer, &HashMap::new()).rects
     }
 
-    /// Runs a full layout pass. `_scroll_offsets` is accepted for API
-    /// symmetry with how a backend tracks per-container scroll position, but
-    /// intentionally unused here: scroll offset is a viewport transform a
-    /// backend applies when placing native objects, not an input to how much
-    /// content there is or how large it naturally wants to be (see
-    /// [`LayoutResult::content_sizes`]'s doc comment).
+    /// Runs a full layout pass.
+    ///
+    /// `extents` supplies each virtual list's [`ExtentCache`] — what the
+    /// backend has measured about that list's items so far — keyed by the
+    /// list's node. A list with no entry (or one whose cache disagrees with
+    /// the item count the tree now declares) is laid out from the estimate
+    /// its [`VirtualListStyle`] states, so a core-only caller needs to
+    /// supply nothing.
+    ///
+    /// Scroll offsets are deliberately *not* an input: a scroll offset is a
+    /// viewport transform a backend applies when placing native objects,
+    /// not an input to how much content there is or how large it naturally
+    /// wants to be (see [`LayoutResult::content_sizes`]). An earlier
+    /// revision took one anyway, unused, "for API symmetry"; this takes
+    /// what layout genuinely needs instead.
     pub fn layout_result_with<M: IntrinsicMeasurer>(
         &self,
         snapshot: &TreeSnapshot,
         size: Size,
         measurer: &M,
-        _scroll_offsets: &HashMap<NodeId, Point>,
+        extents: &HashMap<NodeId, ExtentCache>,
     ) -> LayoutResult {
         let mut result = LayoutResult::default();
         let Some(root) = snapshot.ordered_nodes().into_iter().next() else {
@@ -181,7 +218,7 @@ impl LayoutEngine {
             size.height.min(i32::MAX as u32) as i32,
         );
 
-        self.layout_node(snapshot, root, root_rect, &mut result, measurer);
+        self.layout_node(snapshot, root, root_rect, &mut result, measurer, extents);
         result
     }
 
@@ -192,6 +229,7 @@ impl LayoutEngine {
         rect: Rect,
         result: &mut LayoutResult,
         measurer: &M,
+        extents: &HashMap<NodeId, ExtentCache>,
     ) {
         // Rectangles are always expressed in the coordinate space of the
         // node's native parent. Descendants therefore start from (0, 0)
@@ -208,14 +246,29 @@ impl LayoutEngine {
                 if !matches!(style.overflow, Overflow::Visible) {
                     result.clips.insert(node.id, Rect::new(0, 0, rect.width, rect.height));
                 }
-                let content_size = self.layout_column(
-                    snapshot,
-                    content_rect,
-                    &children,
-                    style.into(),
-                    result,
-                    measurer,
-                );
+                let content_size = if let Some(virtualization) = node.virtualization {
+                    self.layout_virtual(
+                        snapshot,
+                        node,
+                        content_rect,
+                        &children,
+                        virtualization,
+                        style.align_items,
+                        result,
+                        measurer,
+                        extents,
+                    )
+                } else {
+                    self.layout_column(
+                        snapshot,
+                        content_rect,
+                        &children,
+                        style.into(),
+                        result,
+                        measurer,
+                        extents,
+                    )
+                };
                 result.content_sizes.insert(node.id, content_size);
                 result.scroll_ranges.insert(
                     node.id,
@@ -230,14 +283,29 @@ impl LayoutEngine {
                 if !matches!(style.overflow, Overflow::Visible) {
                     result.clips.insert(node.id, Rect::new(0, 0, rect.width, rect.height));
                 }
-                let content_size = self.layout_row(
-                    snapshot,
-                    content_rect,
-                    &children,
-                    style.into(),
-                    result,
-                    measurer,
-                );
+                let content_size = if let Some(virtualization) = node.virtualization {
+                    self.layout_virtual(
+                        snapshot,
+                        node,
+                        content_rect,
+                        &children,
+                        virtualization,
+                        style.align_items,
+                        result,
+                        measurer,
+                        extents,
+                    )
+                } else {
+                    self.layout_row(
+                        snapshot,
+                        content_rect,
+                        &children,
+                        style.into(),
+                        result,
+                        measurer,
+                        extents,
+                    )
+                };
                 result.content_sizes.insert(node.id, content_size);
                 result.scroll_ranges.insert(
                     node.id,
@@ -251,6 +319,10 @@ impl LayoutEngine {
         }
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one layout pass's inputs, not a decomposable set"
+    )]
     fn layout_column<M: IntrinsicMeasurer>(
         &self,
         snapshot: &TreeSnapshot,
@@ -259,6 +331,7 @@ impl LayoutEngine {
         style: ResolvedContainerStyle,
         result: &mut LayoutResult,
         measurer: &M,
+        extents: &HashMap<NodeId, ExtentCache>,
     ) -> Size {
         let ResolvedContainerStyle { padding, gap, align_items } = style;
         let content = inner_rect(rect, padding);
@@ -324,7 +397,7 @@ impl LayoutEngine {
             let height = child.layout.constraints.clamp_height(height.max(0));
             let x = aligned_start(content.x, margin.left, available_width, width, alignment);
             let child_rect = Rect::new(x, y, width, height);
-            self.layout_node(snapshot, child, child_rect, result, measurer);
+            self.layout_node(snapshot, child, child_rect, result, measurer, extents);
 
             y = y.saturating_add(height).saturating_add(margin.bottom);
             if index + 1 < children.len() {
@@ -350,6 +423,10 @@ impl LayoutEngine {
         Size::new(natural_width.max(0) as u32, natural_height.max(0) as u32)
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one layout pass's inputs, not a decomposable set"
+    )]
     fn layout_row<M: IntrinsicMeasurer>(
         &self,
         snapshot: &TreeSnapshot,
@@ -358,6 +435,7 @@ impl LayoutEngine {
         style: ResolvedContainerStyle,
         result: &mut LayoutResult,
         measurer: &M,
+        extents: &HashMap<NodeId, ExtentCache>,
     ) -> Size {
         let ResolvedContainerStyle { padding, gap, align_items } = style;
         let content = inner_rect(rect, padding);
@@ -412,7 +490,7 @@ impl LayoutEngine {
             let height = child.layout.constraints.clamp_height(height.max(0).min(available_height));
             let y = aligned_start(content.y, margin.top, available_height, height, alignment);
             let child_rect = Rect::new(x, y, width, height);
-            self.layout_node(snapshot, child, child_rect, result, measurer);
+            self.layout_node(snapshot, child, child_rect, result, measurer, extents);
 
             x = x.saturating_add(width).saturating_add(margin.right);
             if index + 1 < children.len() {
@@ -436,6 +514,203 @@ impl LayoutEngine {
             .max(rect.height);
 
         Size::new(natural_width.max(0) as u32, natural_height.max(0) as u32)
+    }
+
+    /// Lays out a virtual list: every realized child at the offset its item
+    /// index implies, and a content size covering *every* item, realized or
+    /// not.
+    ///
+    /// That content size is the whole point. It is what gives the container
+    /// a scroll range covering the full list, so scrolling a hundred
+    /// thousand items works with twenty of them realized — see
+    /// [`crate::virtualization`].
+    ///
+    /// Container padding and gap are deliberately not applied here; see
+    /// that module for why.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one layout pass's inputs, not a decomposable set"
+    )]
+    fn layout_virtual<M: IntrinsicMeasurer>(
+        &self,
+        snapshot: &TreeSnapshot,
+        node: &TreeNode,
+        rect: Rect,
+        children: &[&TreeNode],
+        style: VirtualListStyle,
+        align_items: Alignment,
+        result: &mut LayoutResult,
+        measurer: &M,
+        extents: &HashMap<NodeId, ExtentCache>,
+    ) -> Size {
+        // The backend's cache when it has one for this list and it still
+        // describes a list of this length; otherwise what the style states,
+        // so a core-only caller (or a list whose item count just changed)
+        // is laid out from the estimate rather than from stale offsets.
+        let fallback;
+        let cache = match extents.get(&node.id) {
+            Some(cache) if cache.count() == style.item_count => cache,
+            _ => {
+                fallback = style.extents();
+                &fallback
+            }
+        };
+
+        let mut cross_end = 0;
+        for child in children {
+            // An item that did not say which index it realizes is taken to
+            // be at its position among its realized siblings, which is what
+            // a small, fully realized list looks like.
+            let index = child.item_index.unwrap_or(child.index);
+            let margin = child.layout.margin;
+            let main_start = to_i32(cache.offset_of(index));
+            let available_cross = match style.axis {
+                Axis::Vertical => rect.width.saturating_sub(margin.horizontal()).max(0),
+                Axis::Horizontal => rect.height.saturating_sub(margin.vertical()).max(0),
+            };
+            let alignment = child.layout.align_self.unwrap_or(align_items);
+
+            let (main, cross) = match style.axis {
+                Axis::Vertical => {
+                    let width = self.cross_extent(
+                        snapshot,
+                        child,
+                        measurer,
+                        alignment,
+                        child.layout.width,
+                        available_cross,
+                    );
+                    let height = self.item_extent(
+                        snapshot,
+                        child,
+                        measurer,
+                        style.extent,
+                        child.layout.height,
+                        Some(width),
+                        result,
+                        node.id,
+                        index,
+                    );
+                    (height, width)
+                }
+                Axis::Horizontal => {
+                    let width = self.item_extent(
+                        snapshot,
+                        child,
+                        measurer,
+                        style.extent,
+                        child.layout.width,
+                        None,
+                        result,
+                        node.id,
+                        index,
+                    );
+                    let height = self.cross_extent(
+                        snapshot,
+                        child,
+                        measurer,
+                        alignment,
+                        child.layout.height,
+                        available_cross,
+                    );
+                    (width, height)
+                }
+            };
+
+            let child_rect = match style.axis {
+                Axis::Vertical => {
+                    let width = child.layout.constraints.clamp_width(cross.max(0));
+                    let height = child.layout.constraints.clamp_height(main.max(0));
+                    let x = aligned_start(rect.x, margin.left, available_cross, width, alignment);
+                    cross_end = cross_end.max(x.saturating_add(width));
+                    Rect::new(x, rect.y.saturating_add(main_start), width, height)
+                }
+                Axis::Horizontal => {
+                    let width = child.layout.constraints.clamp_width(main.max(0));
+                    let height = child.layout.constraints.clamp_height(cross.max(0));
+                    let y = aligned_start(rect.y, margin.top, available_cross, height, alignment);
+                    cross_end = cross_end.max(y.saturating_add(height));
+                    Rect::new(rect.x.saturating_add(main_start), y, width, height)
+                }
+            };
+            self.layout_node(snapshot, child, child_rect, result, measurer, extents);
+        }
+
+        // Every item, not just the realized ones: this is what the
+        // container scrolls over.
+        let total = to_i32(cache.total());
+        match style.axis {
+            Axis::Vertical => Size::new(
+                cross_end.max(rect.width).max(0) as u32,
+                total.max(rect.height).max(0) as u32,
+            ),
+            Axis::Horizontal => Size::new(
+                total.max(rect.width).max(0) as u32,
+                cross_end.max(rect.height).max(0) as u32,
+            ),
+        }
+    }
+
+    /// How long one virtual-list item is along the list's axis, recording
+    /// what it measured when the list's items are estimated rather than
+    /// fixed.
+    #[allow(clippy::too_many_arguments, reason = "one item's inputs, not a decomposable set")]
+    fn item_extent<M: IntrinsicMeasurer>(
+        &self,
+        snapshot: &TreeSnapshot,
+        child: &TreeNode,
+        measurer: &M,
+        policy: ItemExtent,
+        mode: SizeMode,
+        width_hint: Option<i32>,
+        result: &mut LayoutResult,
+        list: NodeId,
+        index: usize,
+    ) -> i32 {
+        match policy {
+            // The application stated the size; nothing is measured, and an
+            // item that would rather be another size is given this one.
+            ItemExtent::Fixed(extent) => to_i32(extent),
+            ItemExtent::Estimated(_) => {
+                // An item that declares its own size along the axis is that
+                // size, exactly as in an ordinary column or row;
+                // `Fill` has nothing to fill in a list whose length is the
+                // sum of its items, so it measures like `Auto`.
+                let natural = match mode {
+                    SizeMode::Fixed(value) => value.max(0),
+                    SizeMode::Auto | SizeMode::Fill => match width_hint {
+                        Some(width) => {
+                            self.preferred_height(snapshot, child, measurer, Some(width))
+                        }
+                        None => self.preferred_width(snapshot, child, measurer),
+                    },
+                }
+                .max(0);
+                result.measured_items.push(MeasuredItem { list, index, extent: natural as u32 });
+                // Drawn at what it measured rather than at the estimate the
+                // cache still holds, so an item is never clipped by an
+                // estimate that was too small; the cache catches up on the
+                // pass the backend runs after recording this.
+                natural
+            }
+        }
+    }
+
+    /// How long one virtual-list item is across the list's axis.
+    fn cross_extent<M: IntrinsicMeasurer>(
+        &self,
+        snapshot: &TreeSnapshot,
+        child: &TreeNode,
+        measurer: &M,
+        alignment: Alignment,
+        mode: SizeMode,
+        available: i32,
+    ) -> i32 {
+        match (alignment, mode) {
+            (Alignment::Stretch, SizeMode::Auto | SizeMode::Fill) => available,
+            (_, SizeMode::Auto) => self.preferred_width(snapshot, child, measurer).min(available),
+            (_, mode) => resolve_width(mode, available),
+        }
     }
 
     fn preferred_width<M: IntrinsicMeasurer>(
@@ -475,6 +750,15 @@ impl LayoutEngine {
         measurer: &M,
         max_width: Option<i32>,
     ) -> i32 {
+        if node.virtualization.is_some() {
+            // A virtual list does not want to be as tall as its content —
+            // being *shorter* than its content is the entire point, and
+            // asking for the sum of a hundred thousand items would size the
+            // window to the data. It takes whatever it is given (`Fill` or
+            // a fixed size); its content length reaches the backend through
+            // `LayoutResult::content_sizes`, which is what it scrolls over.
+            return 0;
+        }
         match node.kind {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput => {
                 measurer.measure(node.kind, node.text.as_deref(), max_width).height as i32
@@ -524,6 +808,11 @@ impl LayoutEngine {
         node: &TreeNode,
         measurer: &M,
     ) -> i32 {
+        if node.virtualization.is_some() {
+            // As in `preferred_content_height`: a virtual list is sized by
+            // its parent, not by its items.
+            return 0;
+        }
         let children = ordered_children(snapshot, node.id);
         match node.kind {
             NodeKind::Column => {
@@ -605,6 +894,13 @@ fn resolve_width(mode: SizeMode, available: i32) -> i32 {
     }
 }
 
+/// Converts an extent or offset from the unsigned representation
+/// [`ExtentCache`] uses into this module's `i32` working type, saturating
+/// rather than wrapping (see the module's note on casts).
+fn to_i32(value: u32) -> i32 {
+    value.min(i32::MAX as u32) as i32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -613,6 +909,86 @@ mod tests {
 
     fn snapshot_of(node: &Node) -> TreeSnapshot {
         TreeSnapshot::from_node(node).expect("test tree must have unique ids")
+    }
+
+    fn virtual_rows(extent: ItemExtent, rows: std::ops::Range<usize>, height: i32) -> Node {
+        Node::column(
+            "root",
+            [Node::virtual_list(
+                "list",
+                VirtualListStyle::new(100_000, extent),
+                rows.map(|index| {
+                    Node::column_with_layout(
+                        format!("row-{index}"),
+                        [],
+                        LayoutStyle::new().height(SizeMode::Fixed(height)),
+                        ColumnStyle::new(),
+                    )
+                    .with_item_index(index)
+                }),
+            )],
+        )
+    }
+
+    #[test]
+    fn a_virtual_list_places_each_item_at_its_index_offset_and_scrolls_over_all_of_them() {
+        let tree = virtual_rows(ItemExtent::Fixed(20), 500..505, 20);
+        let output = LayoutEngine::new().layout_result_with(
+            &snapshot_of(&tree),
+            Size::new(300, 400),
+            &DefaultIntrinsicMeasurer,
+            &HashMap::new(),
+        );
+        let list = NodeId::from_key("list");
+        for index in 500_i32..505 {
+            let rect = output.rects[&NodeId::from_key(&format!("row-{index}"))];
+            assert_eq!(rect.y, index * 20, "row {index} sits at its offset");
+            assert_eq!(rect.height, 20);
+        }
+        assert_eq!(output.content_sizes[&list].height, 2_000_000, "all 100,000 rows, not 5");
+        assert!(output.measured_items.is_empty(), "fixed rows are never measured");
+    }
+
+    #[test]
+    fn a_virtual_list_is_sized_by_its_parent_not_by_its_items() {
+        // Five realized rows would be 100 px tall; a hundred thousand would
+        // be two million. The list gets neither: it fills what is left.
+        let tree = virtual_rows(ItemExtent::Fixed(20), 0..5, 20);
+        let rects = LayoutEngine::new().layout(&snapshot_of(&tree), Size::new(300, 400));
+        let list = rects[&NodeId::from_key("list")];
+        assert_eq!(list.height, 400 - ColumnStyle::new().padding.vertical());
+    }
+
+    #[test]
+    fn estimated_items_report_what_they_measured() {
+        let tree = virtual_rows(ItemExtent::Estimated(20), 0..3, 45);
+        let output = LayoutEngine::new().layout_result_with(
+            &snapshot_of(&tree),
+            Size::new(300, 400),
+            &DefaultIntrinsicMeasurer,
+            &HashMap::new(),
+        );
+        let list = NodeId::from_key("list");
+        assert_eq!(
+            output.measured_items,
+            (0..3).map(|index| MeasuredItem { list, index, extent: 45 }).collect::<Vec<_>>()
+        );
+        // Placed from the estimate this pass; the backend records the
+        // measurements and lays out again.
+        assert_eq!(output.rects[&NodeId::from_key("row-1")].y, 20);
+
+        let mut cache = ExtentCache::new(100_000, ItemExtent::Estimated(20));
+        for item in &output.measured_items {
+            cache.record(item.index, item.extent);
+        }
+        let settled = LayoutEngine::new().layout_result_with(
+            &snapshot_of(&tree),
+            Size::new(300, 400),
+            &DefaultIntrinsicMeasurer,
+            &HashMap::from([(list, cache)]),
+        );
+        assert_eq!(settled.rects[&NodeId::from_key("row-1")].y, 45, "the second pass has settled");
+        assert_eq!(settled.rects[&NodeId::from_key("row-2")].y, 90);
     }
 
     #[test]
