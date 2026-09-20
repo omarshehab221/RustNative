@@ -74,6 +74,18 @@ MSIX, which requires a signature from a trusted certificate.
 The resource path was exercised with the SDK present; the "no SDK" branch
 (a warning, and a build that continues) was read rather than run.
 
+### Platform availability
+
+Nothing outside Windows has been run at all, because nothing outside Windows
+has a backend yet. Two of the planned targets are also blocked on hardware
+rather than on work: this project has no macOS machine and no iOS device, so
+Milestones 33 and 36 cannot be built or verified here. They remain fully
+planned and fully specified (`PLAN.md`, 2.12 and section 8); the build order
+follows what can be verified, and neither milestone will be called complete
+on reasoning alone. The same rule covers every other target: a backend
+advertises a `Capability` only once it realizes it, and this file records
+what was run and on what.
+
 ---
 
 ## Previous: Milestone 31 — Developer CLI and project tooling — complete.
@@ -1446,7 +1458,7 @@ actually confirms it.
 
 **Advanced input system**
 
-Web is now a first-class planned platform target. It is not implemented yet; the roadmap covers WASM, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, SSR/hydration, service workers/PWA, and browser packaging/testing/deployment.
+Every remaining platform target is planned to the same depth, and none is implemented yet. The Web roadmap covers WASM, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, server rendering with hydration, serverless/edge deployment, service workers/PWA, and browser packaging/testing/deployment; the terminal backend covers the cell grid, Unicode-width measurement, key and mouse protocols, and terminal restoration; macOS and iOS are specified in full and wait on hardware this project does not have yet.
 
 Milestones 20–24 add service injection/mocks, theme tokens and style resolution,
 capability discovery with a native escape hatch, portable system-integration
@@ -1473,14 +1485,17 @@ CLI/project tooling
         ↓
 Packaging/deployment
         ↓
-Web (WASM + DOM + Web APIs)
+Shared core work for the remaining hosts
+(no_std-capable subset, single-threaded executor seam, host clock)
         ↓
-macOS / Linux / Android / iOS / Embedded backends
+macOS / Linux / Android / iOS / Embedded / Terminal backends
+        ↓
+Web (WASM + DOM + Web APIs; client-side, server-rendered, serverless)
 ```
 
 **Advanced input system**
 
-Web is now a first-class planned platform target. It is not implemented yet; the roadmap covers WASM, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, SSR/hydration, service workers/PWA, and browser packaging/testing/deployment.
+Every remaining platform target is planned to the same depth, and none is implemented yet. The Web roadmap covers WASM, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, server rendering with hydration, serverless/edge deployment, service workers/PWA, and browser packaging/testing/deployment; the terminal backend covers the cell grid, Unicode-width measurement, key and mouse protocols, and terminal restoration; macOS and iOS are specified in full and wait on hardware this project does not have yet.
 
 Milestones 20–24 add service injection/mocks, theme tokens and style resolution,
 capability discovery with a native escape hatch, portable system-integration
@@ -1507,7 +1522,10 @@ CLI/project tooling
         ↓
 Packaging/deployment
         ↓
-Web (WASM + DOM + Web APIs)
+Shared core work for the remaining hosts
+(no_std-capable subset, single-threaded executor seam, host clock)
         ↓
-macOS / Linux / Android / iOS / Embedded backends
+macOS / Linux / Android / iOS / Embedded / Terminal backends
+        ↓
+Web (WASM + DOM + Web APIs; client-side, server-rendered, serverless)
 ```

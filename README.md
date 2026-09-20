@@ -10,7 +10,9 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 ## Current status
 
-The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
+The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so macOS, Linux, Android, iOS, Web, terminal, and embedded targets are added as separate adapters, each planned to the same depth: native host objects, native measurement, native input, native accessibility, its own toolchain and packaging.
+
+Two notes on what "planned" means here. macOS and iOS are fully planned platforms that this project has no hardware to build or verify on yet, so their milestones are specified and designed for but not started — order follows hardware, not priority. And a backend advertises a capability only once it genuinely realizes it, so "planned" never reaches an application as a claim of support.
 
 The latest completed milestone is **Milestone 32 — Packaging and
 deployment** (embedded resources, a reproducible portable zip, and a signed
@@ -288,35 +290,70 @@ HWND
 
 A stable node identity means an existing native control can be updated in place instead of destroyed/recreated.
 
-## Planned Web backend
+## Planned platform backends
 
-Web will be a first-class platform target with a dedicated `framework-web` adapter. The intended architecture is:
+Each target gets its own adapter over the same core, and each is planned to
+the same depth. The full specifications are in [`PLAN.md`](PLAN.md), section 8.
 
 ```text
-framework-core
-      ↓
-framework-web
-      ↓
-WebAssembly + browser bindings
-      ↓
-DOM / CSS / browser events / Web APIs
+                    framework-core
+                          │
+  ┌─────────┬─────────┬───┴─────┬─────────┬─────────┬─────────┐
+  ▼         ▼         ▼         ▼         ▼         ▼         ▼
+windows    macos     linux    android    ios       web       tui
+ Win32     AppKit    toolkit   View     UIKit    DOM/CSS    cells
+                                                             │
+                                                        embedded
+                                                     display drivers
 ```
 
-The Web backend will use semantic DOM elements for native browser controls rather than rendering the application into a canvas. The planned Web scope includes:
+**macOS** (Milestone 33) — `NSWindow`/`NSView` and AppKit controls, Core Text
+measurement, the responder chain, `NSAccessibility`, the macOS menu bar, and
+`.app` bundling with signing and notarization.
 
-- WASM runtime and browser host lifecycle;
-- DOM ownership and reconciliation;
-- CSS/layout integration;
-- browser-native focus, text input, pointer, touch, keyboard, and IME handling;
-- HTML/ARIA accessibility mapping;
-- fetch/WebSocket/storage/IndexedDB/Cache Storage and other capability APIs;
-- Web Workers for suitable CPU-bound tasks;
-- URL/history/navigation and browser lifecycle;
-- SSR and hydration;
-- service workers and PWA support;
-- browser development, testing, bundling, and deployment tooling.
+**Linux** (Milestone 34) — one native toolkit first, kept pluggable, with
+Pango measurement, AT-SPI2 accessibility, desktop portals for services, and
+both Wayland and X11 sessions with their differences reported as capabilities.
 
-The full Web roadmap is integrated into `PLAN.md`, not treated as a final add-on.
+**Android** (Milestone 35) — a native `View` hierarchy over a disciplined JNI
+boundary, the activity/process lifecycle mapped onto the existing lifecycle
+and restoration contracts, `AccessibilityNodeInfo`, and Gradle/AAB packaging.
+
+**iOS** (Milestone 36) — `UIView`/UIKit, the scene lifecycle, `UIAccessibility`,
+universal links into the existing deep-link model, and Xcode packaging.
+
+**Web** — a `framework-web` adapter using semantic DOM elements rather than a
+canvas, in all three deployment modes, chosen at build time from one
+application:
+
+```text
+framework-core → framework-web → WebAssembly + browser bindings
+                                      ↓
+                    DOM / CSS / browser events / Web APIs
+
+client-side      runs in the browser; the host serves files
+server-rendered  a Rust server renders HTML per request; the browser hydrates
+serverless       the same render per request in a function or edge runtime
+```
+
+The scope covers the WASM runtime and browser lifecycle, DOM ownership and
+reconciliation, CSS/layout integration, browser focus, text input, pointer,
+touch, keyboard and IME, HTML/ARIA accessibility, fetch/WebSocket/storage
+capabilities, Web Workers, URL/history routing, server rendering with
+hydration and typed server functions, service workers and PWAs, serverless and
+edge deployment, and the browser development, testing, and bundling tooling.
+
+**Terminal** (Milestone 38) — a `framework-tui` adapter realizing the same
+tree onto a terminal's cell grid: the Windows console in virtual-terminal
+mode, `termios` and VT sequences elsewhere, Unicode-width text measurement,
+key and mouse protocols, damage-tracked redraw, and terminal state restored
+even on panic. Desktop terminals and embedded Linux consoles, local or over
+SSH — not Android, iOS, or the browser.
+
+**Embedded** (Milestone 37) — embedded Linux, RTOS, and selected bare-metal
+profiles, realized through the draw-list path rather than native controls,
+with a `no_std`-capable core subset defined before the constrained profiles
+start.
 
 ## Layout model
 
@@ -690,7 +727,14 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-Milestones 25–32 are complete. The next implementation target is
-**Milestone 33 — the macOS backend**, which needs a macOS machine to build
-and verify on; the roadmap then continues through Linux, Android, iOS, and
-embedded backends.
+Milestones 25–32 are complete. What remains is the rest of the platform
+matrix — macOS, Linux, Android, iOS, embedded, terminal, and Web — plus the
+core work those targets share: a `no_std`-capable core subset, an executor
+seam for single-threaded hosts, and time from the host clock rather than
+`std::time::Instant`.
+
+**Milestone 33 — the macOS backend** is next in numbering, but it needs a
+macOS machine to build and verify on and this project has none yet, so the
+order follows hardware availability rather than the numbers. macOS and iOS
+stay fully planned regardless; nothing in the portable layer is designed as
+though they were optional.

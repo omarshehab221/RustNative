@@ -11,9 +11,19 @@ The long-term target platforms are:
 - Linux
 - Android
 - iOS
-- Web (WebAssembly + browser DOM/Web APIs)
+- Web (WebAssembly + browser DOM/Web APIs), in every deployment mode a web
+  application is written in: client-side, server-rendered, and serverless
+- Terminal user interfaces, on the desktop operating systems and on embedded
+  Linux consoles
 - Embedded Linux
 - RTOS / selected bare-metal embedded targets
+
+No target on that list is a port of another one. Each gets a backend of the
+same shape — native host objects, native text measurement, native input,
+native accessibility, native services, its own toolchain and packaging — and
+the order they are built in follows what the core contracts are ready for and
+what hardware the project can verify on, not which platform is considered more
+important.
 
 The framework follows the React Native philosophy of native host controls, but is Rust-native rather than JavaScript-native:
 
@@ -58,13 +68,26 @@ Rust owns:
 
 The framework should use native host controls and platform services wherever a native equivalent exists.
 
-The Windows backend, for example, creates real Win32 `HWND`s. Future backends should use the corresponding native APIs rather than painting a facsimile of an operating-system UI.
+What the host *is* differs per target, and that difference is the point:
 
-### 2.3 The Web is a first-class platform, not a fallback
+```text
+Windows   HWND + common controls
+macOS     NSView + AppKit controls
+Linux     the chosen toolkit's native widgets
+Android   the android.view.View hierarchy
+iOS       UIView + UIKit controls
+Web       semantic DOM elements
+Terminal  the terminal's own cell grid and input protocols
+Embedded  the display and input the device actually has
+```
 
-The Web must be treated as a first-class target alongside desktop, mobile, and embedded systems. It is not acceptable to build the native platforms first and then emulate them in a generic canvas-based browser runtime.
+The Windows backend, for example, creates real Win32 `HWND`s. Every other backend should realize the tree in its own host's terms rather than painting a facsimile of an operating-system UI.
 
-The Web backend should use browser-native primitives wherever appropriate:
+### 2.3 A target is first-class or it is not a target
+
+Desktop, mobile, Web, terminal, and embedded targets are planned as peers. It is not acceptable to build the desktop platforms first and then emulate them elsewhere — neither in a generic canvas-based browser runtime nor in a text-mode imitation of a window manager. Each backend is written against the primitives its host actually offers, and each one is allowed to be different where its host is different.
+
+**Web.** The Web backend should use browser-native primitives wherever appropriate:
 
 - DOM elements for semantic controls and containers;
 - CSS for browser-native layout and visual mechanics where the framework can map its layout semantics safely;
@@ -75,27 +98,37 @@ The Web backend should use browser-native primitives wherever appropriate:
 - WebAssembly for the shared Rust runtime;
 - JavaScript bindings only at the browser boundary where required by Web APIs.
 
-The Web adapter therefore follows the same principle as the native adapters:
+**Terminal.** A terminal backend should use the terminal's own primitives: the cell grid, its text attributes and colour depth, its key and mouse reporting protocols, its resize notifications, its alternate screen and cursor control, and — where the terminal offers one — its clipboard escape sequence. A terminal is a real host with real conventions, not a canvas for drawing fake title bars and shadows.
+
+**Embedded.** An embedded backend should express what the device has and nothing more. Targets without a window manager do not grow one; targets without accessibility services do not pretend to have them. The capability model (2.5) is what makes that honest rather than lossy.
+
+Every adapter therefore follows the same shape:
 
 ```text
 Rust application
     ↓
 framework-core
     ↓
-framework-web
-    ↓
-WASM + browser bindings
-    ↓
-DOM / CSS / Web APIs
+framework-<platform>        framework-web        framework-tui
+    ↓                           ↓                     ↓
+native OS APIs             WASM + browser         terminal I/O
+    ↓                           ↓                     ↓
+native controls            DOM / CSS / Web APIs   cells / key + mouse
+                                                  protocols
 ```
 
-The framework must also explicitly account for browser-specific constraints: the single-threaded main-thread model for DOM access, asynchronous Web APIs, browser lifecycle, URL/history/navigation, page visibility, storage quotas, user-gesture restrictions, hydration, and browser security boundaries.
+The framework must also explicitly account for each host's constraints, and design for them up front rather than discovering them at integration time:
+
+- **browser**: the single-threaded main-thread model for DOM access, asynchronous Web APIs, browser lifecycle, URL/history/navigation, page visibility, storage quotas, user-gesture restrictions, hydration, and browser security boundaries;
+- **terminal**: cell-granular geometry, no overlapping native windows, text-only measurement, colour and capability differences between terminals, input that arrives as escape sequences, and accessibility that belongs to the terminal rather than to the application;
+- **mobile**: process lifecycle and reclaim, configuration changes, and permission prompts;
+- **embedded**: constrained memory, fixed displays, and the absence of a general-purpose OS.
 
 ### 2.4 Platform-independent core, platform-specific adapters
 
-`framework-core` must never depend on Windows, macOS, Android, iOS, GTK, AppKit, UIKit, WinUI, JNI, Objective-C, or other platform APIs.
+`framework-core` must never depend on Windows, macOS, Android, iOS, GTK, AppKit, UIKit, WinUI, JNI, Objective-C, browser/DOM bindings, terminal or terminfo libraries, or other platform APIs.
 
-Platform crates implement the contracts exposed by the core.
+Platform crates implement the contracts exposed by the core. When a host needs something the contracts cannot express, the contract is widened portably — as `Executor` was, when the scheduler was found hard-wired to one Tokio runtime — rather than an `#[cfg]` for that host being added to the core.
 
 ### 2.5 Capabilities over platform conditionals
 
@@ -133,15 +166,26 @@ Examples such as scrolling, focus transitions, pointer movement, and other high-
 
 The core calculates semantic geometry, constraints, clipping, intrinsic measurement requests, and coordinate spaces. A platform backend applies the resulting geometry to native objects and supplies native measurement capabilities.
 
+A backend whose host does not address space in pixels — a terminal, which addresses it in character cells — converts at its own boundary and reports its measurements in the same unit it converts to, so the core keeps one geometry model rather than one per host.
+
 ### 2.11 Async work must respect component lifetime
 
 Background work must never mutate component state directly from a worker. Results return through the framework scheduler/event loop, and task lifetime must be tied to component lifetime through structured task scopes.
+
+### 2.12 Hardware availability changes the order, not the plan
+
+The project does not currently have a macOS machine or an iOS device, so Milestones 33 and 36 cannot be built and verified here yet. That is a scheduling fact, not a scope decision: macOS and iOS remain fully planned platforms, specified at the same depth as the rest, and the core contracts are designed against their documented APIs (AppKit/UIKit view hierarchies, Core Text measurement, `NSAccessibility`/`UIAccessibility`, the Apple toolchains) so that nothing in the portable layer has to be renegotiated when the hardware arrives.
+
+Two rules keep that honest, and they apply to every platform the project cannot exercise on the machine in front of it:
+
+- a backend advertises a `Capability` only once it actually realizes it, never because the plan says it will (the Windows backend already asserts this about itself);
+- `BUILD_STATUS.md` states what was verified and on what. Work reasoned through but not run is recorded as exactly that, and a platform is called supported only after it runs on real hardware.
 
 ---
 
 # 3. Completed milestones
 
-The following milestones are implemented in the current codebase. The current production backend is Windows/Win32; the Web target is planned but not yet implemented.
+The following milestones are implemented in the current codebase. The current production backend is Windows/Win32; every other target in section 1 is planned and not yet implemented.
 
 ## Milestone 1 — Framework foundation and native Windows label
 
@@ -608,8 +652,12 @@ Implemented:
   when their node or element goes away. The MSAA annotations from the
   standards-audit pass remain, for MSAA-only clients.
 
-Planned platform targets not built here (macOS, iOS, Android, Linux) consume
-the same portable model when their backends exist (Milestones 33–36).
+Planned platform targets not built here consume the same portable model when
+their backends exist: macOS, Linux, Android, and iOS through their own
+accessibility APIs (Milestones 33–36), and the Web through HTML/ARIA (Web
+milestone D). The terminal is the exception the capability model exists for —
+accessibility there belongs to the terminal, and Milestone 38's backend says
+so rather than advertising a bridge it cannot provide.
 
 ---
 
@@ -791,7 +839,9 @@ rustnative doctor [--json]
 The toolchains it drives, and the ones it will: Windows uses Cargo with the
 MSVC build tools and the Windows SDK; macOS and iOS will use Xcode and the
 Apple SDKs, Linux the system compiler, Android Gradle with the SDK and NDK,
-and embedded targets their own toolchains through Cargo.
+the Web the `wasm32` targets plus glue and bundling (and, for its serverless
+mode, the target its host runtime expects), the terminal Cargo alone, and
+embedded targets their own toolchains through Cargo.
 
 ---
 
@@ -800,8 +850,9 @@ and embedded targets their own toolchains through Cargo.
 ## Milestone 32 — Packaging and deployment (Windows)
 
 Implemented for the platform that has a backend; the other formats
-(macOS bundles, Linux packages, APK/AAB, iOS bundles, firmware images)
-belong to their backends' milestones.
+(macOS bundles, Linux packages, APK/AAB, iOS bundles, Web bundles and their
+three deployment modes, plain terminal binaries, firmware images) belong to
+their backends' milestones.
 
 - **Resource bundling and manifests**: a new `framework-build` crate, run
   from an application's `build.rs` (the `rustnative new` template wires it, and the
@@ -827,27 +878,78 @@ belong to their backends' milestones.
 
 ---
 
-# 8. Additional platform backends
+# 8. Platform backends
 
-The Windows backend is the first production-oriented backend. New backends should be added only after the core contracts are stable enough to avoid duplicating accidental Windows assumptions.
+The Windows backend is the first production-oriented backend. New backends should be added only after the core contracts are stable enough to avoid duplicating accidental Windows assumptions. "First" is an order, not a ranking: every backend below is specified to the same depth and finished by the same definition.
+
+A backend is complete when, in its own host's terms, it realizes:
+
+- native host objects with stable identity and reuse;
+- native text measurement behind the portable `IntrinsicMeasurer` contract;
+- native input — keyboard, pointer or touch, focus, and IME where the host has one;
+- the portable accessibility model (Milestone 26) through the host's accessibility API, or an honest statement that the host has none;
+- the service contracts, advertising only the capabilities it genuinely realizes;
+- its toolchain and packaging in `rustnative`;
+- its own tests, run against the real host.
+
+Two of these — macOS and iOS — cannot be verified on the project's current hardware (2.12). They remain fully planned, and each is finished when it runs on an Apple machine, not before.
 
 ## Milestone 33 — macOS backend
 
-Native AppKit/Swift/Objective-C interoperability, native windows/controls, native text measurement, menus, accessibility, system services, and packaging.
+Native AppKit interoperability through Rust Objective-C bindings, with the unsafe surface isolated the way `framework-windows` isolates Win32:
+
+- `NSWindow` per window root, an `NSView` hierarchy for containers, and AppKit controls (`NSButton`, `NSTextField`, `NSScrollView`/`NSClipView` for scrolling) as the realized objects;
+- Core Text measurement behind `IntrinsicMeasurer`, including bounded and wrapped measurement;
+- the responder chain translated into the portable event model: keys and modifiers, mouse and trackpad, momentum scrolling, `NSTextInputClient` for IME, pressure input, and `NSPasteboard` drag-and-drop;
+- accessibility through the `NSAccessibility` protocols, driven by the portable `AccessibilityTree`, with virtual elements as accessibility elements and posted notifications for property, structure, and live-region changes;
+- system integration: the macOS menu bar and its application-menu conventions, `NSOpenPanel`/`NSSavePanel`, user notifications, `NSWorkspace` URL launching, clipboard, appearance/dark-mode tracking, and the reduce-motion display setting;
+- animation frames paced by `CADisplayLink`, evaluated by the same portable `Timeline`;
+- run-loop integration for scheduler wake-ups on the main thread;
+- packaging: Xcode toolchain, `.app` bundle and `Info.plist` generated from `rustnative.toml`, code signing, notarization, and a distributable image;
+- verification requires a macOS machine (2.12).
 
 ## Milestone 34 — Linux backend
 
-Start with one supported native toolkit/backend and keep the backend pluggable so additional Linux native backends can be added later.
+Start with one supported native toolkit and keep the backend pluggable so additional Linux native backends can be added later. Potential backend families include GTK or another native toolkit, depending on final architectural decisions.
 
-Potential backend families may include GTK or another native toolkit depending on final architectural decisions.
+- native windows, containers, and controls from the chosen toolkit, with the toolkit behind an internal seam so a second one can be added without touching the core;
+- Pango (or the toolkit's equivalent) text measurement;
+- toolkit/GDK input translated into the portable model: keys through XKB, pointer, touch and pen, scrolling, and IME through the platform input method;
+- both display servers, with their differences reported rather than hidden — client-side decorations, the absence of a global menu bar, and Wayland's restrictions on window placement become capability answers;
+- accessibility through AT-SPI2, driven by the portable model;
+- system services through the desktop portals where they exist: file dialogs, notifications, URL launching, and clipboard;
+- animation frames from the toolkit's frame clock;
+- packaging: the system compiler, a desktop entry and icon theme, and at least one distribution format (AppImage, Flatpak, or a native package);
+- verification on real Linux sessions under both display servers.
 
 ## Milestone 35 — Android backend
 
-Native Android view hierarchy, lifecycle integration, JNI/FFI boundary, Android text/input/accessibility, system services, Gradle integration, packaging.
+Native Android view hierarchy, lifecycle integration, and a disciplined JNI boundary:
+
+- an `Activity` hosting a native `View`/`ViewGroup` hierarchy and platform widgets as the realized objects;
+- JNI/FFI confined to one ownership module, with explicit global-reference and thread-attachment rules, mirroring how the Windows backend confines raw handles;
+- `Paint`/`StaticLayout` text measurement;
+- input: `MotionEvent` translated to the portable pointer model, the soft keyboard and `InputMethodManager` for IME, hardware keys, and system back/predictive back mapped onto the navigation model from Milestone 30;
+- the activity and process lifecycle mapped onto the existing lifecycle and state-restoration contracts, including configuration changes and process death;
+- accessibility through `AccessibilityNodeInfo`, with virtual elements as a virtual view hierarchy, verified with TalkBack;
+- system services: scoped storage, clipboard, notification channels, the share sheet, and the runtime permission model expressed as capability answers;
+- scheduler wake-ups through the main `Looper`;
+- packaging: Gradle with the SDK and NDK, a manifest generated from `rustnative.toml`, signing, and APK/AAB output;
+- verification on an emulator and on a physical device.
 
 ## Milestone 36 — iOS backend
 
-Native UIKit/Swift/Objective-C interoperability, lifecycle integration, native input/accessibility, system services, Xcode integration, packaging.
+Native UIKit interoperability, sharing the Objective-C interop and Core Text work with Milestone 33 wherever the two platforms genuinely agree, and not pretending they agree where they do not:
+
+- `UIWindow`/`UIViewController` roots, a `UIView` hierarchy, UIKit controls, and `UIScrollView` for scrolling;
+- the scene and application lifecycle mapped onto the portable lifecycle and state-restoration contracts;
+- input: touch through the portable pointer model, `UIGestureRecognizer` coexisting with the framework's own recognizers rather than duplicating them, `UITextInput` for IME, hardware keyboards, and pencil pressure;
+- Core Text measurement;
+- accessibility through `UIAccessibility`, with virtual elements as custom accessibility elements, verified with VoiceOver;
+- system services: the share sheet, document picker, notifications, clipboard, and URL schemes and universal links feeding the existing deep-link model;
+- multiple windows treated as an iPadOS capability, not an assumption — `Capability::MultipleWindows` answers it;
+- packaging: Xcode, `Info.plist` and entitlements from `rustnative.toml`, code signing, IPA output, and TestFlight distribution;
+- verification requires Apple hardware and a developer account (2.12).
 
 ## Milestone 37 — Embedded backends
 
@@ -861,107 +963,54 @@ Initial targets should distinguish:
 
 Capability-oriented design is critical here because embedded targets will not implement desktop concepts such as windows or accessibility.
 
----
+- realization goes through the draw-list path from Milestone 29 rather than native controls, because these hosts have none: a display driver consumes a `DrawList`, and the same portable model produces it;
+- embedded Linux may instead reuse the Milestone 34 toolkit backend where a full graphical session exists; the profiles differ, and the plan keeps them named separately for that reason;
+- input arrives as buttons, rotary encoders, touch panels, or a serial console, and is mapped onto the portable key and pointer model;
+- a portable-core subset must be defined before the RTOS and bare-metal profiles start: `framework-core` currently requires `std` and an `Executor` whose tasks are `Send`, so the identity, node, reconcile, and layout layers need a `no_std`-capable profile and a single-threaded executor. That split is core work, stated here so it is not discovered during a backend;
+- resource discipline: bounded allocation, no thread pool, and a frame budget the device can actually meet;
+- packaging: firmware or image output through each target's own toolchain, driven by `rustnative`;
+- verification on device, plus a host-side simulator so most of the logic is testable without hardware.
 
-# 9. Cross-cutting quality milestones
+## Milestone 38 — Terminal (TUI) backend
 
-These should advance continuously rather than waiting for the end.
+A `framework-tui` backend realizing the same application model onto a terminal. In scope: Windows, macOS, and Linux desktop terminals, and embedded Linux consoles — local, over SSH, or on a serial line. Deliberately out of scope: Android, iOS, and the browser. A terminal emulator running inside those is the emulator's application, not a platform target of this framework.
 
-## Testing
+- **the terminal is the host**: the Windows console API in virtual-terminal mode, and `termios` plus VT sequences on Unix. Alternate screen, cursor control, the terminal's own colour depth (16/256/true colour, detected rather than assumed), text attributes, bracketed paste, focus reporting, and resize notification (`SIGWINCH` or console events);
+- **drawn, not native**: this is the one target where 2.2's native host object is the terminal's own cell grid. Drawing goes through the existing draw-list path quantized to cells, so the framework does not gain a second rendering runtime; a "control" is a drawn widget with the same portable semantics, identity, and events as everywhere else;
+- **geometry in cells**: the conversion happens at the backend boundary (2.10), and measurement is Unicode display width — grapheme clusters, wide East Asian characters, combining marks, and emoji presentation — never byte or character counts;
+- **input**: keys with modifiers and function keys (including terminals that cannot report some combinations, which is a capability answer, not a bug), paste, and mouse click/drag/wheel through the SGR protocol where the terminal reports it. No pen, no touch, no gamepad;
+- **focus and traversal** reuse the portable focus model unchanged, including Tab/Shift+Tab and `disabled`;
+- **accessibility belongs to the terminal**: the backend's obligation is a readable, correctly ordered screen and honest capability reporting, not a bridge it cannot provide. Where a terminal exposes an announcement mechanism, live regions from the portable model map onto it;
+- **capabilities, advertised honestly**: no `MultipleWindows`, no native `Menus` or `FileDialogs`, `Clipboard` only where OSC 52 is available, `Notifications` only where the terminal implements them, no `SystemAppearance`, no `Touch`/`Pen`/`Gamepad`;
+- **scheduling and redraw**: a single-threaded loop with input and redraw decoupled, damage tracking so only changed cells are written, coalesced frames, and a full redraw on resize. Animations run through the same `Timeline`, paced to a sane terminal frame rate, and respect a reduced-motion setting;
+- **terminal restoration is a correctness requirement**: raw mode, the alternate screen, and the cursor are restored on exit, on signal, and on panic. A crashed application must not leave a terminal unusable;
+- **tooling**: `rustnative run tui` and `rustnative build tui` — a new platform value in the CLI, built with Cargo alone — plus a deterministic harness that drives a synthetic terminal of a given size and asserts the resulting cell grid, so most of the backend is testable without a TTY;
+- **why it belongs in this plan at all**: same components, same state, same layout, same identity, one small capability set. A target this constrained is the strongest test that the capability model is real rather than decorative.
 
-Maintain:
+## Web backend — Web milestones A–K
 
-- core unit tests;
-- reconciliation tests;
-- layout tests;
-- scheduler tests;
-- lifecycle tests;
-- component-tree tests;
-- platform integration tests;
-- end-to-end example applications.
+The Web track is lettered rather than numbered because it predates the numbering and because `rustnative` names no milestone for `web`. It is one backend like the others; it is longer because the browser is not one deployment target but three.
 
-## Correctness boundaries
+### Web deployment modes
 
-- keep `unsafe` localized;
-- document every FFI ownership rule;
-- minimize global mutable state;
-- make task cancellation deterministic;
-- keep native object lifetime explicit;
-- preserve stable IDs across rerenders;
-- never mutate component state from worker threads.
-
-## Performance
-
-Measure and eventually optimize:
-
-- tree diff cost;
-- layout cost;
-- native object creation/destruction;
-- text measurement;
-- event dispatch;
-- scheduler overhead;
-- scrolling;
-- virtualized list performance;
-- startup and binary size.
-
-## Tooling and diagnostics
-
-Eventually add:
-
-- tree inspection;
-- component ownership diagnostics;
-- native-object leak diagnostics;
-- scheduler/task inspection;
-- layout overlays;
-- event tracing;
-- accessibility inspection;
-- platform capability diagnostics.
-
----
-
-# 10. End-state architecture
-
-The intended final architecture is:
+The same application, the same components, and the same tree must be deployable in every mode a web application is actually written in, chosen at deployment time rather than by rewriting:
 
 ```text
-                       Application
-                           │
-                    Component Runtime
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-     Components          Scheduler          Services
-        │                  │                  │
-        ├── props          ├── tasks          ├── HTTP
-        ├── state          ├── scopes         ├── storage
-        ├── effects        └── wakeups        ├── clipboard
-        ├── lifecycle                         └── platform APIs
-        └── messages
-        │
-        ▼
-                  Declarative UI Tree
-                           │
-                    Reconciliation
-                           │
-                       Layout
-                           │
-                    Native realization
-                           │
-       ┌───────────┬───────┼────────┬───────────┐
-       ▼           ▼       ▼        ▼           ▼
-    Windows      macOS   Linux    Android       iOS
-       │           │       │        │           │
-       └───────────┴───────┴────────┴───────────┘
-                           │
-                       Embedded
-                 via capability subsets
+client-side      the application runs in the browser; the host serves static files
+server-rendered  a long-lived Rust server renders HTML per request; the browser hydrates it
+serverless       the same render runs per request in a function or edge runtime,
+                 with nothing kept between requests
 ```
 
-The final framework should feel like a native application framework first and a cross-platform abstraction second: one Rust application model, native operating-system behavior, explicit platform capabilities, and strong compile-time/lifetime guarantees wherever Rust can provide them.
+Which milestones each mode needs:
 
-## Web platform roadmap (first-class target)
+```text
+client-side      A B C D E F G I J
+server-rendered  the above, plus H
+serverless       the above, plus H and K
+```
 
-Web support is a full architectural track rather than a final packaging step. It must cover the browser environment end-to-end.
+An application that renders identically in all three is the test that the modes are genuinely one target (see Web milestone K).
 
 ### Web milestone A — WASM runtime and browser host
 
@@ -972,6 +1021,11 @@ Build a dedicated `framework-web` adapter that:
 - bridges Rust to JavaScript/Web APIs only at the platform boundary;
 - creates and tracks DOM/native handles without exposing browser types to `framework-core`;
 - integrates with the browser event loop and microtask/task model.
+
+Two pieces of core work belong to this milestone rather than to the backend, because they are contracts rather than bindings:
+
+- `Executor` is already the pluggable seam a browser executor needs, but `BoxedTask`/`BoxedSleep` are `Send` futures, and the browser drives futures on one thread. The bound has to be relaxed portably, or a browser-side seam supplied, before a real browser executor exists;
+- `std::time::Instant` is unavailable on the browser's WASM target. Time must reach the framework through the executor/host clock — the direction `Executor::sleep` already established — rather than from the standard library.
 
 ### Web milestone B — Native DOM realization
 
@@ -1067,9 +1121,17 @@ Add browser-native lifecycle concepts:
 - persistence and restoration;
 - storage-backed application state.
 
-### Web milestone H — SSR, hydration, and progressive enhancement
+### Web milestone H — Server-rendered HTML, hydration, and progressive enhancement
 
-The framework should support server-rendered HTML as an optional deployment mode, followed by Rust/WASM hydration on the client. This requires deterministic tree identity and a hydration-safe native ownership model.
+The framework should support server-rendered HTML as a deployment mode, followed by Rust/WASM hydration on the client. This requires deterministic tree identity and a hydration-safe native ownership model.
+
+This milestone owns the server half of the Web target, and the pieces it adds are shared by both server-side modes (Web milestone K runs exactly this render in a serverless host):
+
+- an **HTML renderer** over the existing tree and style resolution, with no platform event loop and no native objects — the same `view()` that produces DOM produces markup;
+- **server-side data loading**: a render may await, and the renderer must be able to render a tree whose data arrives asynchronously, with a deterministic result;
+- **typed server functions**: a call from a component to a Rust function that exists only on the server, carried over HTTP and delivered through the same message/callback model, so client-side and server-rendered applications share one way of reaching the server;
+- **per-request state**: no process-wide mutable state on the render path; services, storage, and session data are constructed for the request;
+- **static generation** as the degenerate case: rendering the same pages at build time for hosts that serve only files, reusing this renderer rather than a separate one.
 
 The Web roadmap therefore includes:
 
@@ -1104,16 +1166,160 @@ The CLI/package system must eventually support:
 - development server;
 - browser hot reload/development workflow;
 - production bundling;
-- SSR deployment;
+- server-rendered and serverless deployment;
 - PWA manifests;
 - service-worker packaging;
 - browser test execution;
 - accessibility testing;
 - feature/capability detection.
 
+The deployment mode is a build option, not a different application:
+
+```text
+rustnative build web --mode client
+rustnative build web --mode server
+rustnative build web --mode serverless [--host <adapter>]
+```
+
 Web support is complete only when an application can be developed, tested, packaged, deployed, and updated through the same framework tooling rather than merely compiled to WASM.
+
+### Web milestone K — Serverless and edge deployment
+
+The serverless mode runs Web milestone H's renderer per request in a host that keeps nothing between requests, and it is a distinct milestone because those hosts impose constraints a long-lived server does not:
+
+- **two runtime shapes**, both of which the render path must build for: a native binary invoked per request (AWS Lambda and equivalents, through a runtime adapter) and a WASM sandbox (edge/worker runtimes, and `wasm32-wasip1` hosts);
+- **stateless by construction**: nothing durable lives in the process. Anything that must outlive a request goes through a service — storage, HTTP, or a database — and the state store on that path is per request;
+- **cold start and binary size are correctness-adjacent**: no process-wide lazily created runtime on this path (the shared Tokio runtime is exactly what must not be reached for), a single-threaded executor, and a size/startup budget measured in CI like any other regression;
+- **no work outliving the response**: a request owns a task scope bounded by the response, cancelled the way a component's scope is cancelled at unmount. A task that survives the response is a bug, not a background job;
+- **streaming responses**: the HTML renderer should be able to emit chunks so a response starts before the whole tree is rendered, which is what makes these hosts' time limits survivable;
+- **configuration and secrets from the environment**, read per invocation, never cached in a global;
+- **one route table**: `Route`/`Router` from Milestone 30 matches the request path server-side and the URL client-side, rather than a second routing model for the server;
+- **host limits surfaced as capabilities**: execution timeouts, memory ceilings, absent or ephemeral filesystems, and response-size limits are answers the application can ask for, not surprises in production;
+- **tooling**: host adapters for at least one function runtime and one edge/WASM runtime, plus a local emulator so the serverless path is runnable and debuggable without deploying;
+- **the equivalence test**: one application, the same state, rendered client-side, server-rendered, and serverless, must produce the same DOM. That test is what keeps the three modes one target instead of three codebases.
 
 ---
 
+# 9. Cross-cutting quality milestones
+
+These should advance continuously rather than waiting for the end.
+
+## Testing
+
+Maintain:
+
+- core unit tests;
+- reconciliation tests;
+- layout tests;
+- scheduler tests;
+- lifecycle tests;
+- component-tree tests;
+- platform integration tests, run against each backend's real host;
+- browser tests for the Web backend, and a rendered-output equivalence test
+  across its three deployment modes;
+- synthetic-terminal tests for the terminal backend, asserting the cell grid;
+- end-to-end example applications.
+
+Every backend should be testable without its hardware for most of its logic, and untestable-without-hardware work should be recorded as such (2.12) rather than assumed to pass.
+
+## Correctness boundaries
+
+- keep `unsafe` localized;
+- document every FFI ownership rule;
+- minimize global mutable state;
+- make task cancellation deterministic;
+- keep native object lifetime explicit;
+- preserve stable IDs across rerenders;
+- never mutate component state from worker threads.
+
+## Performance
+
+Measure and eventually optimize:
+
+- tree diff cost;
+- layout cost;
+- native object creation/destruction;
+- text measurement;
+- event dispatch;
+- scheduler overhead;
+- scrolling;
+- virtualized list performance;
+- startup and binary size.
+
+## Tooling and diagnostics
+
+Eventually add:
+
+- tree inspection;
+- component ownership diagnostics;
+- native-object leak diagnostics;
+- scheduler/task inspection;
+- layout overlays;
+- event tracing;
+- accessibility inspection;
+- platform capability diagnostics.
+
+---
+
+# 10. End-state architecture
+
+The intended final architecture is:
+
+```text
+                       Application
+                           │
+                    Component Runtime
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+     Components          Scheduler          Services
+        │                  │                  │
+        ├── props          ├── tasks          ├── HTTP
+        ├── state          ├── scopes         ├── storage
+        ├── effects        └── wakeups        ├── clipboard
+        ├── lifecycle                         └── platform APIs
+        └── messages
+        │
+        ▼
+                  Declarative UI Tree
+                           │
+                    Reconciliation
+                           │
+                       Layout
+                           │
+                    Native realization
+                           │
+  ┌─────────┬─────────┬────┴────┬─────────┬─────────┐
+  ▼         ▼         ▼         ▼         ▼         ▼
+Windows   macOS     Linux    Android     iOS       Web
+  │         │         │         │         │         │
+  └─────────┴─────────┴─────────┴─────────┴─────────┘
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+          Terminal                  Embedded
+       via capability subsets, not via a reduced application model
+```
+
+The Web branch ends in three deployment shapes — client-side, server-rendered, and serverless — from the same tree; the terminal and embedded branches realize that tree onto a cell grid or a display driver. None of them is a reduced version of the application model: they differ in capabilities, not in semantics.
+
+The final framework should feel like a native application framework first and a cross-platform abstraction second: one Rust application model, native operating-system behavior, explicit platform capabilities, and strong compile-time/lifetime guarantees wherever Rust can provide them.
 
 ## Long-range roadmap
+
+Everything through Milestone 32 is complete (section 3). What remains, in the order the backlog is currently expected to be taken up — subject to 2.12, since the order follows hardware availability and contract readiness rather than importance:
+
+```text
+core work shared by the remaining targets
+  (no_std-capable core subset, non-Send executor seam, host clock)
+        ↓
+platform backends, each finished by section 8's definition
+  macOS · Linux · Android · iOS · Embedded · Terminal
+        ↓
+Web backend, milestones A–K
+  client-side → server-rendered → serverless
+        ↓
+one application, every target, the same semantics
+```
+
+The cross-cutting work in section 9 — testing, correctness boundaries, performance, tooling, and diagnostics — advances alongside all of it rather than after it.
