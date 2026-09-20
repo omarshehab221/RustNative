@@ -756,40 +756,46 @@ Implemented on the managed component tree, not beside it:
 
 All three (Milestones 27–29) are complete; see section 3.
 
-# 7. Application architecture milestones
-
 ## Milestone 31 — Developer CLI and project tooling
 
-Create a first-class CLI for project creation and platform commands.
-
-Target commands:
-
-```text
-rf new app-name
-rf run windows
-rf run macos
-rf run linux
-rf run android
-rf run ios
-rf run embedded
-rf build windows
-rf build android
-rf test
-rf doctor
-```
-
-The CLI should orchestrate native build systems rather than replace them.
-
-Candidate native toolchains:
+Implemented as `crates/rf` (package `rf-cli`, binary `rf`), which
+orchestrates the native toolchains rather than replacing them:
 
 ```text
-Windows  -> MSVC / Windows SDK
-macOS    -> Xcode / Apple SDKs
-Linux    -> system compiler + selected native backend
-Android  -> Gradle / Android SDK / NDK
-iOS      -> Xcode / Apple SDKs
-Embedded -> target-specific toolchains / Cargo
+rf new <name> [--path DIR] [--framework-path DIR]
+rf build <platform> [--release]
+rf run   <platform> [--release]
+rf check [platform]
+rf test  [cargo test arguments...]
+rf doctor [--json]
 ```
+
+- **project creation**: `rf new` writes a project that compiles — `src/main.rs`,
+  `Cargo.toml`, `rf.toml`, `README.md`, `.gitignore` — depending either on
+  published framework versions or, with `--framework-path`, on a checkout;
+- **project metadata**: `rf.toml` holds the application's identity (the same
+  id its saved state, single-instance mutex, and package use), its display
+  name, version, publisher, description, icon, and URL schemes. Every
+  validation failure names the field it is about, and an unknown field is
+  refused rather than ignored;
+- **platform commands**: every platform on the roadmap is recognized; the
+  ones without a backend fail with "no backend for `<platform>` yet — see
+  PLAN.md, Milestone N" and exit code 3, never a silent build for Windows.
+  Exit codes are part of the interface: 2 usage, 3 no backend, 4 a missing
+  toolchain, 1 everything else;
+- **`rf doctor`**: rustc against the MSRV, Cargo, git, the MSVC build tools
+  (through `vswhere`), the newest installed Windows SDK and its `rc`, `mt`,
+  `makeappx`, and `signtool`, plus per-platform readiness — as a table or,
+  with `--json`, for a script.
+
+The toolchains it drives, and the ones it will: Windows uses Cargo with the
+MSVC build tools and the Windows SDK; macOS and iOS will use Xcode and the
+Apple SDKs, Linux the system compiler, Android Gradle with the SDK and NDK,
+and embedded targets their own toolchains through Cargo.
+
+---
+
+# 7. Application architecture milestones
 
 ## Milestone 32 — Packaging and deployment
 

@@ -12,10 +12,9 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 30 — Persistence and
-navigation** (navigation stacks and tabs on the managed component tree,
-state that outlives the process), after Milestone 29's graphics escape
-hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
+The latest completed milestone is **Milestone 31 — Developer CLI**
+(`rf new`, `build`, `run`, `test`, `doctor`), after Milestone 30's
+persistence and navigation, Milestone 29's graphics escape hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
 Milestone 26's accessibility bridge,
 Milestone 25's advanced input system, and the standards-audit remediation
 pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
@@ -572,6 +571,27 @@ flushed after a moment of quiet, before `Lifecycle::Suspending` and
 `WindowsPlatform::new().with_app_id(id)` makes the application
 single-instance: a second launch hands its URL to the running one.
 
+## The `rf` command
+
+`crates/rf` builds the `rf` binary, which drives the toolchains rather than
+replacing them:
+
+```sh
+rf new my-app --framework-path .   # a project that compiles, against this checkout
+cd my-app
+rf run windows                     # cargo run, with this project's manifest
+rf build windows --release
+rf test -- --nocapture             # arguments pass through to cargo test
+rf doctor                          # what this machine can build, and what it lacks
+```
+
+A project is a folder with an `rf.toml`: the application's identity (the
+same id its saved state and single-instance mutex use), its display name,
+version, publisher, and URL schemes. Every platform on the roadmap is
+recognized; the ones whose backend does not exist yet say so, with the
+milestone that brings them, and exit with a distinct code rather than
+quietly building for Windows.
+
 ## Text input
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
@@ -640,6 +660,5 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 31 — Developer CLI and
-project tooling**. The roadmap then proceeds through packaging and
-additional native backends.
+The next implementation target is **Milestone 32 — Packaging and
+deployment**. The roadmap then proceeds to additional native backends.

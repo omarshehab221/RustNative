@@ -2,7 +2,68 @@
 
 ## Current milestone
 
-**Milestone 30 — Persistence and navigation — complete.**
+**Milestone 31 — Developer CLI and project tooling — complete.**
+
+### What was built
+
+`crates/rf` (package `rf-cli`, binary `rf`): `new`, `build`, `run`,
+`check`, `test`, and `doctor`. `rf.toml` (`config`) describes a project;
+`project` creates one from templates and finds the one you are standing in;
+`platform` knows every platform on the roadmap and which has a backend;
+`toolchain` runs Cargo and locates the MSVC build tools and the Windows SDK;
+`doctor` reports both, as a table or as JSON. Errors carry exit codes: 2
+usage, 3 no backend for that platform, 4 a missing toolchain, 1 otherwise.
+
+Dependencies: `clap`, `serde`, `serde_json`, `toml` — all already in this
+workspace's lockfile through existing dev-dependencies, all MIT/Apache-2.0.
+
+### What it found
+
+1. **`trailing_var_arg` alone does not pass flags through.** `rf test
+   --offline` was parsed as `rf`'s own flag and refused; the pass-through
+   argument also needs `allow_hyphen_values`. The test that runs
+   `rf test --offline` caught it.
+2. **A speculative `target_triple` had no caller.** It was written to
+   return `None` for every platform (the only backend is the host's), which
+   clippy correctly read as a method that ignores its receiver. Removed;
+   cross-compiled platforms can add it when they exist.
+
+### Verified, and how
+
+Eleven integration tests run the real binary in real folders: a generated
+project **compiles** (`cargo check --offline` against this workspace) and
+**builds to an executable** (`rf build windows`, and the `.exe` is there);
+`rf.toml` is generated valid and found from a subfolder; each of the six
+platforms without a backend is refused by name with its milestone and exit
+code 3; an unknown platform is a usage error (2); a broken `rf.toml` names
+the field (`app.version`); running outside a project says `rf new`;
+`doctor --json` is valid JSON that reports this machine's real rustc,
+Cargo, MSVC tools, and SDK paths; `doctor`'s table names the milestones;
+`rf test` passes both filters and flags through to Cargo; and creating a
+project over an existing folder is refused. Seventeen unit tests cover
+config validation (every invalid field named, unknown fields refused),
+template filling, SDK version comparison, and the exit-code mapping.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+### Not verified on this machine
+
+A machine *without* the MSVC tools or the Windows SDK: `doctor` reports
+what it finds, and the "missing" branches were exercised only by reading
+them, not by uninstalling a toolchain. `rf new` against published crates
+(`framework-core = "0.1"`) cannot be resolved until the crates are
+published, so the generated-project tests use `--framework-path`.
+
+---
+
+## Previous: Milestone 30 — Persistence and navigation — complete.
 
 ### What was built
 

@@ -1,0 +1,26 @@
+[package]
+name = "rf-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The rf command: create, check, build, run, and diagnose Rust Native applications"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords = ["gui", "cli", "windows", "native", "framework"]
+categories = ["command-line-utilities", "gui"]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "rf"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+
