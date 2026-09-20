@@ -1,13 +1,13 @@
 //! Signing a package with the SDK's `signtool`.
 //!
-//! `rf` never holds a password: `--password-env` names an environment
+//! `rustnative` never holds a password: `--password-env` names an environment
 //! variable, and the value is read from it and handed to `signtool`
 //! directly, so it is not in the command line a person typed, in their
 //! shell history, or in this process's arguments as another process could
 //! list them.
 //!
 //! The certificate's subject has to match the package's `Publisher`.
-//! `rf` checks what it can see — that the publisher is an X.500 name at all
+//! `rustnative` checks what it can see — that the publisher is an X.500 name at all
 //! — and lets `signtool` make the real comparison against the certificate,
 //! which it does and reports precisely; a package signed by a mismatched
 //! certificate would install nowhere, so failing here is the point.
@@ -66,7 +66,7 @@ pub fn arguments(signing: &Signing, package: &Path) -> Result<Vec<String>> {
 pub fn check_publisher(publisher: Option<&str>) -> Result<()> {
     let Some(publisher) = publisher else {
         return Err(Error::Usage(
-            "app.publisher is not set in rf.toml, and a signed package needs one that matches \
+            "app.publisher is not set in rustnative.toml, and a signed package needs one that matches \
              the certificate's subject"
                 .to_owned(),
         ));
@@ -112,7 +112,7 @@ mod tests {
     use super::*;
 
     fn certificate() -> PathBuf {
-        let path = std::env::temp_dir().join(format!("rf-sign-{}.pfx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("rustnative-sign-{}.pfx", std::process::id()));
         std::fs::write(&path, b"not a real certificate").expect("a scratch file");
         path
     }
@@ -122,20 +122,20 @@ mod tests {
         let certificate = certificate();
         // SAFETY: this test reads the variable back itself, on this thread,
         // and removes it immediately.
-        unsafe { std::env::set_var("RF_TEST_PFX_PASSWORD", "hunter2") };
+        unsafe { std::env::set_var("RUSTNATIVE_TEST_PFX_PASSWORD", "hunter2") };
         let signing = Signing {
             certificate: certificate.clone(),
-            password_env: Some("RF_TEST_PFX_PASSWORD".to_owned()),
+            password_env: Some("RUSTNATIVE_TEST_PFX_PASSWORD".to_owned()),
         };
         let arguments = arguments(&signing, Path::new("demo.msix")).expect("built");
         // SAFETY: as above.
-        unsafe { std::env::remove_var("RF_TEST_PFX_PASSWORD") };
+        unsafe { std::env::remove_var("RUSTNATIVE_TEST_PFX_PASSWORD") };
 
         assert_eq!(arguments[0], "sign");
         assert!(arguments.windows(2).any(|pair| pair == ["/fd", "SHA256"]), "{arguments:?}");
         assert!(arguments.contains(&"hunter2".to_owned()), "the password reaches signtool");
         assert!(
-            !arguments.contains(&"RF_TEST_PFX_PASSWORD".to_owned()),
+            !arguments.contains(&"RUSTNATIVE_TEST_PFX_PASSWORD".to_owned()),
             "the variable's name is not passed, its value is"
         );
         assert_eq!(arguments.last().map(String::as_str), Some("demo.msix"));
@@ -147,10 +147,10 @@ mod tests {
         let certificate = certificate();
         let signing = Signing {
             certificate: certificate.clone(),
-            password_env: Some("RF_TEST_NO_SUCH_VARIABLE".to_owned()),
+            password_env: Some("RUSTNATIVE_TEST_NO_SUCH_VARIABLE".to_owned()),
         };
         let error = arguments(&signing, Path::new("demo.msix")).expect_err("refused");
-        assert!(error.to_string().contains("RF_TEST_NO_SUCH_VARIABLE"), "{error}");
+        assert!(error.to_string().contains("RUSTNATIVE_TEST_NO_SUCH_VARIABLE"), "{error}");
         std::fs::remove_file(certificate).ok();
     }
 

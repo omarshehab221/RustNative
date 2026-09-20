@@ -1,8 +1,8 @@
 //! MSIX packages: the manifest, the layout, and `makeappx`.
 //!
 //! An MSIX is a folder with an `AppxManifest.xml` in it, packed by the
-//! Windows SDK's `makeappx`. What `rf` contributes is the manifest — built
-//! from the same `rf.toml` the application's own identity comes from, so
+//! Windows SDK's `makeappx`. What `rustnative` contributes is the manifest — built
+//! from the same `rustnative.toml` the application's own identity comes from, so
 //! the package's identity, the state store's folder, and the
 //! single-instance mutex cannot drift apart — and the layout around it.
 //!

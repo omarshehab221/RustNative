@@ -1,7 +1,7 @@
 //! Running Cargo.
 //!
-//! `rf` orchestrates the native toolchains rather than replacing them, and
-//! Cargo is the first of them: `rf build windows` *is* `cargo build`, with
+//! `rustnative` orchestrates the native toolchains rather than replacing them, and
+//! Cargo is the first of them: `rustnative build windows` *is* `cargo build`, with
 //! the project's own manifest and whatever Cargo already knows about the
 //! host's linker. Output is inherited, so what a person sees is Cargo's own
 //! progress and diagnostics, not a paraphrase.
@@ -36,8 +36,8 @@ where
     Err(Error::ToolFailed { tool: "cargo", code: status.code() })
 }
 
-/// The Cargo to run: the one that invoked `rf` if there was one (so
-/// `cargo run -p rf-cli -- build` uses the same toolchain), otherwise
+/// The Cargo to run: the one that invoked `rustnative` if there was one (so
+/// `cargo run -p rustnative-cli -- build` uses the same toolchain), otherwise
 /// whatever is on the path.
 fn cargo() -> std::ffi::OsString {
     std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into())

@@ -16,13 +16,13 @@ const FRAMEWORK_VERSION: &str = "0.1";
 
 /// Create, build, run, and diagnose Rust Native applications.
 #[derive(Debug, Parser)]
-#[command(name = "rf", version, about, long_about = None)]
+#[command(name = "rustnative", version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     command: Command,
 }
 
-/// What `rf` was asked to do.
+/// What `rustnative` was asked to do.
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Create a new application.
@@ -62,7 +62,7 @@ enum Command {
     /// Run the application's tests.
     Test {
         /// Arguments passed through to `cargo test`, flags included
-        /// (`rf test --offline -- --nocapture`).
+        /// (`rustnative test --offline -- --nocapture`).
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         arguments: Vec<String>,
     },
@@ -107,7 +107,7 @@ impl Cli {
                 let root = create(&parent, &name, &framework)?;
                 println!("Created {}", root.display());
                 println!("  cd {name}");
-                println!("  rf run windows");
+                println!("  rustnative run windows");
                 Ok(())
             }
             Command::Build { platform, release } => {

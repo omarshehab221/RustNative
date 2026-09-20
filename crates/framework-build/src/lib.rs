@@ -9,7 +9,7 @@
 //! }
 //! ```
 //!
-//! which reads the project's `rf.toml`, writes an `.ico`, an application
+//! which reads the project's `rustnative.toml`, writes an `.ico`, an application
 //! manifest, and a `.rc` into the build directory, compiles them with the
 //! Windows SDK's `rc.exe`, and tells Cargo to link the result. The
 //! executable then has an icon in Explorer, a version in its properties,
@@ -22,7 +22,7 @@
 //!
 //! Resource compilation is skipped with a Cargo warning rather than
 //! failing the build: an application still runs without an icon, and a
-//! contributor without the SDK can still `cargo check`. `rf doctor` is
+//! contributor without the SDK can still `cargo check`. `rustnative doctor` is
 //! where a missing SDK is reported as a problem.
 
 #![deny(missing_docs)]
@@ -36,7 +36,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-/// What `rf.toml` says, as much of it as resources need.
+/// What `rustnative.toml` says, as much of it as resources need.
 #[derive(Debug, Clone, Deserialize)]
 struct Manifest {
     app: App,
@@ -60,7 +60,7 @@ struct App {
 /// Why resources could not be embedded.
 #[derive(Debug)]
 pub enum BuildError {
-    /// `rf.toml` is missing, unreadable, or not valid.
+    /// `rustnative.toml` is missing, unreadable, or not valid.
     Manifest(String),
     /// A file could not be written into the build directory.
     Io(std::io::Error),
@@ -73,7 +73,7 @@ pub enum BuildError {
 impl std::fmt::Display for BuildError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Manifest(message) => write!(f, "rf.toml: {message}"),
+            Self::Manifest(message) => write!(f, "rustnative.toml: {message}"),
             Self::Io(error) => write!(f, "{error}"),
             Self::Icon(error) => write!(f, "{error}"),
             Self::ResourceCompiler(message) => write!(f, "rc.exe: {message}"),
@@ -88,7 +88,7 @@ impl std::error::Error for BuildError {}
 ///
 /// # Panics
 ///
-/// Panics only if `rf.toml` itself is wrong — a mistake in the project
+/// Panics only if `rustnative.toml` itself is wrong — a mistake in the project
 /// rather than in the machine, and one that should stop the build.
 pub fn embed_resources() {
     if !cfg!(windows) {
@@ -99,7 +99,7 @@ pub fn embed_resources() {
         Ok(false) => {
             println!(
                 "cargo:warning=the Windows SDK's rc.exe was not found: this build has no icon, \
-                 version information, or application manifest (run `rf doctor`)"
+                 version information, or application manifest (run `rustnative doctor`)"
             );
         }
         Err(error @ BuildError::Manifest(_)) => panic!("{error}"),
@@ -111,7 +111,7 @@ pub fn embed_resources() {
 ///
 /// # Errors
 ///
-/// [`BuildError`] for a bad `rf.toml`, a file that could not be written, an
+/// [`BuildError`] for a bad `rustnative.toml`, a file that could not be written, an
 /// unusable icon, or a failing `rc.exe`.
 pub fn try_embed_resources() -> Result<bool, BuildError> {
     let project = std::env::var_os("CARGO_MANIFEST_DIR")
@@ -121,7 +121,7 @@ pub fn try_embed_resources() -> Result<bool, BuildError> {
         .map(PathBuf::from)
         .ok_or_else(|| BuildError::Manifest("OUT_DIR is not set".to_owned()))?;
     let resources = read_manifest(&project)?;
-    println!("cargo:rerun-if-changed=rf.toml");
+    println!("cargo:rerun-if-changed=rustnative.toml");
     if let Some(icon) = &resources.icon_file {
         println!("cargo:rerun-if-changed={icon}");
     }
@@ -166,9 +166,9 @@ fn prepare(project: &Path, out: &Path, resources: &rc::Resources) -> Result<(), 
         .map_err(BuildError::Io)
 }
 
-/// Reads `rf.toml` into the resource description.
+/// Reads `rustnative.toml` into the resource description.
 fn read_manifest(project: &Path) -> Result<rc::Resources, BuildError> {
-    let path = project.join("rf.toml");
+    let path = project.join("rustnative.toml");
     let text = std::fs::read_to_string(&path)
         .map_err(|error| BuildError::Manifest(format!("{}: {error}", path.display())))?;
     let manifest: Manifest =
@@ -201,13 +201,13 @@ mod tests {
     fn write_project(directory: &Path, icon: bool) {
         let icon_line = if icon { "icon = \"icon.png\"\n" } else { "" };
         std::fs::write(
-            directory.join("rf.toml"),
+            directory.join("rustnative.toml"),
             format!(
                 "[app]\nname = \"demo\"\nid = \"com.example.demo\"\ndisplay-name = \"Demo\"\n\
                  version = \"2.3.4\"\npublisher = \"CN=Example\"\n{icon_line}"
             ),
         )
-        .expect("write rf.toml");
+        .expect("write rustnative.toml");
         if icon {
             let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
             png.extend_from_slice(&13u32.to_be_bytes());

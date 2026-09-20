@@ -1,10 +1,10 @@
 [package]
-name = "rf-cli"
+name = "rustnative-cli"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "The rf command: create, check, build, run, and diagnose Rust Native applications"
+description = "The rustnative command: create, check, build, run, and diagnose Rust Native applications"
 repository.workspace = true
 homepage.workspace = true
 readme.workspace = true
@@ -15,7 +15,7 @@ categories = ["command-line-utilities", "gui"]
 workspace = true
 
 [[bin]]
-name = "rf"
+name = "rustnative"
 path = "src/main.rs"
 
 [dependencies]

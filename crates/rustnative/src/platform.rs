@@ -1,4 +1,4 @@
-//! The platforms `rf` knows about, and which of them can be built today.
+//! The platforms `rustnative` knows about, and which of them can be built today.
 //!
 //! Every platform on the roadmap is *recognized*, and the ones without a
 //! backend fail with the milestone that will bring them rather than with

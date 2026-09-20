@@ -1,4 +1,4 @@
-//! Milestone 32 acceptance tests: what `rf package` produces, and what an
+//! Milestone 32 acceptance tests: what `rustnative package` produces, and what an
 //! executable built through `framework-build` actually carries.
 //!
 //! These run the real binary against a real generated project, then read
@@ -23,8 +23,8 @@ use windows_sys::Win32::System::LibraryLoader::{
     FindResourceW, LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW, SizeofResource,
 };
 
-fn rf() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_rf"))
+fn rustnative() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_rustnative"))
 }
 
 fn workspace() -> PathBuf {
@@ -46,25 +46,26 @@ fn packaged_project() -> &'static PathBuf {
 
     static PROJECT: OnceLock<PathBuf> = OnceLock::new();
     PROJECT.get_or_init(|| {
-        let parent = std::env::temp_dir().join(format!("rf-package-{}", std::process::id()));
+        let parent =
+            std::env::temp_dir().join(format!("rustnative-package-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&parent);
         std::fs::create_dir_all(&parent).expect("a scratch folder");
-        let created = rf()
+        let created = rustnative()
             .args(["new", "packaged", "--path"])
             .arg(&parent)
             .arg("--framework-path")
             .arg(workspace())
             .output()
-            .expect("rf runs");
+            .expect("rustnative runs");
         assert!(created.status.success(), "{}", stderr(&created));
 
         let project = parent.join("packaged");
-        let output = rf()
+        let output = rustnative()
             .current_dir(&project)
             .args(["package", "windows", "--format", "all"])
             .env("CARGO_TARGET_DIR", workspace().join("target"))
             .output()
-            .expect("rf runs");
+            .expect("rustnative runs");
         assert!(output.status.success(), "packaging must succeed:\n{}", stderr(&output));
         project
     })
@@ -109,7 +110,7 @@ fn the_executable_carries_the_version_information_rf_toml_declares() {
     // SAFETY: `value`/`length` describe a wide string inside `buffer`.
     let text = unsafe { std::slice::from_raw_parts(value.cast::<u16>(), length as usize) };
     let product_version = String::from_utf16_lossy(text).trim_end_matches('\0').to_owned();
-    assert_eq!(product_version, "0.1.0.0", "the version rf.toml declares");
+    assert_eq!(product_version, "0.1.0.0", "the version rustnative.toml declares");
 }
 
 #[test]
@@ -146,12 +147,12 @@ fn the_portable_zip_is_reproducible_and_its_checksums_verify() {
 
     // Packaging again — a separate process, a separate build — produces the
     // same bytes.
-    let again = rf()
+    let again = rustnative()
         .current_dir(project)
         .args(["package", "windows", "--format", "zip"])
         .env("CARGO_TARGET_DIR", workspace().join("target"))
         .output()
-        .expect("rf runs");
+        .expect("rustnative runs");
     assert!(again.status.success(), "{}", stderr(&again));
     let second = std::fs::read(&zip).expect("the archive was rewritten");
     assert_eq!(first, second, "two builds of the same files are byte-identical");
@@ -212,18 +213,18 @@ fn the_msix_packs_and_unpacks_with_the_manifest_rf_toml_describes() {
 #[test]
 fn signing_without_a_certificate_is_refused_before_anything_is_built() {
     let project = packaged_project();
-    let output = rf()
+    let output = rustnative()
         .current_dir(project)
         .args(["package", "windows", "--format", "msix", "--sign", "no-such.pfx"])
         .output()
-        .expect("rf runs");
+        .expect("rustnative runs");
     assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
     assert!(stderr(&output).contains("no-such.pfx"), "{}", stderr(&output));
 }
 
-/// The SDK's `makeappx`, found the way `rf doctor` finds it.
+/// The SDK's `makeappx`, found the way `rustnative doctor` finds it.
 fn makeappx() -> Option<PathBuf> {
-    let output = rf().args(["doctor", "--json"]).output().ok()?;
+    let output = rustnative().args(["doctor", "--json"]).output().ok()?;
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     let checks = report["checks"].as_array()?;
     let entry = checks.iter().find(|check| check["name"] == "makeappx")?;

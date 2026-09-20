@@ -758,22 +758,22 @@ All three (Milestones 27–29) are complete; see section 3.
 
 ## Milestone 31 — Developer CLI and project tooling
 
-Implemented as `crates/rf` (package `rf-cli`, binary `rf`), which
+Implemented as `crates/rustnative` (package `rustnative-cli`, binary `rustnative`), which
 orchestrates the native toolchains rather than replacing them:
 
 ```text
-rf new <name> [--path DIR] [--framework-path DIR]
-rf build <platform> [--release]
-rf run   <platform> [--release]
-rf check [platform]
-rf test  [cargo test arguments...]
-rf doctor [--json]
+rustnative new <name> [--path DIR] [--framework-path DIR]
+rustnative build <platform> [--release]
+rustnative run   <platform> [--release]
+rustnative check [platform]
+rustnative test  [cargo test arguments...]
+rustnative doctor [--json]
 ```
 
-- **project creation**: `rf new` writes a project that compiles — `src/main.rs`,
-  `Cargo.toml`, `rf.toml`, `README.md`, `.gitignore` — depending either on
+- **project creation**: `rustnative new` writes a project that compiles — `src/main.rs`,
+  `Cargo.toml`, `rustnative.toml`, `README.md`, `.gitignore` — depending either on
   published framework versions or, with `--framework-path`, on a checkout;
-- **project metadata**: `rf.toml` holds the application's identity (the same
+- **project metadata**: `rustnative.toml` holds the application's identity (the same
   id its saved state, single-instance mutex, and package use), its display
   name, version, publisher, description, icon, and URL schemes. Every
   validation failure names the field it is about, and an unknown field is
@@ -783,7 +783,7 @@ rf doctor [--json]
   PLAN.md, Milestone N" and exit code 3, never a silent build for Windows.
   Exit codes are part of the interface: 2 usage, 3 no backend, 4 a missing
   toolchain, 1 everything else;
-- **`rf doctor`**: rustc against the MSRV, Cargo, git, the MSVC build tools
+- **`rustnative doctor`**: rustc against the MSRV, Cargo, git, the MSVC build tools
   (through `vswhere`), the newest installed Windows SDK and its `rc`, `mt`,
   `makeappx`, and `signtool`, plus per-platform readiness — as a table or,
   with `--json`, for a script.
@@ -804,24 +804,24 @@ Implemented for the platform that has a backend; the other formats
 belong to their backends' milestones.
 
 - **Resource bundling and manifests**: a new `framework-build` crate, run
-  from an application's `build.rs` (the `rf new` template wires it, and the
-  example uses it). It reads `rf.toml` and produces the executable's icon
+  from an application's `build.rs` (the `rustnative new` template wires it, and the
+  example uses it). It reads `rustnative.toml` and produces the executable's icon
   (a `.png` wrapped into a PNG-compressed `.ico`, so no image library is
   needed), its `VERSIONINFO`, and its application manifest — per-monitor V2
   DPI awareness, Common Controls v6, the `supportedOS` entries layered
   child windows need, UTF-8 as the active code page, and long-path
   awareness — compiled with the SDK's `rc.exe` and linked in. Without the
   SDK the build carries on with a warning rather than failing;
-- **Windows executable packaging**: `rf package windows --format zip|msix|all`.
+- **Windows executable packaging**: `rustnative package windows --format zip|msix|all`.
   The portable zip is reproducible (sorted entries, fixed timestamps and
   attributes, stored rather than compressed) and carries a `SHA256SUMS`;
 - **Installer packaging**: an MSIX — a generated `AppxManifest.xml` whose
   identity, publisher, version, logos, and `uap:Protocol` entries come from
-  the same `rf.toml` the application's own identity does, laid out and
+  the same `rustnative.toml` the application's own identity does, laid out and
   packed with `makeappx`;
 - **Signing**: `--sign <pfx> [--password-env VAR]` runs `signtool sign /fd
   SHA256`. The password is read from the named environment variable rather
-  than the command line; `rf` checks the publisher is an X.500 name before
+  than the command line; `rustnative` checks the publisher is an X.500 name before
   building, and `signtool` makes the real comparison against the
   certificate's subject.
 

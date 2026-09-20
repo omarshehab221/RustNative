@@ -1,4 +1,4 @@
-//! `rf.toml`: what a project says about itself.
+//! `rustnative.toml`: what a project says about itself.
 //!
 //! One file, one table, and every field either required or with an obvious
 //! default. What is here is what the tooling needs and nothing else: the
@@ -11,10 +11,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// The file an `rf` project is described by.
-pub const FILE_NAME: &str = "rf.toml";
+/// The file a `rustnative` project is described by.
+pub const FILE_NAME: &str = "rustnative.toml";
 
-/// A problem with `rf.toml`, naming the field it is about.
+/// A problem with `rustnative.toml`, naming the field it is about.
 #[derive(Debug)]
 pub enum ConfigError {
     /// The file could not be read.
@@ -54,7 +54,7 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-/// A project's `rf.toml`.
+/// A project's `rustnative.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -90,7 +90,7 @@ pub struct App {
 }
 
 impl Config {
-    /// Reads and validates the `rf.toml` in `directory`.
+    /// Reads and validates the `rustnative.toml` in `directory`.
     ///
     /// # Errors
     ///
@@ -153,7 +153,7 @@ impl Config {
         Ok(())
     }
 
-    /// A starting `rf.toml` for a new project called `name`.
+    /// A starting `rustnative.toml` for a new project called `name`.
     #[must_use]
     pub fn template(name: &str) -> Self {
         Self {

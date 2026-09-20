@@ -10,15 +10,15 @@ use crate::error::{Error, Result};
 /// Where a project is and what it says about itself.
 #[derive(Debug, Clone)]
 pub struct Project {
-    /// The folder holding `rf.toml`.
+    /// The folder holding `rustnative.toml`.
     pub root: PathBuf,
-    /// What `rf.toml` says.
+    /// What `rustnative.toml` says.
     pub config: Config,
 }
 
 impl Project {
-    /// Finds the project `directory` is in: the nearest ancestor with an
-    /// `rf.toml`, starting with `directory` itself.
+    /// Finds the project `directory` is in: the nearest ancestor with a
+    /// `rustnative.toml`, starting with `directory` itself.
     ///
     /// # Errors
     ///
@@ -33,7 +33,7 @@ impl Project {
             candidate = root.parent();
         }
         Err(Error::Usage(format!(
-            "no {} here or in any parent folder — run `rf new <name>` to make a project",
+            "no {} here or in any parent folder — run `rustnative new <name>` to make a project",
             config::FILE_NAME
         )))
     }
@@ -112,7 +112,7 @@ pub fn create(parent: &Path, name: &str, framework: &FrameworkSource) -> Result<
     )?;
     write(&root, "build.rs", templates::BUILD_RS)?;
     let rf_toml = toml::to_string_pretty(&config).map_err(|cause| Error::Io {
-        what: "write rf.toml".to_owned(),
+        what: "write rustnative.toml".to_owned(),
         cause: std::io::Error::other(cause.to_string()),
     })?;
     write(&root, config::FILE_NAME, &rf_toml)?;
@@ -144,7 +144,7 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let directory =
-            std::env::temp_dir().join(format!("rf-project-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("rustnative-project-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a scratch folder");
         directory
@@ -155,7 +155,8 @@ mod tests {
         let parent = scratch("create");
         let root = create(&parent, "demo-app", &FrameworkSource::Published("0.1".to_owned()))
             .expect("created");
-        for file in ["Cargo.toml", "rf.toml", ".gitignore", "README.md", "src/main.rs", "build.rs"]
+        for file in
+            ["Cargo.toml", "rustnative.toml", ".gitignore", "README.md", "src/main.rs", "build.rs"]
         {
             assert!(root.join(file).is_file(), "{file} is generated");
         }
@@ -211,6 +212,6 @@ mod tests {
         let parent = scratch("empty");
         let error = Project::find(&parent).expect_err("no project here");
         assert_eq!(error.exit_code(), 2);
-        assert!(error.to_string().contains("rf new"));
+        assert!(error.to_string().contains("rustnative new"));
     }
 }

@@ -1,4 +1,4 @@
-//! `rf package`: what a person downloads or installs.
+//! `rustnative package`: what a person downloads or installs.
 //!
 //! Two formats, for the two ways a Windows application is shipped:
 //!
@@ -127,7 +127,7 @@ fn build_msix(
         toolchain.tool("makeappx").and_then(|tool| tool.path.clone()).ok_or_else(|| {
             Error::ToolMissing {
                 tool: "makeappx",
-                hint: "install the Windows SDK (run `rf doctor`)".to_owned(),
+                hint: "install the Windows SDK (run `rustnative doctor`)".to_owned(),
                 cause: None,
             }
         })?;
@@ -145,7 +145,7 @@ fn build_msix(
             toolchain.tool("signtool").and_then(|tool| tool.path.clone()).ok_or_else(|| {
                 Error::ToolMissing {
                     tool: "signtool",
-                    hint: "install the Windows SDK (run `rf doctor`)".to_owned(),
+                    hint: "install the Windows SDK (run `rustnative doctor`)".to_owned(),
                     cause: None,
                 }
             })?;

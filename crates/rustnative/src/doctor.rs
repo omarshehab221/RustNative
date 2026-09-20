@@ -1,4 +1,4 @@
-//! `rf doctor`: what this machine can build, and what it is missing.
+//! `rustnative doctor`: what this machine can build, and what it is missing.
 //!
 //! Every check reports what it actually found — a version, a path — rather
 //! than a tick, so a failing build can be compared against what `doctor`
@@ -25,7 +25,7 @@ pub struct Check {
 pub struct PlatformReadiness {
     /// The platform.
     pub platform: String,
-    /// Whether `rf build <platform>` would work on this machine.
+    /// Whether `rustnative build <platform>` would work on this machine.
     pub ready: bool,
     /// Why, or why not.
     pub detail: String,
@@ -62,7 +62,7 @@ impl Report {
             Check {
                 name: "cargo".to_owned(),
                 ok: toolchain::is_available("cargo"),
-                detail: "the build `rf` drives".to_owned(),
+                detail: "the build `rustnative` drives".to_owned(),
             },
             Check {
                 name: "git".to_owned(),

@@ -1,4 +1,4 @@
-//! The native toolchains `rf` drives.
+//! The native toolchains `rustnative` drives.
 //!
 //! | Platform | Toolchain | Status |
 //! |---|---|---|
@@ -8,13 +8,13 @@
 //! | Android | Gradle, the Android SDK and NDK | Milestone 35 |
 //! | Embedded | per-target toolchains through Cargo | Milestone 37 |
 //!
-//! `rf` never reimplements a toolchain: it finds one, runs it, and reports
+//! `rustnative` never reimplements a toolchain: it finds one, runs it, and reports
 //! honestly when it is not there.
 
 pub mod cargo;
 pub mod windows_sdk;
 
-/// The minimum Rust version this workspace supports, which `rf doctor`
+/// The minimum Rust version this workspace supports, which `rustnative doctor`
 /// checks the installed toolchain against.
 pub const MINIMUM_RUST: (u64, u64) = (1, 85);
 
@@ -73,6 +73,6 @@ mod tests {
 
     #[test]
     fn a_tool_that_does_not_exist_is_reported_missing() {
-        assert!(!is_available("rf-no-such-tool-exists"));
+        assert!(!is_available("rustnative-no-such-tool-exists"));
     }
 }

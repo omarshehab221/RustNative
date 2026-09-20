@@ -14,7 +14,7 @@ The current working backend is Windows/Win32. The framework core is designed to 
 
 The latest completed milestone is **Milestone 32 — Packaging and
 deployment** (embedded resources, a reproducible portable zip, and a signed
-MSIX), after Milestone 31's `rf` CLI, Milestone 30's persistence and
+MSIX), after Milestone 31's `rustnative` CLI, Milestone 30's persistence and
 navigation, Milestone 29's graphics escape hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
 Milestone 26's accessibility bridge,
 Milestone 25's advanced input system, and the standards-audit remediation
@@ -572,21 +572,21 @@ flushed after a moment of quiet, before `Lifecycle::Suspending` and
 `WindowsPlatform::new().with_app_id(id)` makes the application
 single-instance: a second launch hands its URL to the running one.
 
-## The `rf` command
+## The `rustnative` command
 
-`crates/rf` builds the `rf` binary, which drives the toolchains rather than
+`crates/rustnative` builds the `rustnative` binary, which drives the toolchains rather than
 replacing them:
 
 ```sh
-rf new my-app --framework-path .   # a project that compiles, against this checkout
+rustnative new my-app --framework-path .   # a project that compiles, against this checkout
 cd my-app
-rf run windows                     # cargo run, with this project's manifest
-rf build windows --release
-rf test -- --nocapture             # arguments pass through to cargo test
-rf doctor                          # what this machine can build, and what it lacks
+rustnative run windows                     # cargo run, with this project's manifest
+rustnative build windows --release
+rustnative test -- --nocapture             # arguments pass through to cargo test
+rustnative doctor                          # what this machine can build, and what it lacks
 ```
 
-A project is a folder with an `rf.toml`: the application's identity (the
+A project is a folder with a `rustnative.toml`: the application's identity (the
 same id its saved state and single-instance mutex use), its display name,
 version, publisher, and URL schemes. Every platform on the roadmap is
 recognized; the ones whose backend does not exist yet say so, with the
@@ -609,17 +609,17 @@ awareness, Common Controls v6, and the `supportedOS` entries without which
 layered child windows (animated opacity) and themed tab controls do not
 behave as documented.
 
-`rf` builds what people install:
+`rustnative` builds what people install:
 
 ```sh
-rf package windows --format zip     # reproducible archive + SHA256SUMS
-rf package windows --format msix    # installable package, identity from rf.toml
-rf package windows --format all --sign cert.pfx --password-env CERT_PASSWORD
+rustnative package windows --format zip     # reproducible archive + SHA256SUMS
+rustnative package windows --format msix    # installable package, identity from rustnative.toml
+rustnative package windows --format all --sign cert.pfx --password-env CERT_PASSWORD
 ```
 
 The zip is byte-identical between builds of the same files, so its
 checksums mean something. The MSIX takes its identity, publisher, version,
-and URL schemes from the same `rf.toml` the running application uses, so a
+and URL schemes from the same `rustnative.toml` the running application uses, so a
 package cannot disagree with the program inside it.
 
 ## Text input

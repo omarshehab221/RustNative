@@ -1,23 +1,23 @@
-//! `rf`, the Rust Native command.
+//! `rustnative`, the Rust Native command.
 //!
 //! ```text
-//! rf new <name> [--path DIR] [--framework-path DIR]
-//! rf build <platform> [--release]
-//! rf run   <platform> [--release]
-//! rf check [platform]
-//! rf test  [-- cargo test arguments]
-//! rf package <platform> [--format zip|msix|all] [--sign CERT --password-env VAR]
-//! rf doctor [--json]
+//! rustnative new <name> [--path DIR] [--framework-path DIR]
+//! rustnative build <platform> [--release]
+//! rustnative run   <platform> [--release]
+//! rustnative check [platform]
+//! rustnative test  [-- cargo test arguments]
+//! rustnative package <platform> [--format zip|msix|all] [--sign CERT --password-env VAR]
+//! rustnative doctor [--json]
 //! ```
 //!
-//! `rf` **orchestrates** the toolchains rather than replacing them: a build
+//! `rustnative` **orchestrates** the toolchains rather than replacing them: a build
 //! is Cargo's build, with Cargo's own output, and the Windows SDK tools are
 //! found where they are installed rather than bundled. Platforms whose
 //! backend the roadmap has not reached are recognized and refused by name,
 //! with the milestone that will bring them — never quietly built for
 //! Windows instead.
 //!
-//! A project is a folder with an `rf.toml` (see [`config`]), which holds
+//! A project is a folder with a `rustnative.toml` (see [`config`]), which holds
 //! the identity the application's saved state, single-instance mutex, and
 //! package are keyed by.
 

@@ -1,7 +1,7 @@
 //! Finding the Microsoft toolchain: the MSVC build tools Cargo links with,
 //! and the Windows SDK tools packaging needs.
 //!
-//! Nothing here *runs* a build — Cargo does that. This is what `rf doctor`
+//! Nothing here *runs* a build — Cargo does that. This is what `rustnative doctor`
 //! reports and what Milestone 32's packaging will call: where `makeappx`
 //! and `signtool` are, and whether a linker exists at all.
 

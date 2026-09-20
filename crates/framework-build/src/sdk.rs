@@ -2,7 +2,7 @@
 //!
 //! A build script cannot assume the SDK is on the path — it usually is not,
 //! outside a Developer Command Prompt — so the newest installed Windows SDK
-//! is located the same way `rf doctor` locates it, by looking under
+//! is located the same way `rustnative doctor` locates it, by looking under
 //! `Windows Kits\10\bin`.
 
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 /// The newest installed `rc.exe`, if there is one.
 #[must_use]
 pub fn resource_compiler() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("RF_RC_EXE").map(PathBuf::from) {
+    if let Some(path) = std::env::var_os("RUSTNATIVE_RC_EXE").map(PathBuf::from) {
         // An escape hatch for a machine whose SDK is somewhere unusual,
         // and how this crate's own tests point at a stand-in.
         return path.is_file().then_some(path);
@@ -74,15 +74,16 @@ mod tests {
     fn the_override_is_used_when_it_points_at_a_real_file() {
         // Safe: this test's process is the only reader of the variable, and
         // the value is removed before the test returns.
-        let temporary = std::env::temp_dir().join(format!("rf-rc-{}.exe", std::process::id()));
+        let temporary =
+            std::env::temp_dir().join(format!("rustnative-rc-{}.exe", std::process::id()));
         std::fs::write(&temporary, b"not really a compiler").expect("a scratch file");
         // SAFETY: `set_var` is unsafe because another thread could be
         // reading the environment; this test reads it back itself on the
         // same thread and clears it immediately.
-        unsafe { std::env::set_var("RF_RC_EXE", &temporary) };
+        unsafe { std::env::set_var("RUSTNATIVE_RC_EXE", &temporary) };
         assert_eq!(resource_compiler(), Some(temporary.clone()));
         // SAFETY: as above.
-        unsafe { std::env::remove_var("RF_RC_EXE") };
+        unsafe { std::env::remove_var("RUSTNATIVE_RC_EXE") };
         std::fs::remove_file(&temporary).ok();
     }
 }

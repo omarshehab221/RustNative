@@ -1,9 +1,9 @@
 //! What a new project is made of.
 //!
 //! Small on purpose: a window, a button, and the three files that make it a
-//! project (`Cargo.toml`, `rf.toml`, `.gitignore`). Everything a person is
+//! project (`Cargo.toml`, `rustnative.toml`, `.gitignore`). Everything a person is
 //! likely to change is in `src/main.rs`, and everything the tooling reads
-//! is in `rf.toml`.
+//! is in `rustnative.toml`.
 
 /// The generated `src/main.rs`.
 pub const MAIN_RS: &str = r#"#![cfg_attr(windows, windows_subsystem = "windows")]
@@ -84,7 +84,7 @@ publish = false
 /// The generated `build.rs`, which gives the executable its icon, version
 /// information, and application manifest.
 pub const BUILD_RS: &str = r"//! Embeds this application's icon, version information, and Windows
-//! application manifest, all described by `rf.toml`.
+//! application manifest, all described by `rustnative.toml`.
 
 fn main() {
     framework_build::embed_resources();
@@ -100,13 +100,13 @@ pub const README: &str = r"# {{display_name}}
 A [Rust Native](https://github.com/<org>/RustNative) application.
 
 ```sh
-rf run windows      # build and run
-rf build windows    # build only, `--release` for an optimized build
-rf test             # run the project's tests
-rf doctor           # check the toolchains this machine has
+rustnative run windows      # build and run
+rustnative build windows    # build only, `--release` for an optimized build
+rustnative test             # run the project's tests
+rustnative doctor           # check the toolchains this machine has
 ```
 
-`rf.toml` holds what the tooling needs to know about this application: its
+`rustnative.toml` holds what the tooling needs to know about this application: its
 identity (used for its saved state and to keep one instance running), the
 name people see, and its version.
 ";

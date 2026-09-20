@@ -1,6 +1,6 @@
 //! What can go wrong, and what the shell learns from it.
 //!
-//! Exit codes are part of the interface: a script that runs `rf build
+//! Exit codes are part of the interface: a script that runs `rustnative build
 //! macos` can tell "no backend for that platform yet" (3) from "the build
 //! failed" (1) without reading the message.
 
@@ -9,13 +9,13 @@ use std::fmt;
 use crate::config::ConfigError;
 use crate::platform::Platform;
 
-/// The result of anything `rf` does.
+/// The result of anything `rustnative` does.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Something `rf` could not do.
+/// Something `rustnative` could not do.
 #[derive(Debug)]
 pub enum Error {
-    /// The project's `rf.toml` is missing or wrong.
+    /// The project's `rustnative.toml` is missing or wrong.
     Config(ConfigError),
     /// A file could not be read or written.
     Io {
@@ -31,7 +31,7 @@ pub enum Error {
         /// The milestone that will bring it, if it is numbered.
         milestone: Option<u32>,
     },
-    /// A tool `rf` needs is not installed.
+    /// A tool `rustnative` needs is not installed.
     ToolMissing {
         /// The tool's name.
         tool: &'static str,

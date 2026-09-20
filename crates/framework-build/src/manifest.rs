@@ -64,7 +64,7 @@ pub fn application_manifest(name: &str, version: &str) -> String {
     TEMPLATE.replace("{{name}}", &escape(name)).replace("{{version}}", &four_part_version(version))
 }
 
-/// A manifest version is always four numbers; `rf.toml` carries three.
+/// A manifest version is always four numbers; `rustnative.toml` carries three.
 fn four_part_version(version: &str) -> String {
     let mut parts = version
         .split('.')

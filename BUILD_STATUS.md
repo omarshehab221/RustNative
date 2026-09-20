@@ -7,21 +7,21 @@
 ### What was built
 
 `crates/framework-build`, run from an application's `build.rs`: it reads
-`rf.toml` and writes the `.ico` (a PNG wrapped into a PNG-compressed icon
+`rustnative.toml` and writes the `.ico` (a PNG wrapped into a PNG-compressed icon
 entry — six bytes of header, sixteen of directory, then the PNG, so no
 image library), the application manifest, and the `.rc` carrying both plus
 `VERSIONINFO`, compiles them with the SDK's `rc.exe`, and links the result.
 A machine without the SDK gets a Cargo warning, not a failed build.
 
-`rf package windows --format zip|msix|all [--sign <pfx> --password-env VAR]`:
+`rustnative package windows --format zip|msix|all [--sign <pfx> --password-env VAR]`:
 a reproducible portable zip (sorted entries, fixed timestamps and
 attributes, stored entries, `SHA256SUMS`), and an MSIX whose
 `AppxManifest.xml` — identity, publisher, version, logos, and one
 `uap:Protocol` per URL scheme from Milestone 30 — comes from the same
-`rf.toml` the running application's state store and single-instance mutex
+`rustnative.toml` the running application's state store and single-instance mutex
 use, packed with `makeappx` and optionally signed with `signtool`.
 
-The example now carries its own `rf.toml` and `build.rs`, so the
+The example now carries its own `rustnative.toml` and `build.rs`, so the
 framework's own application is built the way it tells others to build
 theirs.
 
@@ -35,7 +35,7 @@ from 0.9 to 1.x in both new crates, which also resolved a duplicate
    PNG directly since Vista, so "convert the icon" is a header and the
    file's own bytes — no decoding, no resizing, no dependency.
 2. **`makeappx` needs logos that exist, not logos that are right.** A
-   package with no images does not build, so `rf` writes a placeholder PNG
+   package with no images does not build, so `rustnative` writes a placeholder PNG
    (assembled byte by byte, with correct CRCs and a stored deflate block)
    when the project has no PNG icon. It is a placeholder, and says so.
 
@@ -44,9 +44,9 @@ from 0.9 to 1.x in both new crates, which also resolved a duplicate
 Fifteen unit tests in `framework-build` cover the ICO writer (including a
 256-pixel icon, which an `.ico` records as zero), the manifest's contents
 and its XML escaping, the `.rc` text and its quoting, and SDK discovery.
-Six integration tests in `rf` build a generated project for real and then
+Six integration tests in `rustnative` build a generated project for real and then
 read the results back the way Windows does: `GetFileVersionInfoW` /
-`VerQueryValueW` find the `ProductVersion` `rf.toml` declared,
+`VerQueryValueW` find the `ProductVersion` `rustnative.toml` declared,
 `FindResourceW` finds the `RT_MANIFEST` resource, two packaging runs
 produce a byte-identical zip whose `SHA256SUMS` matches an independently
 computed hash of the executable, `makeappx unpack` round-trips the MSIX and
@@ -80,8 +80,8 @@ The resource path was exercised with the SDK present; the "no SDK" branch
 
 ### What was built
 
-`crates/rf` (package `rf-cli`, binary `rf`): `new`, `build`, `run`,
-`check`, `test`, and `doctor`. `rf.toml` (`config`) describes a project;
+`crates/rustnative` (package `rustnative-cli`, binary `rustnative`): `new`, `build`, `run`,
+`check`, `test`, and `doctor`. `rustnative.toml` (`config`) describes a project;
 `project` creates one from templates and finds the one you are standing in;
 `platform` knows every platform on the roadmap and which has a backend;
 `toolchain` runs Cargo and locates the MSVC build tools and the Windows SDK;
@@ -93,10 +93,10 @@ workspace's lockfile through existing dev-dependencies, all MIT/Apache-2.0.
 
 ### What it found
 
-1. **`trailing_var_arg` alone does not pass flags through.** `rf test
-   --offline` was parsed as `rf`'s own flag and refused; the pass-through
+1. **`trailing_var_arg` alone does not pass flags through.** `rustnative test
+   --offline` was parsed as `rustnative`'s own flag and refused; the pass-through
    argument also needs `allow_hyphen_values`. The test that runs
-   `rf test --offline` caught it.
+   `rustnative test --offline` caught it.
 2. **A speculative `target_triple` had no caller.** It was written to
    return `None` for every platform (the only backend is the host's), which
    clippy correctly read as a method that ignores its receiver. Removed;
@@ -106,14 +106,14 @@ workspace's lockfile through existing dev-dependencies, all MIT/Apache-2.0.
 
 Eleven integration tests run the real binary in real folders: a generated
 project **compiles** (`cargo check --offline` against this workspace) and
-**builds to an executable** (`rf build windows`, and the `.exe` is there);
-`rf.toml` is generated valid and found from a subfolder; each of the six
+**builds to an executable** (`rustnative build windows`, and the `.exe` is there);
+`rustnative.toml` is generated valid and found from a subfolder; each of the six
 platforms without a backend is refused by name with its milestone and exit
-code 3; an unknown platform is a usage error (2); a broken `rf.toml` names
-the field (`app.version`); running outside a project says `rf new`;
+code 3; an unknown platform is a usage error (2); a broken `rustnative.toml` names
+the field (`app.version`); running outside a project says `rustnative new`;
 `doctor --json` is valid JSON that reports this machine's real rustc,
 Cargo, MSVC tools, and SDK paths; `doctor`'s table names the milestones;
-`rf test` passes both filters and flags through to Cargo; and creating a
+`rustnative test` passes both filters and flags through to Cargo; and creating a
 project over an existing folder is refused. Seventeen unit tests cover
 config validation (every invalid field named, unknown fields refused),
 template filling, SDK version comparison, and the exit-code mapping.
@@ -131,7 +131,7 @@ cargo deny check                                                  clean
 
 A machine *without* the MSVC tools or the Windows SDK: `doctor` reports
 what it finds, and the "missing" branches were exercised only by reading
-them, not by uninstalling a toolchain. `rf new` against published crates
+them, not by uninstalling a toolchain. `rustnative new` against published crates
 (`framework-core = "0.1"`) cannot be resolved until the crates are
 published, so the generated-project tests use `--framework-path`.
 
