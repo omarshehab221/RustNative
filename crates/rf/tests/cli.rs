@@ -143,6 +143,10 @@ fn outside_a_project_the_error_says_how_to_make_one() {
     assert!(stderr(&output).contains("rf new"), "{}", stderr(&output));
 }
 
+/// Windows-only: what `doctor` reports about the MSVC toolchain and the
+/// SDK is only true on a machine that has them, and on Linux `doctor`
+/// correctly reports the opposite (and exits non-zero for it).
+#[cfg(windows)]
 #[test]
 fn doctor_reports_this_machine_as_json() {
     let output = rf().args(["doctor", "--json"]).output().expect("rf runs");
@@ -219,6 +223,8 @@ fn creating_over_an_existing_project_is_refused() {
     assert!(stderr(&output).contains("already exists"), "{}", stderr(&output));
 }
 
+/// Windows-only: the executable's name, and the linker that produces it.
+#[cfg(windows)]
 #[test]
 fn building_a_generated_project_produces_an_executable() {
     let project = new_project("builds");
