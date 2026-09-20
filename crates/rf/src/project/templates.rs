@@ -65,9 +65,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 "#;
 
-/// The generated `Cargo.toml`, with `{{dependencies}}` filled in depending
-/// on whether the project is built against a checkout of the framework or
-/// against published versions.
+/// The generated `Cargo.toml`, with `{{dependencies}}` and
+/// `{{build-dependencies}}` filled in depending on whether the project is
+/// built against a checkout of the framework or against published versions.
 pub const CARGO_TOML: &str = r#"[package]
 name = "{{name}}"
 version = "{{version}}"
@@ -77,7 +77,19 @@ publish = false
 
 [dependencies]
 {{dependencies}}
+[build-dependencies]
+{{build-dependencies}}
 "#;
+
+/// The generated `build.rs`, which gives the executable its icon, version
+/// information, and application manifest.
+pub const BUILD_RS: &str = r"//! Embeds this application's icon, version information, and Windows
+//! application manifest, all described by `rf.toml`.
+
+fn main() {
+    framework_build::embed_resources();
+}
+";
 
 /// The generated `.gitignore`.
 pub const GITIGNORE: &str = "/target\n";

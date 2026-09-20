@@ -6,6 +6,7 @@
 //! rf run   <platform> [--release]
 //! rf check [platform]
 //! rf test  [-- cargo test arguments]
+//! rf package <platform> [--format zip|msix|all] [--sign CERT --password-env VAR]
 //! rf doctor [--json]
 //! ```
 //!
@@ -26,6 +27,7 @@ mod cli;
 mod config;
 mod doctor;
 mod error;
+mod package;
 mod platform;
 mod project;
 mod toolchain;

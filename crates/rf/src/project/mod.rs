@@ -56,7 +56,7 @@ impl FrameworkSource {
                 format!("framework-core = \"{version}\"\nframework-windows = \"{version}\"\n")
             }
             Self::Path(path) => {
-                let path = path.display().to_string().replace('\\', "/");
+                let path = normalized(path);
                 format!(
                     "framework-core = {{ path = \"{path}/crates/framework-core\" }}\n\
                      framework-windows = {{ path = \"{path}/crates/framework-windows\" }}\n"
@@ -64,6 +64,23 @@ impl FrameworkSource {
             }
         }
     }
+
+    /// The build-time half: the crate that embeds the icon, version
+    /// information, and application manifest into the executable.
+    fn build_dependencies(&self) -> String {
+        match self {
+            Self::Published(version) => format!("framework-build = \"{version}\"\n"),
+            Self::Path(path) => {
+                let path = normalized(path);
+                format!("framework-build = {{ path = \"{path}/crates/framework-build\" }}\n")
+            }
+        }
+    }
+}
+
+/// A path Cargo reads the same way however it was written.
+fn normalized(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
 }
 
 /// Creates a new project called `name` in `parent`, returning its folder.
@@ -90,8 +107,10 @@ pub fn create(parent: &Path, name: &str, framework: &FrameworkSource) -> Result<
         &root,
         "Cargo.toml",
         &fill(templates::CARGO_TOML, &config)
-            .replace("{{dependencies}}", &framework.dependencies()),
+            .replace("{{dependencies}}", &framework.dependencies())
+            .replace("{{build-dependencies}}", &framework.build_dependencies()),
     )?;
+    write(&root, "build.rs", templates::BUILD_RS)?;
     let rf_toml = toml::to_string_pretty(&config).map_err(|cause| Error::Io {
         what: "write rf.toml".to_owned(),
         cause: std::io::Error::other(cause.to_string()),
@@ -136,12 +155,14 @@ mod tests {
         let parent = scratch("create");
         let root = create(&parent, "demo-app", &FrameworkSource::Published("0.1".to_owned()))
             .expect("created");
-        for file in ["Cargo.toml", "rf.toml", ".gitignore", "README.md", "src/main.rs"] {
+        for file in ["Cargo.toml", "rf.toml", ".gitignore", "README.md", "src/main.rs", "build.rs"]
+        {
             assert!(root.join(file).is_file(), "{file} is generated");
         }
         let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
         assert!(manifest.contains("name = \"demo-app\""));
         assert!(manifest.contains("framework-windows = \"0.1\""));
+        assert!(manifest.contains("[build-dependencies]\nframework-build = \"0.1\""), "{manifest}");
         let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
         assert!(main.contains("com.example.demoapp"), "the app id reaches the source");
         assert!(!main.contains("{{"), "every placeholder is filled: {main}");

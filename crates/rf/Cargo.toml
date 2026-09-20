@@ -20,7 +20,20 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+# Packaging: a reproducible ZIP needs CRC-32 per entry, and `SHA256SUMS`
+# needs SHA-256. Both are small, dependency-free, and widely audited.
+crc32fast = "1"
+sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.9"
+toml = "1"
 
+
+[dev-dependencies]
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dev-dependencies]
+# The packaging tests read a built executable's version resource and
+# manifest back out of it, which is what proves `framework-build` embedded
+# them rather than only writing a script.
+windows-sys = { workspace = true }

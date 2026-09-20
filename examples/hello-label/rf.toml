@@ -1,0 +1,10 @@
+# The example's own project description, read by `framework-build` (which
+# `build.rs` runs) and by `rf`.
+[app]
+name = "hello-label"
+id = "dev.rustnative.hello-label"
+display-name = "Rust Native UI"
+version = "0.1.0"
+publisher = "CN=Rust Native"
+description = "The Rust Native framework's example application"
+url-schemes = ["rustnative"]

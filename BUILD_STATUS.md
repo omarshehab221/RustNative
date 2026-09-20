@@ -2,7 +2,81 @@
 
 ## Current milestone
 
-**Milestone 31 — Developer CLI and project tooling — complete.**
+**Milestone 32 — Packaging and deployment (Windows) — complete.**
+
+### What was built
+
+`crates/framework-build`, run from an application's `build.rs`: it reads
+`rf.toml` and writes the `.ico` (a PNG wrapped into a PNG-compressed icon
+entry — six bytes of header, sixteen of directory, then the PNG, so no
+image library), the application manifest, and the `.rc` carrying both plus
+`VERSIONINFO`, compiles them with the SDK's `rc.exe`, and links the result.
+A machine without the SDK gets a Cargo warning, not a failed build.
+
+`rf package windows --format zip|msix|all [--sign <pfx> --password-env VAR]`:
+a reproducible portable zip (sorted entries, fixed timestamps and
+attributes, stored entries, `SHA256SUMS`), and an MSIX whose
+`AppxManifest.xml` — identity, publisher, version, logos, and one
+`uap:Protocol` per URL scheme from Milestone 30 — comes from the same
+`rf.toml` the running application's state store and single-instance mutex
+use, packed with `makeappx` and optionally signed with `signtool`.
+
+The example now carries its own `rf.toml` and `build.rs`, so the
+framework's own application is built the way it tells others to build
+theirs.
+
+Dependencies: `crc32fast` and `sha2` for the zip's checksums; `toml` moved
+from 0.9 to 1.x in both new crates, which also resolved a duplicate
+`winnow` that `cargo clippy`'s `multiple_crate_versions` flagged.
+
+### What it found
+
+1. **The icon could be built without an image crate.** An `.ico` may hold a
+   PNG directly since Vista, so "convert the icon" is a header and the
+   file's own bytes — no decoding, no resizing, no dependency.
+2. **`makeappx` needs logos that exist, not logos that are right.** A
+   package with no images does not build, so `rf` writes a placeholder PNG
+   (assembled byte by byte, with correct CRCs and a stored deflate block)
+   when the project has no PNG icon. It is a placeholder, and says so.
+
+### Verified, and how
+
+Fifteen unit tests in `framework-build` cover the ICO writer (including a
+256-pixel icon, which an `.ico` records as zero), the manifest's contents
+and its XML escaping, the `.rc` text and its quoting, and SDK discovery.
+Six integration tests in `rf` build a generated project for real and then
+read the results back the way Windows does: `GetFileVersionInfoW` /
+`VerQueryValueW` find the `ProductVersion` `rf.toml` declared,
+`FindResourceW` finds the `RT_MANIFEST` resource, two packaging runs
+produce a byte-identical zip whose `SHA256SUMS` matches an independently
+computed hash of the executable, `makeappx unpack` round-trips the MSIX and
+its manifest (identity, version, executable, `runFullTrust`, logos), and
+signing with a missing certificate is refused before anything is built.
+
+```text
+cargo fmt --all -- --check                                        clean
+cargo clippy --workspace --all-targets --all-features -D warnings clean
+cargo test --workspace                                            passing; 3 ignored (M25, unchanged)
+cargo doc --workspace --no-deps (RUSTDOCFLAGS=-D warnings)        clean
+cargo +1.85 check --workspace --all-targets                       clean
+cargo deny check                                                  clean
+```
+
+### Not verified on this machine
+
+**Signing with a real certificate.** No certificate was created, imported,
+or used: this machine's certificate store is untouched. What is tested is
+the argument construction (SHA-256, the password read from an environment
+variable and never from the command line) and the refusals; `signtool`
+itself was not run against a `.pfx`. The same applies to *installing* the
+MSIX, which requires a signature from a trusted certificate.
+
+The resource path was exercised with the SDK present; the "no SDK" branch
+(a warning, and a build that continues) was read rather than run.
+
+---
+
+## Previous: Milestone 31 — Developer CLI and project tooling — complete.
 
 ### What was built
 

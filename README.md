@@ -12,9 +12,10 @@ This is intentionally closer to the architectural philosophy of React Native tha
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so Web, macOS, Linux, Android, iOS, and embedded targets can later be added as separate adapters. Web is a first-class planned target using WebAssembly, semantic DOM/CSS, browser events, accessibility, and Web APIs rather than a canvas emulator.
 
-The latest completed milestone is **Milestone 31 — Developer CLI**
-(`rf new`, `build`, `run`, `test`, `doctor`), after Milestone 30's
-persistence and navigation, Milestone 29's graphics escape hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
+The latest completed milestone is **Milestone 32 — Packaging and
+deployment** (embedded resources, a reproducible portable zip, and a signed
+MSIX), after Milestone 31's `rf` CLI, Milestone 30's persistence and
+navigation, Milestone 29's graphics escape hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
 Milestone 26's accessibility bridge,
 Milestone 25's advanced input system, and the standards-audit remediation
 pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
@@ -592,6 +593,35 @@ recognized; the ones whose backend does not exist yet say so, with the
 milestone that brings them, and exit with a distinct code rather than
 quietly building for Windows.
 
+## Packaging
+
+An application's `build.rs` is one line:
+
+```rust
+fn main() {
+    framework_build::embed_resources();
+}
+```
+
+which gives the executable its icon, its version information, and the
+Windows application manifest this framework depends on: per-monitor V2 DPI
+awareness, Common Controls v6, and the `supportedOS` entries without which
+layered child windows (animated opacity) and themed tab controls do not
+behave as documented.
+
+`rf` builds what people install:
+
+```sh
+rf package windows --format zip     # reproducible archive + SHA256SUMS
+rf package windows --format msix    # installable package, identity from rf.toml
+rf package windows --format all --sign cert.pfx --password-env CERT_PASSWORD
+```
+
+The zip is byte-identical between builds of the same files, so its
+checksums mean something. The MSIX takes its identity, publisher, version,
+and URL schemes from the same `rf.toml` the running application uses, so a
+package cannot disagree with the program inside it.
+
 ## Text input
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
@@ -660,5 +690,7 @@ cargo test --workspace -- --ignored
 
 The complete master roadmap—including completed milestones, architectural invariants, and all planned future stages—is maintained in [`PLAN.md`](PLAN.md).
 
-The next implementation target is **Milestone 32 — Packaging and
-deployment**. The roadmap then proceeds to additional native backends.
+Milestones 25–32 are complete. The next implementation target is
+**Milestone 33 — the macOS backend**, which needs a macOS machine to build
+and verify on; the roadmap then continues through Linux, Android, iOS, and
+embedded backends.

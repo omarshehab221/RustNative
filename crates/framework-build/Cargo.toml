@@ -1,0 +1,19 @@
+[package]
+name = "framework-build"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Build-script support for Rust Native applications: icons, manifests, and version resources"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords = ["gui", "windows", "build-dependencies", "resources", "manifest"]
+categories = ["development-tools::build-utils", "gui"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1"

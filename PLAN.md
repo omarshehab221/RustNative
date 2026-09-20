@@ -797,18 +797,33 @@ and embedded targets their own toolchains through Cargo.
 
 # 7. Application architecture milestones
 
-## Milestone 32 — Packaging and deployment
+## Milestone 32 — Packaging and deployment (Windows)
 
-Add reproducible packaging for each target:
+Implemented for the platform that has a backend; the other formats
+(macOS bundles, Linux packages, APK/AAB, iOS bundles, firmware images)
+belong to their backends' milestones.
 
-- Windows installer / executable packaging;
-- macOS app bundles;
-- Linux packages/AppImage-style distribution where appropriate;
-- Android APK/AAB;
-- iOS application bundle;
-- embedded firmware/images.
-
-Signing, resource bundling, manifests, icons, and platform metadata belong here.
+- **Resource bundling and manifests**: a new `framework-build` crate, run
+  from an application's `build.rs` (the `rf new` template wires it, and the
+  example uses it). It reads `rf.toml` and produces the executable's icon
+  (a `.png` wrapped into a PNG-compressed `.ico`, so no image library is
+  needed), its `VERSIONINFO`, and its application manifest — per-monitor V2
+  DPI awareness, Common Controls v6, the `supportedOS` entries layered
+  child windows need, UTF-8 as the active code page, and long-path
+  awareness — compiled with the SDK's `rc.exe` and linked in. Without the
+  SDK the build carries on with a warning rather than failing;
+- **Windows executable packaging**: `rf package windows --format zip|msix|all`.
+  The portable zip is reproducible (sorted entries, fixed timestamps and
+  attributes, stored rather than compressed) and carries a `SHA256SUMS`;
+- **Installer packaging**: an MSIX — a generated `AppxManifest.xml` whose
+  identity, publisher, version, logos, and `uap:Protocol` entries come from
+  the same `rf.toml` the application's own identity does, laid out and
+  packed with `makeappx`;
+- **Signing**: `--sign <pfx> [--password-env VAR]` runs `signtool sign /fd
+  SHA256`. The password is read from the named environment variable rather
+  than the command line; `rf` checks the publisher is an X.500 name before
+  building, and `signtool` makes the real comparison against the
+  certificate's subject.
 
 ---
 

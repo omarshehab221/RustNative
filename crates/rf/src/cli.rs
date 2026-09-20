@@ -66,6 +66,20 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         arguments: Vec<String>,
     },
+    /// Build the application and package it for distribution.
+    Package {
+        /// Which platform to package for.
+        platform: Platform,
+        /// Which package to produce.
+        #[arg(long, value_enum, default_value = "all")]
+        format: crate::package::Format,
+        /// A `.pfx` certificate to sign the MSIX with.
+        #[arg(long, value_name = "CERT")]
+        sign: Option<PathBuf>,
+        /// The environment variable holding the certificate's password.
+        #[arg(long, value_name = "VAR", requires = "sign")]
+        password_env: Option<String>,
+    },
     /// Report what this machine can build.
     Doctor {
         /// Print the findings as JSON.
@@ -106,6 +120,27 @@ impl Cli {
                 let mut command = vec!["test".to_owned()];
                 command.extend(arguments);
                 cargo::run(&project.root, command)
+            }
+            Command::Package { platform, format, sign, password_env } => {
+                if platform.backend().is_none() {
+                    return Err(Error::NoBackend {
+                        platform,
+                        milestone: platform.planned_milestone(),
+                    });
+                }
+                let project = Project::find(&here)?;
+                let signing = sign
+                    .map(|certificate| crate::package::sign::Signing { certificate, password_env });
+                let produced = crate::package::package(
+                    &project.root,
+                    &project.config,
+                    format,
+                    signing.as_ref(),
+                )?;
+                for path in produced {
+                    println!("Packaged {}", path.display());
+                }
+                Ok(())
             }
             Command::Doctor { json } => {
                 let report = Report::gather();

@@ -17,3 +17,6 @@ workspace = true
 [dependencies]
 framework-core.workspace = true
 framework-windows.workspace = true
+
+[build-dependencies]
+framework-build.workspace = true
