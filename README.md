@@ -738,3 +738,33 @@ macOS machine to build and verify on and this project has none yet, so the
 order follows hardware availability rather than the numbers. macOS and iOS
 stay fully planned regardless; nothing in the portable layer is designed as
 though they were optional.
+
+Interleaved with the backends, `PLAN.md` section 11 carries the
+production-parity milestones (39–52) in four tiers:
+
+- **Tier 0 (39–40), before the second backend exists** — portable-surface
+  obligations (right-to-left mirroring in the layout model, safe areas,
+  permission states, gesture arbitration, panic and teardown policy, ownership
+  and escape-hatch contracts) and interoperability, so a RustNative tree can be
+  embedded in an existing application and a foreign control embedded in ours.
+  These cost once now and once per backend later.
+- **Tier 1 (41–45), continuous, and part of section 8's definition of a
+  finished backend** — the conformance suites that turn this framework's
+  guarantees into tested ones, CI-enforced budgets, a state-preserving
+  developer loop, a runtime inspection protocol with an inspector, and the
+  headless test backend that lets the application layer be tested without one
+  machine per target.
+- **Tier 2 (46–48), before any public release** — internationalization and
+  localization, shared state, error boundaries, the asynchronous data layer,
+  forms and validation, and a native component library with a design-token
+  pipeline.
+- **Tier 3 (49–52), with and after the Web track** — the server application
+  model, deployment and post-ship updates, observability and compliance, and
+  the stability policy, ecosystem contract, and documentation that decide
+  whether the framework gets a second project.
+
+They come out of the standing analysis in
+[`docs/ecosystem-analysis/`](docs/ecosystem-analysis/), which examines the
+framework families this project is measured against from their substrate
+choices upward — naming no product or vendor, deliberately — and scores this
+codebase layer by layer against them.
