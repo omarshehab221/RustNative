@@ -97,10 +97,10 @@ cost.
 **Opportunities for RustNative.** This archetype is the strongest evidence for
 our L4 position: the industry's own correction was to move toward
 unidirectional data flow, immutable descriptions, and scope-bound asynchronous
-work — which is what `PLAN.md` sections 2.8–2.11 already specify. It is also a
-large migration population, and migration means embedding: a RustNative subtree
-inside an existing native screen is how a team would adopt us without a
-rewrite.
+work — which is what `PLAN.md` sections 2.8 and 2.10–2.12 already specify. It
+is also a large migration population, and migration means embedding: a
+RustNative subtree inside an existing native screen is how a team would adopt
+us without a rewrite.
 
 **Threats.** None directly; the archetype is in maintenance.
 
@@ -124,7 +124,7 @@ clearest real-world confirmation of F0.5's analysis in this entire document.
 
 **Semantics and model (L3–L4).** Tree diffing (F3.1) over a portable layout
 implementation, with the resulting geometry applied to host views — the same
-division of labour `PLAN.md` 2.10 specifies. State and effects follow W1.
+division of labour `PLAN.md` 2.11 specifies. State and effects follow W1.
 
 **Integration (L5–L6).** Good but not host-level: accessibility works through
 mapped properties and lags host semantics; system conventions are approximated

@@ -108,7 +108,7 @@ fidelity, accessibility, and internationalization are nobody's job.
 than magic: dependencies can be values a developer can read. Macros and
 monomorphization give build-time specialization inside the language's own
 toolchain, with stack traces that point at source instead of at emitted code.
-And the transient-state rule (`PLAN.md` 2.9) already gives us the
+And the transient-state rule (`PLAN.md` 2.10) already gives us the
 change-proportional path for exactly the updates that matter most — it is
 currently an implementation practice rather than a contract.
 
@@ -119,7 +119,7 @@ architecture is measured against, fairly or not.
 
 - `W-FG-1` `[X]` Targeted update paths for high-frequency state (text entry,
   scroll offset, animated values, list windows) that mutate host objects with
-  no tree pass, formalized as a contract with tests (`PLAN.md` 2.9 promoted).
+  no tree pass, formalized as a contract with tests (`PLAN.md` 2.10 promoted).
 - `W-FG-2` `[X]` Public, reproducible benchmarks with per-target CI budgets:
   startup, update cost, input latency, memory, artifact size (= `X-L0-1`).
 

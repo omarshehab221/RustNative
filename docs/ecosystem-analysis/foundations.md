@@ -476,7 +476,7 @@ subscription-leak and tracking-rule bugs; compile-time emission cannot avoid
 opaque debugging; fragment replacement cannot preserve client state.
 
 **RustNative's position.** Keyed diffing with stable identity and host-object
-reuse (Milestones 2 and 4), plus the transient-state rule (2.9) that removes
+reuse (Milestones 2 and 4), plus the transient-state rule (2.10) that removes
 the highest-frequency updates from the tree path entirely. That combination is
 the right answer, but the *proof* is missing: nothing currently makes
 over-invalidation a test failure.
@@ -578,6 +578,126 @@ pipeline and a documented semantic-versus-absolute boundary do not.
 - `X-L3-7` `[X]` A design-token pipeline into the theme system, with a
   documented token schema and an explicit split between semantic roles (mapped
   to host appearance) and absolute brand values (applied as-is).
+
+## F3.5 — The authoring surface
+
+**Mechanism, six variants.** Every framework has to decide what a developer
+physically types to describe a tree.
+
+- *Builder or fluent API in the host language.* Constructors and chained
+  modifiers. Nothing new to learn, the full language available, and every tool
+  the language already has — formatter, completion, go-to-definition, error
+  messages — works on day one, because none of it knows anything special is
+  happening.
+- *A markup-extended source dialect.* Whole source files in a superset of the
+  host language in which an element is one more kind of expression, written
+  wherever an expression may go, with no wrapper. The text's shape matches the
+  tree's shape, and this is the form the largest population of UI developers
+  alive already writes every day. The host compiler does not accept the
+  dialect, so a compile step lowers each file first — and everything the host
+  toolchain gave for free must be given back through that step: a source map,
+  diagnostics rewritten onto the dialect file, a language-server layer that maps
+  positions both ways, and a formatter that understands both halves of the file.
+- *Markup inside a delimited host-language construct.* The same element
+  grammar inside a macro or equivalent, in ordinary source files. No compile
+  step and no source map: the construct's tokens keep their real positions, so
+  errors land where they were written under the plain toolchain. It costs a
+  delimiter around every markup region, and it opts out of the host language's
+  formatting and much of its editor assistance inside the delimiters.
+- *A separate template file compiled against the code.* Strong separation and
+  designer-editable artifacts, at the price of a second language with its own
+  scoping and its own type story, and a boundary where type information is
+  easiest to lose.
+- *A brace-based declarative DSL.* Nesting expressed with the host language's
+  own block syntax. Much cheaper to implement than elements; loses the
+  attribute/child distinction and tends to accumulate ad-hoc conventions in
+  place of a grammar.
+- *Generated code from a visual designer.* Fastest start of any variant; the
+  generated artifact becomes the real source of truth, merges badly, and
+  constrains everything above it.
+
+**Strengths and weaknesses.** The builder variant's strength is that it is free
+and complete by construction: there is no surface that can lag, because there
+is no surface. Its weakness is that deeply nested structure stops looking like
+structure. The two markup carriers share the opposite strength and divide the
+cost differently. The dialect is the more natural to write and read, and the
+more familiar, and it pays in tooling: its quality is exactly the quality of
+its source mapping. The delimited construct is cheaper and exact under the
+plain toolchain, and it pays in ergonomics: a wrapper around every region, and
+a formatter and editor that stop at the delimiter unless someone extends them.
+
+**The failure modes, and there are two.** The first is shared by every
+framework that offers *two* surfaces: they rarely stay equal. The second
+surface ships a release later, the documentation settles on whichever one the
+maintainers prefer, examples stop being written in both, a feature lands in one
+and is "coming soon" in the other, and the lagging surface ends up with worse
+errors, no formatter, and a smaller API. This is worse than offering one,
+because the lagging surface is advertised as a choice and is actually a trap —
+a developer discovers the inequality after the codebase is written in it.
+Multiple archetypes across three of the platform families in this analysis
+demonstrate exactly this decay.
+
+The second belongs to the dialect alone: a compile step without complete
+source mapping. Errors that point into generated code, an editor that cannot
+resolve a name inside an element, a formatter that mangles one half of the
+file — each makes the most pleasant surface to write the least pleasant one to
+debug, and each is the default outcome, because the host toolchain will never
+know the dialect exists.
+
+**Ceiling per variant.** A dialect cannot be better than its source map and its
+language-server layer, because every host tool sees only the lowered file; a
+delimited markup construct cannot exceed the diagnostics and formatting its own
+implementers build, because it declined the language's; a builder surface
+cannot make nesting visible; a template file cannot fully recover the type
+information it crosses a boundary to lose; a designer-generated surface cannot
+survive being hand-edited. And no framework can keep two surfaces — or two
+carriers of one surface — equal by intention, only by a test that fails when
+they are not.
+
+**RustNative's position.** `PLAN.md` 2.9 commits to the builder variant and to
+markup as peers, and carries markup both ways: as a dialect (`.rsx` files) for
+code that is mostly UI, and as a delimited construct (`rsx!`) for markup inside
+ordinary source, for crates without a build step, and for runnable API
+documentation. Equality is defined structurally rather than aspirationally, at
+both boundaries:
+
+- between the syntaxes, markup is a compile-time front end that emits builder
+  calls and nothing else, so it cannot carry a capability the builder form
+  lacks, and an equivalence suite asserts that both spellings of every node
+  kind and modifier produce equal values;
+- between the carriers, the dialect's compile step does nothing but wrap each
+  markup expression in the macro and leave every other byte in place, so there
+  is one parser, one lowering, and one set of diagnostics, and a grammar rule —
+  no bare text between tags — keeps anything from being expressible in one
+  carrier and not the other.
+
+That design answers the first failure mode. The second is answered only by
+building the source-map tooling at the same depth as the syntax, which is why
+Milestone 53 treats diagnostics remapping, the language-server proxy, and the
+formatter as part of the syntax rather than as follow-up work. None of it is
+built yet.
+
+- `X-L3-8` `[X]` Capability equality between authoring surfaces, proven by an
+  equivalence suite covering every node kind and every modifier through every
+  carrier, run in CI, and failing when a new constructor or modifier lands in
+  only one of them.
+- `X-L3-9` `[X]` Diagnostics from markup held to the host compiler's quality —
+  spans on the offending attribute or element rather than on a macro
+  invocation or a lowered file, unknown attributes naming what was expected,
+  type errors reported against the attribute's own span — proven by a
+  compile-failure suite run through every carrier rather than by inspection.
+- `X-L3-10` `[X]` Tooling parity for markup: formatting of markup regions,
+  completion, hover and go-to-definition that resolve an attribute to the
+  method it calls, and a command that prints the lowered builder form. A
+  surface with worse tooling is not an equal surface regardless of what its
+  capability table says.
+- `X-L3-11` `[X]` A markup-extended source dialect whose compile step is
+  invisible in use: every diagnostic — from markup and from ordinary host code
+  alike — reported at the dialect file's own position, a language-server layer
+  mapping positions in both directions, a whole-file formatter, and source-map
+  round trips under test. Where the plain host toolchain cannot be made to
+  report dialect positions, the limitation is documented rather than
+  discovered.
 
 ---
 
@@ -763,7 +883,7 @@ control of time and asynchrony.
 
 **Ceiling.** Without a headless backend, component testing requires hardware,
 which caps test coverage at whatever CI can host — the exact problem `PLAN.md`
-2.12 identifies for platforms we cannot verify on.
+2.13 identifies for platforms we cannot verify on.
 
 - `X-L7-5` `[X]` A headless reference backend that realizes the tree into an
   inspectable model, so component, interaction, and golden tests run anywhere.
@@ -776,7 +896,7 @@ which caps test coverage at whatever CI can host — the exact problem `PLAN.md`
 
 # What the foundations imply
 
-Reading the ceilings together produces four conclusions that the platform
+Reading the ceilings together produces five conclusions that the platform
 documents then apply target by target.
 
 1. **Our root choices (F0.4, F1.4, F2.1, F3.3) are correct and defensible, and
@@ -798,3 +918,14 @@ documents then apply target by target.
    fidelity argument (F2.1) is only worth making if it is measured against the
    host's own applications and its own assistive technology — which is a
    testing commitment, not a design one.
+
+5. **Offering two authoring surfaces (F3.5) is an adoption advantage that
+   decays into a liability unless equality is enforced by a test.** The
+   familiar surface is how developers from the largest UI population arrive at
+   all; the builder surface is what the host language gives for free and what
+   programmatic composition needs. Keeping both is worth doing and cheap to get
+   wrong, and every archetype that got it wrong got it wrong the same way — by
+   documenting one and letting the other lag. Carrying the familiar surface as
+   a source dialect adds a second obligation of the same kind: the compile step
+   must be invisible in use, which is a tooling commitment made at the same
+   time as the syntax, not after it.

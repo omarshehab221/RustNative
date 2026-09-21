@@ -43,6 +43,8 @@ Application
       native OS APIs
 ```
 
+That application model has two authoring surfaces, not one. A tree can be written with the builder API or in markup — directly, as an expression anywhere in a `.rsx` source file, or inside the `rsx!` macro in an ordinary `.rs` file — and the two are spellings of the same tree rather than two frameworks bolted together: the markup form expands to the builder form at compile time and adds nothing to the runtime. Both are supported natively, both reach the entire API, and neither is treated as the primary one (2.9).
+
 The framework must not become a lowest-common-denominator abstraction that hides the unique capabilities of each operating system. Portable semantics should be consistent, while platform-specific capabilities remain available through explicit capability APIs and native escape hatches.
 
 ---
@@ -158,21 +160,60 @@ Framework node IDs and component keys provide stable identity across rerenders. 
 
 The application produces a declarative tree. Native objects are a realization of that tree, not an independent source of truth.
 
-### 2.9 Transient interaction state is not a rerender
+### 2.9 One tree, two syntaxes
+
+The tree 2.8 describes has two spellings, and both are first-class ways to write an application:
+
+- a **builder syntax** — `Node::column(...)` and the `with_*` modifiers, which is ordinary Rust: values, method chains, iterators, and functions that return `Node`;
+- a **markup syntax** — elements with typed attributes, nested children, and Rust expressions in braces, written as an expression wherever Rust expects one.
+
+The markup syntax has one grammar and two carriers:
+
+- **`.rsx` files.** A `.rsx` file is Rust with one more kind of expression: an element. Markup is written directly wherever an expression is valid — a `let` initializer, a return value, a closure body, a match arm, an argument — with no wrapper around it. This is the same arrangement as markup-extended source files elsewhere, and it has the same mechanics: the host language's compiler does not accept the extension, so a compile step lowers the file to plain Rust before `rustc` sees it (`framework_build::compile_rsx()`, run from the build script).
+- **The `rsx!` macro.** The same markup, delimited, inside any `.rs` file. It needs no build step, so it is how markup appears in a crate that has none, in a `.rs` module that wants one markup-shaped subtree, and in runnable documentation examples, which `rustdoc` compiles as plain Rust.
+
+```text
+   builder syntax                   markup syntax
+                             ┌───────────┴───────────┐
+   Node::column(..)       .rsx file               .rs file
+                          <Column ..>             rsx! { <Column ..> }
+          │                  │                       │
+          │                  │ compile_rsx()         │
+          │                  │ wraps it in rsx!      │
+          │                  └──────────┬────────────┘
+          │                             │ rsx! expands to
+          └──────────► builder calls ◄──┘
+                             │
+                   Node — the same tree
+```
+
+The carriers share everything but the delimiter. `compile_rsx()` does exactly one thing to a `.rsx` file: it finds each markup expression and wraps it in `rsx!`, leaving every other byte of the file where it was. Parsing, lowering, and diagnostics therefore exist once, in the macro, and a `.rsx` file cannot accept anything the macro rejects or mean anything the macro would not. The grammar is identical by rule as well as by implementation: any element can move between a `.rsx` file and an `rsx!` call without being rewritten.
+
+Neither syntax is a layer over the other. The markup form is a compile-time front end that expands to builder calls and nothing else: it introduces no node kind, no runtime type, no allocation, no indirection, and no capability of its own. Everything downstream — reconciliation, layout, realization, accessibility, animation, virtualization — sees one tree and cannot tell which syntax or carrier produced it, because by construction there is nothing to tell.
+
+Three rules follow, and they are the whole of the principle:
+
+- **Capability equality.** Anything one syntax can express, the other can express. Every attribute is a builder method; every builder method is reachable from markup; `{ }` splices any Rust expression into markup, and `..expr` applies any builder chain to a markup element. A feature is not finished when it works in one syntax.
+- **No compromise in either direction.** Neither syntax is narrowed to keep the other reachable. Markup gets the constructs markup is good at — nesting that matches the tree, conditional and repeated children, fragments, component elements with typed props, and in `.rsx` files, markup as a plain expression with no wrapper. The builder API gets the constructs an API is good at — composition through ordinary functions, iterator pipelines, conditional chaining, extension traits. A translation between them is not required to be literal, and idiomatic code in each will not look like the other.
+- **Equal standing.** Documentation, examples, project templates, the component library, and the conformance suites carry both. Neither is "the real one" with the other as sugar, and neither is presented as the default a developer should prefer.
+
+Equality of this kind decays unless it is tested, so it is: an equivalence suite asserts that both spellings of every documented node kind and modifier produce equal `Node` values (Milestone 41), and the markup diagnostics — reported against the `.rsx` file or the `rsx!` call the developer actually wrote — are held to the same bar as a compiler's (Milestone 53).
+
+### 2.10 Transient interaction state is not a rerender
 
 Examples such as scrolling, focus transitions, pointer movement, and other high-frequency native interaction should update native runtime state directly when possible instead of rebuilding the entire component tree.
 
-### 2.10 Layout is platform-independent
+### 2.11 Layout is platform-independent
 
 The core calculates semantic geometry, constraints, clipping, intrinsic measurement requests, and coordinate spaces. A platform backend applies the resulting geometry to native objects and supplies native measurement capabilities.
 
 A backend whose host does not address space in pixels — a terminal, which addresses it in character cells — converts at its own boundary and reports its measurements in the same unit it converts to, so the core keeps one geometry model rather than one per host.
 
-### 2.11 Async work must respect component lifetime
+### 2.12 Async work must respect component lifetime
 
 Background work must never mutate component state directly from a worker. Results return through the framework scheduler/event loop, and task lifetime must be tied to component lifetime through structured task scopes.
 
-### 2.12 Hardware availability changes the order, not the plan
+### 2.13 Hardware availability changes the order, not the plan
 
 The project does not currently have a macOS machine or an iOS device, so Milestones 33 and 36 cannot be built and verified here yet. That is a scheduling fact, not a scope decision: macOS and iOS remain fully planned platforms, specified at the same depth as the rest, and the core contracts are designed against their documented APIs (AppKit/UIKit view hierarchies, Core Text measurement, `NSAccessibility`/`UIAccessibility`, the Apple toolchains) so that nothing in the portable layer has to be renegotiated when the hardware arrives.
 
@@ -892,6 +933,13 @@ A backend is complete when, in its own host's terms, it realizes:
 - its toolchain and packaging in `rustnative`;
 - its own tests, run against the real host.
 
+Nothing in this section concerns the authoring syntax. Both spellings of the
+tree (2.9) lower to the same `Node` before a backend is reached, so no backend
+implements either one, no backend can behave differently under one of them, and
+a backend author never encounters the markup syntax while writing a backend.
+What a backend does owe is documentation: its own examples are written in both,
+like everything else.
+
 Section 11 adds the gates that apply to every backend from the second one
 onward, and they are part of this definition rather than separate work:
 
@@ -913,7 +961,7 @@ onward, and they are part of this definition rather than separate work:
 - it runs the developer loop of Milestone 43 on its own host, on-device where
   the host is a device.
 
-Two of these — macOS and iOS — cannot be verified on the project's current hardware (2.12). They remain fully planned, and each is finished when it runs on an Apple machine, not before.
+Two of these — macOS and iOS — cannot be verified on the project's current hardware (2.13). They remain fully planned, and each is finished when it runs on an Apple machine, not before.
 
 ## Milestone 33 — macOS backend
 
@@ -930,7 +978,7 @@ Native AppKit interoperability through Rust Objective-C bindings, with the unsaf
 - sandboxing and entitlements expressed as capability answers rather than build flags the application maintains by hand, and window and state restoration driven through the host's own restoration mechanism (Milestone 39);
 - embedding in both directions: our tree realized into a caller-supplied `NSView`, and an `NSView` adopted as a leaf of our tree, laid out and clipped by our layout model (Milestone 40);
 - locale formatting, collation, and right-to-left mirroring delegated to the host's own facilities rather than reimplemented (Milestone 46);
-- verification requires a macOS machine (2.12).
+- verification requires a macOS machine (2.13).
 
 ## Milestone 34 — Linux backend
 
@@ -986,7 +1034,7 @@ Native UIKit interoperability, sharing the Objective-C interop and Core Text wor
 - embedding in both directions against `UIView`, plus the library-only mode for linking the application model into an existing iOS application (Milestone 40);
 - over-the-air update support within the host's rules — which forbid more here than elsewhere, so the milestone states what is permitted rather than assuming parity with other targets (Milestone 50);
 - privacy manifests and data-use declarations generated from the build rather than hand-maintained (Milestone 51);
-- verification requires Apple hardware and a developer account (2.12), and includes the lifecycle conformance suite of Milestone 45.
+- verification requires Apple hardware and a developer account (2.13), and includes the lifecycle conformance suite of Milestone 45.
 
 ## Milestone 37 — Embedded backends
 
@@ -1021,7 +1069,7 @@ A `framework-tui` backend realizing the same application model onto a terminal. 
 
 - **the terminal is the host**: the Windows console API in virtual-terminal mode, and `termios` plus VT sequences on Unix. Alternate screen, cursor control, the terminal's own colour depth (16/256/true colour, detected rather than assumed), text attributes, bracketed paste, focus reporting, and resize notification (`SIGWINCH` or console events);
 - **drawn, not native**: this is the one target where 2.2's native host object is the terminal's own cell grid. Drawing goes through the existing draw-list path quantized to cells, so the framework does not gain a second rendering runtime; a "control" is a drawn widget with the same portable semantics, identity, and events as everywhere else;
-- **geometry in cells**: the conversion happens at the backend boundary (2.10), and measurement is Unicode display width — grapheme clusters, wide East Asian characters, combining marks, and emoji presentation — never byte or character counts;
+- **geometry in cells**: the conversion happens at the backend boundary (2.11), and measurement is Unicode display width — grapheme clusters, wide East Asian characters, combining marks, and emoji presentation — never byte or character counts;
 - **input**: keys with modifiers and function keys (including terminals that cannot report some combinations, which is a capability answer, not a bug), paste, and mouse click/drag/wheel through the SGR protocol where the terminal reports it. No pen, no touch, no gamepad;
 - **focus and traversal** reuse the portable focus model unchanged, including Tab/Shift+Tab and `disabled`;
 - **accessibility belongs to the terminal**: the backend's obligation is a readable, correctly ordered screen and honest capability reporting, not a bridge it cannot provide. Where a terminal exposes an announcement mechanism, live regions from the portable model map onto it;
@@ -1301,6 +1349,12 @@ These should advance continuously rather than waiting for the end.
 Maintain:
 
 - core unit tests;
+- syntax equivalence tests: both spellings of every documented node kind and
+  modifier, asserted to produce equal `Node` values (2.9), with the
+  markup side compiled through both carriers (`.rsx` files and `rsx!`), plus
+  expansion goldens, a compile-failure suite for the markup diagnostics, and
+  `.rsx` compiler tests for disambiguation, context inference, and source-map
+  round trips;
 - reconciliation tests;
 - layout tests;
 - scheduler tests;
@@ -1312,7 +1366,7 @@ Maintain:
 - synthetic-terminal tests for the terminal backend, asserting the cell grid;
 - end-to-end example applications.
 
-Every backend should be testable without its hardware for most of its logic, and untestable-without-hardware work should be recorded as such (2.12) rather than assumed to pass.
+Every backend should be testable without its hardware for most of its logic, and untestable-without-hardware work should be recorded as such (2.13) rather than assumed to pass.
 
 Milestone 45 is what makes that sentence true rather than aspirational, and it
 adds to the list above: a headless reference backend that realizes the tree
@@ -1411,6 +1465,9 @@ The intended final architecture is:
         └── messages
         │
         ▼
+          builder syntax ──┬── markup syntax (.rsx files, rsx!)
+                           │
+                           ▼
                   Declarative UI Tree
                            │
                     Reconciliation
@@ -1433,17 +1490,20 @@ Windows   macOS     Linux    Android     iOS       Web
 
 The Web branch ends in three deployment shapes — client-side, server-rendered, and serverless — from the same tree; the terminal and embedded branches realize that tree onto a cell grid or a display driver. None of them is a reduced version of the application model: they differ in capabilities, not in semantics.
 
+The two authoring surfaces sit at the top of that picture and end at the same place. A builder-written application and a markup-written one produce the same declarative tree, reach the same backends, and are indistinguishable from the reconciler down (2.9). A single application may use both — a screen written in markup can call a function that assembles a subtree with the builder API, and a markup element can be spliced into a builder chain — because there is only one node type between them.
+
 The final framework should feel like a native application framework first and a cross-platform abstraction second: one Rust application model, native operating-system behavior, explicit platform capabilities, and strong compile-time/lifetime guarantees wherever Rust can provide them.
 
 ## Long-range roadmap
 
-Everything through Milestone 32 is complete (section 3). What remains, in the order the backlog is currently expected to be taken up — subject to 2.12, since the order follows hardware availability and contract readiness rather than importance:
+Everything through Milestone 32 is complete (section 3). What remains, in the order the backlog is currently expected to be taken up — subject to 2.13, since the order follows hardware availability and contract readiness rather than importance:
 
 ```text
 core work shared by the remaining targets
   (no_std-capable core subset, non-Send executor seam, host clock)
         ↓
-Tier 0 — portable-surface obligations and interoperability (39–40)
+Tier 0 — the markup syntax, portable-surface obligations, and
+         interoperability (53, 39, 40)
   everything that costs once now and once per backend afterwards
         ↓
 platform backends, each finished by section 8's definition
@@ -1469,7 +1529,7 @@ The cross-cutting work in section 9 — testing, correctness boundaries, perform
 
 ---
 
-# 11. Production-parity milestones (39–52)
+# 11. Production-parity milestones (39–53)
 
 Sections 1–10 specify the framework's architecture and its targets. They do not
 specify the accumulated answers a mature framework is expected to have —
@@ -1494,7 +1554,7 @@ that convention. The sequencing is:
 core work shared by the remaining targets
   (no_std-capable core subset, non-Send executor seam, host clock)
         ↓
-Tier 0   Milestones 39–40        before the second backend exists
+Tier 0   Milestones 53, 39, 40   before the second backend exists
         ↓
 Tier 1   Milestones 41–45        continuous; gates each backend's completion
         ↓                        (folded into section 8's definition of done)
@@ -1505,8 +1565,9 @@ Tier 3   Milestones 49–52        with and after the Web track
 
 One rule binds the order, and it is the reason Tier 0 exists at all:
 **anything that is a per-backend obligation lands before the second backend
-does.** A layout property, a capability shape, a conformance suite, or an
-embedding contract costs once when there is one backend and once per backend
+does.** A layout property, a capability shape, a conformance suite, an
+embedding contract, or an authoring surface every later example and template is
+written in costs once when there is one backend and once per backend
 afterwards. This is section 2.4's argument — widen the contract rather than add
 a conditional — applied to schedule instead of to structure.
 
@@ -1526,6 +1587,200 @@ produced it without re-deriving the argument.
 ---
 
 ## Tier 0 — before the second backend
+
+Listed first in this tier is Milestone 53, whose number is later than its
+peers' for the reason stated above: numbers are identities, not an order.
+
+## Milestone 53 — The markup syntax
+
+2.9 states that the declarative tree has two spellings and that both are
+first-class. One of them exists. This milestone builds the other, and it is
+Tier 0 for the same reason the rest of Tier 0 is: the authoring surface is what
+every later example, template, tutorial, doc test, component-library entry, and
+conformance case is written in. Writing that corpus once and retrofitting a
+second syntax through it costs more than every other item in this tier
+combined, and the cost grows with each backend, each milestone, and each page
+of documentation.
+
+The syntax is a compile-time front end and nothing else. It is therefore
+entirely backend-independent: no backend implements it, none is affected by
+it, and a backend author never encounters it.
+
+Satisfies: `X-L3-8`, `X-L3-9`, `X-L3-10`, `X-L3-11`.
+
+### Why a compile step, and why the macro as well
+
+Markup-extended source files work the same way in every language that has
+them: the host compiler does not understand the extension, so a tool that owns
+the parse lowers the file to the host language first, and the tooling around
+it — errors, the editor, the formatter — maps what the host compiler reports
+back to what the developer wrote. That is not a workaround peculiar to Rust; it
+is the whole mechanism, and the tooling half is most of the work. A `.rsx` file
+is done properly only when a developer never has to look at the lowered file,
+and this milestone is scoped so that they do not.
+
+The macro stays, and not as a fallback. It is the only carrier that needs no
+build step and no tooling beyond the compiler, so it is the right one for a
+crate without a build script, for one markup-shaped subtree in a `.rs` module,
+and for runnable API documentation, which `rustdoc` compiles as plain Rust. It
+is also the single implementation both carriers share: the `.rsx` compiler
+wraps and delegates, and does not parse markup a second way.
+
+### The grammar
+
+One grammar, identical in both carriers, owned by a `framework-markup` library
+crate that the proc macro, the build-script compiler, and the CLI all link:
+
+- **elements are node kinds**: `Column`, `Row`, `Label`, `Button`,
+  `TextInput`, `Canvas`, `Surface`, `TabBar`, `VirtualList` — one element per
+  `Node` constructor, added to in the same commit that adds a constructor;
+- **attributes are builder methods.** `key` is the constructor's key and stays
+  explicit in both syntaxes, because a key is semantic (2.7) and nothing may
+  infer it. `LayoutStyle` and `ColumnStyle`/`RowStyle` fields are flattened
+  into attributes (`width`, `height`, `margin`, `align_self`, `constraints`,
+  `padding`, `gap`, `align_items`, `overflow`); every `with_*` modifier is an
+  attribute of the same name without the prefix (`accessibility`, `style`,
+  `input`, `opacity`, `transition`, `item_index`); `disabled` and `hidden` are
+  present-means-true flags. Values are `name="literal"` or `name={expr}`, and
+  an attribute accepts exactly the type its builder method accepts;
+- **structural constructs in child position**: nested elements, `{expr}` for
+  any `Node` or `IntoIterator<Item = Node>`, `if`/`else`, `match`, `for`, and
+  `<>…</>` fragments for a branch that yields several children. These are the
+  constructs markup is good at, and they are why the markup form is not a
+  transliteration of the builder form;
+- **component elements**: `<Screen key="home" navigator={nav.clone()} />`
+  lowers to `ComponentContext::child_with_props`, with the props struct built
+  from the attributes, so a missing or misspelled prop is a type error at the
+  element;
+- **`..expr`** applies any `FnOnce(Node) -> Node`, which is how an
+  application's own extension-trait modifiers, which the grammar has never
+  heard of, stay reachable from markup;
+- **no bare text.** Text is an attribute (`text="…"`) or a braced expression,
+  never loose characters between tags. A macro receives Rust tokens, and loose
+  prose — one apostrophe is enough — is not a valid token stream. A `.rsx` file
+  could lift that limit, since its compiler owns the parse, and deliberately
+  does not: the moment one carrier accepts something the other cannot, an
+  element can no longer move between them unchanged, and "one grammar" stops
+  being true. The rule has a second benefit — every `.rsx` file is a valid Rust
+  token stream, which is what lets its compiler reuse the host language's own
+  lexer rather than maintain one.
+
+### Carrier 1 — `.rsx` files
+
+- **markup is an expression.** In a `.rsx` file an element may appear wherever
+  Rust accepts an expression — a `let` initializer, a function's tail, a
+  `return`, a closure body, a match arm, a call argument, a struct field, an
+  array element — with no wrapper. Everything else in the file is ordinary
+  Rust, and a `.rsx` file with no markup in it is a `.rs` file with a different
+  extension;
+- **the disambiguation rule, stated once.** In expression-start position, `<`
+  followed by an identifier or by `>` begins an element; a qualified path
+  (`<T>::item`, `<T as Trait>::item`) is recognized by the `::` or `as` that
+  follows and stays Rust. `<` after an expression is always a comparison, and
+  `<` in type position is always generics. The file is parsed by a Rust
+  expression parser extended with that one primary expression, not scanned
+  with token heuristics, so the rule is exact rather than usually right;
+- **the component context is found, not written.** A component element needs
+  the `ComponentContext` it composes through. A macro cannot see the function
+  it is called in, so `rsx!` takes the context explicitly (below). The `.rsx`
+  compiler can, so it uses the enclosing function's `ComponentContext`
+  parameter; a function with none, or with more than one, is a compile error at
+  the component element, and the fix is the macro form with an explicit
+  context — which is valid in a `.rsx` file, since a `.rsx` file is Rust;
+- **the lowering is a wrap.** `framework_build::compile_rsx()`, one line in the
+  build script beside `embed_resources()`, compiles every `.rsx` file under
+  `src/` into `OUT_DIR`, emitting it byte for byte except that each markup
+  expression becomes `::framework_core::rsx!(…)` around the original text, with
+  the inferred context supplied. Lines never move, so the map from the lowered
+  file back to the source is a column offset on the lines that contain markup,
+  recorded in a source map beside the output;
+- **modules.** A `.rsx` module is declared with `rsx_mod!(inbox);`, which
+  expands to the module that includes the lowered file, so the module tree
+  reads the way it would with `mod inbox;`. `mod` declarations inside a `.rsx`
+  file are rewritten by the compiler to explicit paths, so a `.rsx` module can
+  have `.rs` and `.rsx` children alike. A crate root stays `.rs`, because Cargo
+  hands it to `rustc` directly;
+- **incremental and cached.** Each file is recompiled only when it changes,
+  `rerun-if-changed` is emitted per file, and the cost sits in Milestone 42's
+  build-time budget like any other part of the build;
+- **diagnostics land on the `.rsx` file.** `rustnative build`, `check`, and
+  `test` run Cargo with structured diagnostics and rewrite every span that
+  falls in a lowered file — errors from the markup and ordinary Rust errors
+  alike — back through the source map, so the developer is shown the file,
+  line, and column they wrote. Plain `cargo build` still works and reports
+  positions in the lowered file, whose header names its source; that is the one
+  place the compile step shows through, it is stated here rather than
+  discovered, and it is why the CLI is the documented way to build a `.rsx`
+  project;
+- **editor support is a proxy, not a fork.** `rustnative lsp` presents `.rsx`
+  files to the editor and forwards to the Rust language server over the lowered
+  files, mapping positions in both directions through the same source map —
+  completion, hover, go-to-definition, rename, and diagnostics included. It
+  owns only what is markup: element and attribute completion, and hover that
+  names the builder method an attribute calls;
+- **formatting.** `rustnative fmt` formats a `.rsx` file whole: the Rust in it
+  through `rustfmt`, the markup in it with the same markup formatter the
+  `rsx!` carrier uses, so one project has one style.
+
+### Carrier 2 — the `rsx!` macro
+
+- **`rsx!`**, in a `framework-macros` proc-macro crate that is a thin shell
+  over `framework-markup`, re-exported from `framework-core` behind a
+  default-on `markup` feature — default-on so it is not a second-class opt-in,
+  and a feature so the constrained profiles of Milestone 37 can drop a
+  proc-macro dependency they cannot afford. `.rsx` files lower to `rsx!`, so
+  turning the feature off turns off both carriers together;
+- **explicit context.** A tree containing component elements names its context
+  with a leading `in context,` — `in` is a reserved word, so it cannot collide
+  with an element name — and a tree without component elements omits it;
+- **spans are native.** Tokens handed to a proc macro keep their source
+  positions, so errors inside `rsx!` point at the attribute or element in the
+  `.rs` file with no remapping, under plain `cargo` as well as under the CLI;
+- **`rsx!` evaluates to a `Node`**, so any builder chain applies to a markup
+  tree directly and any markup tree is a builder expression.
+
+### Shared by both carriers
+
+- **diagnostics at compiler quality**: spans that point at the offending
+  attribute or element rather than at the macro call or the lowered file, an
+  unknown attribute that names the builder method it was looking for, a type
+  mismatch reported against the attribute's own span, and an unclosed or
+  mismatched element reported at the opening tag. Held by a compile-failure
+  suite run through both carriers, not by inspection;
+- **`rustnative expand`** prints the builder form a markup tree lowers to, from
+  either carrier;
+- **the equivalence suite**: for every node kind and every modifier, the
+  builder spelling and the markup spelling are asserted to produce equal `Node`
+  values, with each markup case compiled once from a `.rsx` file and once
+  through `rsx!`. `Node` already derives `PartialEq`, so this is a direct
+  assertion, and a new constructor or modifier without both spellings fails the
+  suite (Milestone 41 owns it thereafter);
+- **compiler tests for the `.rsx` carrier**: the disambiguation rule, context
+  inference and both of its error cases, byte-for-byte preservation outside
+  markup, source-map round trips for every diagnostic position, and module
+  paths;
+- **expansion goldens**, so that a change to the lowering is a visible diff
+  rather than a silent one, and so that the "expands to builder calls and
+  nothing else" claim of 2.9 is checkable;
+- **`rustnative new --syntax builder|markup`**, with no default. The generator
+  does not pick a side on the developer's behalf; the markup template is
+  written in `.rsx` files with `compile_rsx()` already in its build script, and
+  both templates are the same application;
+- **the documentation obligation**: every example in `README.md`, `PLAN.md`,
+  and the guides exists in both syntaxes, the markup side written as it appears
+  in a `.rsx` file; every runnable doc example on a public API exists in both,
+  the markup side through `rsx!` because that is what `rustdoc` compiles. A
+  public API gains both or neither. This roughly doubles the doc-test count,
+  which is the intended cost.
+
+**Done when** the equivalence suite covers every node kind and modifier
+through both carriers, the compile-failure suite covers every diagnostic above
+through both carriers, a diagnostic from a `.rsx` file is reported at its
+source position by `rustnative build` and by the editor, `rustnative fmt` and
+`rustnative expand` work on both carriers, both project templates build and
+run, and no documented example exists in only one syntax.
+
+**Depends on** nothing. Like Milestone 39, it is deliberately early.
 
 ## Milestone 39 — Portable-surface obligations
 
@@ -1636,10 +1891,16 @@ marketing; a tested one is the difference between this framework and the
 archetypes that must re-implement what it inherits. This milestone converts
 each claim into a suite.
 
-Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L2-1`, `X-L2-2`,
-`X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`, `D-FP-2`,
-`M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`.
+Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L2-1`,
+`X-L2-2`, `X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`,
+`D-FP-2`, `M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`.
 
+- **syntax equivalence as a standing guarantee** (2.9): the equivalence suite
+  Milestone 53 creates — builder against markup, with the markup compiled from
+  a `.rsx` file and through `rsx!` — moves here and stays here, so that a node kind or
+  modifier added later in one syntax and not the other fails the build rather
+  than quietly making one surface smaller than the other. This is the only
+  mechanism that keeps two authoring surfaces equal over years;
 - **an invalidation contract**: a document stating exactly which subtrees
   re-render for each kind of change, and tests that fail when a change
   re-renders more of the tree than the contract allows;
@@ -1647,7 +1908,7 @@ Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L2-1`, `X-L2-2`,
   prop, resource, or effect responsible, with a component path — the diagnostic
   that competing archetypes provide through reflection and this one must
   provide deliberately;
-- **the transient-state fast path as a contract** (2.9): text entry, scroll
+- **the transient-state fast path as a contract** (2.10): text entry, scroll
   offset, animated values, and list windows mutate host objects with no tree
   pass, stated as a guarantee with tests rather than left as a practice;
 - **scope-bound cancellation as a public guarantee**: no task observes or
@@ -1726,7 +1987,7 @@ pillar developers cite most when choosing between two otherwise equivalent
 frameworks, so leaving it unaddressed loses evaluations before anything else is
 examined.
 
-Satisfies: `X-L7-1`, `X-L7-2`, `M-BR-4`, `E-PR-1`.
+Satisfies: `X-L7-1`, `X-L7-2`, `X-L3-10`, `X-L3-11`, `M-BR-4`, `E-PR-1`.
 
 - **rebuild and restart with application state preserved**: state serialized
   before teardown and restored into the new process, so the developer stays
@@ -1746,7 +2007,15 @@ Satisfies: `X-L7-1`, `X-L7-2`, `M-BR-4`, `E-PR-1`.
   running application, with flashing, logging, and restart included;
 - **a measured first-hour target**: project creation to running on a device in
   three commands or fewer, documented and tested as a number rather than
-  claimed.
+  claimed;
+- **editor assistance that does not stop at a syntax boundary**: in a `.rsx`
+  file through `rustnative lsp`, and inside `rsx!` in a `.rs` file,
+  completion offers the element's attributes, hover shows the builder method an
+  attribute calls, go-to-definition reaches it, and a diagnostic is anchored to
+  the attribute the developer wrote rather than to a macro call or a lowered
+  file. A developer who chooses the
+  markup syntax must not get a worse loop for it (2.9), and the same applies in
+  reverse — neither surface is allowed to become the one with tooling.
 
 **Done when** the loop's wall-clock time is in the budget file and is met on
 every shipped backend, including at least one device target.
@@ -1786,7 +2055,7 @@ embedded in reduced form, and the inspector is part of the shipped CLI.
 
 ## Milestone 45 — Test infrastructure
 
-Section 2.12 caps verification at the hardware this project has. A headless
+Section 2.13 caps verification at the hardware this project has. A headless
 backend lifts most of that cap for everything above the realization layer, and
 it is the prerequisite for testing the application layer built in Tier 2 —
 which is otherwise untestable without one machine per target.
@@ -1839,7 +2108,13 @@ Satisfies: `X-L5-3`, `X-L5-4`.
   translated;
 - **compile-time-checked placeholders**: a message and its arguments are
   checked together, which is a capability the dynamic-substrate archetypes
-  cannot offer;
+  cannot offer, and which reaches both authoring surfaces identically — a
+  message reference is an ordinary expression in a builder call and in a markup
+  attribute, so a literal string left untranslated is the same lint in both;
+- **extraction that reads both syntaxes**: the string extractor walks builder
+  calls, `.rsx` files, and `rsx!` trees alike, because a catalogue that misses half the
+  application's strings depending on how a screen was written is worse than no
+  extractor;
 - **locale-aware formatting delegated to host facilities** where they exist —
   numbers, dates, currencies, units, collation, and casing — rather than
   reimplemented per backend, consistent with the text-stack position in 2.2;
@@ -1917,7 +2192,9 @@ Satisfies: `X-UI-1`, `X-UI-2`, `X-VIZ-1`, `D-SD-1`, `E-GUI-3`.
 
 - **a component library** covering the controls applications need, realized
   natively per backend, with the accessibility semantics of each one
-  documented and asserted;
+  documented and asserted, and with every component usable — and documented —
+  as a builder call and as a markup element (2.9). A component library that is
+  comfortable in only one syntax would silently make that syntax the default;
 - **a design-token pipeline** feeding the existing theme system, with a
   documented token schema and an explicit split between semantic roles — mapped
   to host appearance — and absolute brand values applied as given. A token
@@ -2104,17 +2381,22 @@ Satisfies: `W-MF-8`, `X-DOC-1`, `X-DOC-2`, `X-ECO-1`, `X-ECO-2`, `E-RS-3`,
   its space is complained about for exactly this, and the complaint is
   answerable;
 - **task-oriented guides and a published generated API reference**, with a
-  runnable example per subsystem and per supported board;
+  runnable example per subsystem and per supported board — every one of them in
+  both syntaxes, presented side by side rather than in separate builder and
+  markup editions, so that neither becomes the documented path and the other
+  the appendix (2.9);
 - **a third-party capability package contract**: a community-authored service
   or control implementing a portable contract with per-backend code,
   discoverable and versioned, usable without forking the framework. Without
   this there is no ecosystem, and the one asymmetry running against this
   project stays open;
 - **a machine-readable description of the framework** — component and service
-  contracts, capabilities, events, and layout semantics — so code-generating
-  tools produce correct code rather than plausible code. This is increasingly
-  decisive and is cheap to maintain if it is generated from the same source as
-  the API reference;
+  contracts, capabilities, events, layout semantics, and the element/attribute
+  vocabulary of the markup syntax with the builder method each attribute calls
+  — so code-generating tools produce correct code rather than plausible code,
+  in whichever syntax they are asked for. This is increasingly decisive and is
+  cheap to maintain if it is generated from the same source as the API
+  reference;
 - **a stated non-duplication policy toward the embedded ecosystem**: the
   `Executor` contract demonstrated against an existing embedded async
   executor, peripheral access and HAL traits consumed rather than reimplemented,
@@ -2140,7 +2422,8 @@ of the target range.
 Nothing in section 11 overrides sections 1–2. The architecture is unchanged:
 Rust owns application semantics, the OS owns the native UI, every target is
 first-class, the core stays platform-independent, capabilities replace platform
-conditionals, and a backend advertises only what it genuinely realizes. These
+conditionals, a backend advertises only what it genuinely realizes, and the
+declarative tree has two equal spellings that produce the same tree. These
 milestones exist because that architecture is necessary and not sufficient —
 they are what turns a correct framework into a chosen one.
 

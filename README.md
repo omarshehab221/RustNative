@@ -8,6 +8,15 @@ The project is being developed around one core idea:
 
 This is intentionally closer to the architectural philosophy of React Native than to a custom-rendered toolkit. The framework does not paint an imitation of every operating system. It maintains a declarative Rust UI/component model and realizes that model through native platform objects.
 
+That model is written in one of two syntaxes, and they are peers. A **builder
+syntax** of constructors and `with_*` modifiers, and a **markup syntax** —
+elements, attributes, and nested children written directly as expressions in
+`.rsx` files, the way anyone arriving from JSX or TSX would expect, or inside
+the `rsx!` macro in an ordinary `.rs` file. Neither syntax wraps the other:
+markup expands to the builder form at compile time, so both produce the same
+tree, reach the same API, and cost the same at runtime. See
+[Two syntaxes](#two-syntaxes).
+
 ## Current status
 
 The current working backend is Windows/Win32. The framework core is designed to remain platform-independent so macOS, Linux, Android, iOS, Web, terminal, and embedded targets are added as separate adapters, each planned to the same depth: native host objects, native measurement, native input, native accessibility, its own toolchain and packaging.
@@ -41,6 +50,9 @@ verified, what it found while doing so, and what is still open.
         └── messages
         │
         ▼
+        builder syntax  ──┬──  markup syntax (.rsx files, rsx!)
+                          │
+                          ▼
                   Declarative UI Tree
                            │
                        Tree Diff
@@ -59,6 +71,234 @@ verified, what it found while doing so, and what is still open.
 
 The runtime also carries theme/style data and portable capability discovery;
 platform-specific APIs remain behind explicit service and native-extension boundaries.
+
+## Two syntaxes
+
+A tree can be written two ways. Both are part of the framework, both reach all
+of it, and neither is a wrapper over the other.
+
+**Builder** — ordinary Rust: constructors, `with_*` modifiers, method chains,
+and functions that return `Node`.
+
+```rust
+// inbox.rs
+fn view(&self) -> Node {
+    Node::column_with_layout(
+        "root",
+        [
+            Node::label("title", "Inbox"),
+            Node::button("compose", "Compose").disabled(self.offline),
+        ],
+        LayoutStyle::new().width(SizeMode::Fill),
+        ColumnStyle::new().padding(EdgeInsets::all(24)).gap(12),
+    )
+}
+```
+
+**Markup** — the same tree as elements, written directly as an expression in a
+`.rsx` file.
+
+```rust
+// inbox.rsx
+fn view(&self) -> Node {
+    <Column key="root" width={SizeMode::Fill} padding={EdgeInsets::all(24)} gap={12}>
+        <Label key="title" text="Inbox" />
+        <Button key="compose" text="Compose" disabled={self.offline} />
+    </Column>
+}
+```
+
+Those two produce the same `Node` — not an equivalent one, the same one, and
+the test suite asserts it with `==`.
+
+### Where markup can be written
+
+A `.rsx` file is Rust with one more kind of expression. An element can go
+anywhere Rust accepts an expression — a function's tail, a `let`, a `return`,
+a closure body, a match arm, an argument — with nothing around it, the way
+markup is written in the markup-extended source files of other languages.
+Everything else in the file is ordinary Rust.
+
+The same markup can also be written inside the `rsx!` macro in any `.rs` file:
+
+```rust
+// any .rs file
+let header = rsx! { <Label key="title" text="Inbox" /> };
+```
+
+These are two carriers of one grammar, not two syntaxes. Any element moves
+between a `.rsx` file and an `rsx!` call without a character changing, and they
+are one implementation: building a `.rsx` file wraps each markup expression in
+`rsx!` and leaves every other byte where it was, so a `.rsx` file cannot accept
+anything the macro rejects or mean anything it would not.
+
+They exist because each is the right tool somewhere:
+
+- **`.rsx` files** are for code that is mostly UI — a screen, a component, a
+  view module — where markup is simply how the file is written;
+- **`rsx!`** is for markup inside a `.rs` file, for crates without a build
+  script, and for runnable API documentation, which `rustdoc` compiles as plain
+  Rust.
+
+### How `.rsx` files build
+
+Rust's compiler does not understand markup, just as a JavaScript engine does
+not; in both cases a compile step lowers the file first, and the tooling maps
+everything back. For a RustNative project that step is one line of the build
+script, beside the one that embeds resources:
+
+```rust
+// build.rs
+fn main() {
+    framework_build::embed_resources();
+    framework_build::compile_rsx(); // every .rsx file under src/
+}
+```
+
+and a `.rsx` module is declared with `rsx_mod!(inbox);` where a `.rs` module
+would use `mod inbox;`. The crate root stays `main.rs` or `lib.rs`.
+
+The lowered files live in `target/` and nobody should need to open them:
+
+- `rustnative build`, `check`, and `test` report every error — from markup or
+  from ordinary Rust — at the `.rsx` file, line, and column you wrote;
+- `rustnative lsp` gives editors completion, hover, go-to-definition, rename,
+  and diagnostics in `.rsx` files, by forwarding to the Rust language server
+  and mapping positions both ways;
+- `rustnative fmt` formats a `.rsx` file whole — its Rust through `rustfmt`,
+  its markup with the same formatter `rsx!` uses;
+- `rustnative expand` prints the builder form any markup lowers to.
+
+Plain `cargo build` still works; it reports positions in the lowered file,
+whose header names the source. That is the one place the compile step shows
+through, which is why the CLI is the documented way to build a `.rsx` project.
+`rsx!` has no such seam — a proc macro keeps its tokens' real positions, so its
+errors land on the `.rs` file under plain `cargo` too.
+
+### Why the two syntaxes cannot drift apart
+
+Markup is a compile-time front end that expands to builder calls and nothing
+else. It adds no node kind, no runtime type, no allocation, no indirection, and
+no capability of its own. Everything downstream — reconciliation, layout,
+native realization, accessibility, animation, virtualization — sees one tree
+and cannot tell which syntax produced it, because there is nothing to tell.
+
+That is what makes the guarantees below structural rather than a promise
+somebody has to keep:
+
+- **Every attribute is a builder method.** `key` is the constructor's key, and
+  it stays explicit in both syntaxes because a key is semantic and nothing may
+  infer it. `LayoutStyle` and `ColumnStyle`/`RowStyle` fields flatten into
+  attributes — `width`, `height`, `margin`, `align_self`, `constraints`,
+  `padding`, `gap`, `align_items`, `overflow`. Every `with_*` modifier is an
+  attribute of the same name without the prefix. `disabled` and `hidden` are
+  present-means-true flags.
+- **Every builder method is reachable from markup.** Beyond the attribute
+  mapping, `..expr` applies any `FnOnce(Node) -> Node`, which is how an
+  application's own extension-trait modifiers — which the grammar has never
+  heard of — stay available.
+- **Every markup tree is a builder expression.** An element evaluates to a
+  `Node`, so a builder chain applies to it directly, and `{expr}` splices any
+  `Node` or iterator of nodes into markup.
+- **A feature is not finished in one syntax.** A new node kind or modifier
+  lands with both spellings and an equivalence case — compiled through a `.rsx`
+  file and through `rsx!` — or the build fails.
+
+Text is always an attribute or a braced expression, never loose characters
+between tags. A macro receives Rust tokens, and loose prose is not valid Rust
+tokens; a `.rsx` file could allow it, and deliberately does not, because the
+moment one carrier accepts something the other cannot, markup stops moving
+between them unchanged.
+
+### Each at full strength
+
+Neither form is a transliteration of the other. Markup gets the constructs
+markup is good at — structure that mirrors the tree, conditional and repeated
+children, fragments, component elements with typed props:
+
+```rust
+// inbox.rsx
+fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+    <Column key="inbox" gap={8}>
+        <FolderHeader key="header" title={self.folder.name.clone()} unread={self.unread} />
+        if self.messages.is_empty() {
+            <Label key="empty" text="Nothing here" />
+        } else {
+            for message in self.messages.iter().filter(|m| m.matches(&self.query)) {
+                <Row key={message.id.to_string()} gap={12} ..{ |row| row.unread(message.unread) }>
+                    <Label key="from" text={message.from.clone()} />
+                    <Label key="subject" text={message.subject.clone()} />
+                </Row>
+            }
+        }
+    </Column>
+}
+```
+
+`<FolderHeader/>` is a component element. `title` and `unread` are that
+component's props, so a missing or misspelled one is a compile error at the
+attribute, and it composes through `render`'s `ComponentContext` — the `.rsx`
+compiler finds that parameter itself. Inside `rsx!`, which cannot see the
+function it is in, the context is named instead: `rsx! { in context, … }`.
+
+The builder API gets the constructs an API is good at — composition through
+ordinary functions, iterator pipelines, conditional chaining, and extension
+traits that read as part of the framework:
+
+```rust
+// inbox.rs
+fn message_row(message: &Message) -> Node {
+    Node::row_with_layout(
+        message.id.to_string(),
+        [
+            Node::label("from", message.from.clone()),
+            Node::label("subject", message.subject.clone()),
+        ],
+        LayoutStyle::new(),
+        RowStyle::new().gap(12),
+    )
+    .unread(message.unread) // the application's own extension trait
+}
+
+fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+    Node::column_with_layout(
+        "inbox",
+        iter::once(context.child_with_props(
+            "header",
+            FolderHeaderProps { title: self.folder.name.clone(), unread: self.unread },
+            FolderHeader::new,
+        ))
+        .chain(match self.messages.len() {
+            0 => vec![Node::label("empty", "Nothing here")],
+            _ => self.messages.iter().filter(|m| m.matches(&self.query)).map(message_row).collect(),
+        }),
+        LayoutStyle::new(),
+        ColumnStyle::new().gap(8),
+    )
+}
+```
+
+Because there is one node type between them, an application may use both. A
+`.rsx` screen can splice in a subtree assembled by a builder function, and a
+builder chain can be applied to an element — which is what the navigation
+example further down actually does.
+
+### How this repository reads
+
+Every example below appears in both syntaxes, labelled **Builder** and
+**Markup**, with the markup written as it appears in a `.rsx` file; in a `.rs`
+file the same markup goes inside `rsx! { … }`. The order inside each pair is
+alphabetical and means nothing else. Neither syntax is the default, and the
+CLI's project templates require you to choose (`rustnative new --syntax
+builder|markup`) rather than choosing for you.
+
+**Status.** The builder syntax is implemented and verified through Milestone 32
+and is what the examples in `examples/` are written in. The markup syntax —
+`.rsx` files and `rsx!` alike — is specified at implementable depth and is
+**Milestone 53**; the markup in this repository is that specification and does
+not compile yet. `PLAN.md` 2.9 states the contract it is held to, and
+`BUILD_STATUS.md` records its status the same way it records everything else
+this project has not yet run.
 
 ## Crate boundaries
 
@@ -108,6 +348,35 @@ RustNative/
 │   │   │   └── property_tests.rs
 │   │   └── benches/
 │   │       └── core_benchmarks.rs
+│   │
+│   ├── framework-markup/             (Milestone 53: the markup grammar, once)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── parse/                (elements, attributes, children,
+│   │       │                          control flow, fragments, spreads)
+│   │       ├── vocabulary.rs         (element -> constructor,
+│   │       │                          attribute -> builder method)
+│   │       ├── lower.rs              (element tree -> builder calls)
+│   │       ├── rsx_file.rs           (.rsx: find markup expressions, wrap
+│   │       │                          them in rsx!, record the source map)
+│   │       ├── source_map.rs         (lowered position <-> .rsx position)
+│   │       └── diagnostics.rs        (spans and messages)
+│   │
+│   ├── framework-macros/             (Milestone 53: `rsx!`, a thin proc-macro
+│   │   │                              shell over framework-markup,
+│   │   │                              re-exported from framework-core)
+│   │   ├── Cargo.toml
+│   │   ├── src/lib.rs
+│   │   └── tests/
+│   │       ├── equivalence.rs        (builder, .rsx, and rsx! spellings,
+│   │       │                          asserted equal)
+│   │       ├── rsx_files/            (the same cases as .rsx files)
+│   │       ├── expansion/            (expansion goldens)
+│   │       └── ui/                   (compile-failure suite, both carriers)
+│   │
+│   ├── framework-build/              (build-script helpers: resources today;
+│   │                                  `compile_rsx()` in Milestone 53)
 │   │
 │   └── framework-windows/
 │       ├── Cargo.toml
@@ -180,6 +449,41 @@ Contains the portable runtime and UI model:
 - multiple independently owned window roots and window lifecycle state.
 
 It must not import Windows or any other operating-system API.
+
+### The markup crates: `framework-markup`, `framework-macros`, and `compile_rsx`
+
+The markup syntax is three thin pieces over one implementation, all planned for
+Milestone 53:
+
+- **`framework-markup`** owns the grammar, once: one element per `Node`
+  constructor — `Column`, `Row`, `Label`, `Button`, `TextInput`, `Canvas`,
+  `Surface`, `TabBar`, `VirtualList` — plus component elements, which lower to
+  `ComponentContext::child_with_props`; one attribute per builder method or
+  style field, carrying that method's exact type; the structural constructs
+  (nested children, `{expr}`, `if`/`else`, `match`, `for`, `<>…</>`
+  fragments, `..expr` spreads); the lowering to builder calls; and the
+  diagnostics. It also knows how to read a `.rsx` file: a Rust parser extended
+  with one expression form, which finds each markup expression, wraps it in
+  `rsx!`, and records the source map.
+- **`framework-macros`** is `rsx!`: a proc-macro shell over
+  `framework-markup`, re-exported from `framework-core` behind a default-on
+  `markup` feature — on by default so the syntax is not a second-class opt-in,
+  and a feature so the constrained embedded profiles can drop a proc-macro
+  dependency they cannot afford.
+- **`framework_build::compile_rsx()`** runs that wrapping step for every
+  `.rsx` file from the build script, and `rustnative` uses the same source map
+  to put every diagnostic, editor position, and formatting edit back on the
+  `.rsx` file.
+
+Diagnostics are held to compiler quality by a compile-failure suite run
+through both carriers: the span points at the offending attribute or element —
+never at the macro call or the lowered file — an unknown attribute names the
+builder method it was looking for, and a type mismatch is reported against the
+attribute's own span.
+
+None of it touches the runtime. Markup emits builder calls, so it cannot add
+behaviour the builder syntax does not already have, and the `equivalence`
+tests are what keep that true as the node API grows.
 
 ### `framework-windows`
 
@@ -394,9 +698,19 @@ Scroll position is transient runtime state and does not itself trigger a compone
 Beyond clicks, keys, text, and focus — which every node receives — a node opts
 into the higher-frequency streams it actually wants:
 
+**Builder**
+
 ```rust
 Node::column("canvas", children)
     .with_input(InputInterest::new().pointer().gestures().wheel())
+```
+
+**Markup**
+
+```rust
+<Column key="canvas" input={InputInterest::new().pointer().gestures().wheel()}>
+    {children}
+</Column>
 ```
 
 A backend delivers those streams only to interested nodes, walking up from
@@ -456,18 +770,35 @@ screen reader in another process reaches the application.
 
 A value can change over time without the component tree knowing. Two ways in:
 
+A transition — whenever this node's opacity changes, animate to the new value
+over 120 ms rather than jumping to it.
+
+**Builder**
+
 ```rust
-// A transition: whenever this node's opacity changes, animate to the new
-// value over 120 ms rather than jumping to it.
 Node::column("panel", [])
     .with_opacity(if pressed { 0.6 } else { 1.0 })
     .with_transition(
         AnimatedProperty::Opacity,
         Transition::new(Duration::from_millis(120)),
-    );
+    )
+```
 
-// An explicit animation, requested from a component: a spring back to the
-// laid-out position, starting 24 px to the right of it.
+**Markup**
+
+```rust
+<Column
+    key="panel"
+    opacity={if pressed { 0.6 } else { 1.0 }}
+    transition={(AnimatedProperty::Opacity, Transition::new(Duration::from_millis(120)))}
+/>
+```
+
+An explicit animation is requested from the component rather than described on
+a node, so it is the same call in either syntax: a spring back to the laid-out
+position, starting 24 px to the right of it.
+
+```rust
 context.animations().animate(
     "panel",
     Animation::new(
@@ -507,6 +838,8 @@ motion is reduced.
 
 A list of a hundred thousand items realizes a screenful of native windows:
 
+**Builder**
+
 ```rust
 Node::virtual_list(
     "rows",
@@ -515,6 +848,16 @@ Node::virtual_list(
         Node::label(format!("row-{index}"), format!("Row {index}")).with_item_index(index)
     }),
 )
+```
+
+**Markup**
+
+```rust
+<VirtualList key="rows" count={100_000} extent={ItemExtent::Fixed(24)}>
+    for index in self.range.indices() {
+        <Label key={format!("row-{index}")} text={format!("Row {index}")} item_index={index} />
+    }
+</VirtualList>
 ```
 
 The component renders only `self.range`, which it learns from
@@ -542,6 +885,9 @@ pictures, there are two explicit escape hatches.
 A **canvas** draws a portable display list with the platform's 2D API
 (Direct2D on Windows):
 
+A draw list is built the same way in either syntax — it is data, not tree
+structure — and only the node differs.
+
 ```rust
 let chart = DrawList::new()
     .fill_rect(RectF::new(0.0, 0.0, 240.0, 90.0), Paint::color(Color::rgb(245, 246, 250)))
@@ -549,9 +895,25 @@ let chart = DrawList::new()
     .fill_rect(RectF::new(0.0, 0.0, 36.0, 70.0), Paint::color(Color::rgb(90, 140, 230)))
     .hit_region(1, RectF::new(0.0, 0.0, 36.0, 70.0))
     .pop();
+```
 
+**Builder**
+
+```rust
 Node::canvas("chart", chart, LayoutStyle::new().width(SizeMode::Fixed(240)).height(SizeMode::Fixed(90)))
     .with_input(InputInterest::new().pointer())
+```
+
+**Markup**
+
+```rust
+<Canvas
+    key="chart"
+    draw_list={chart}
+    width={SizeMode::Fixed(240)}
+    height={SizeMode::Fixed(90)}
+    input={InputInterest::new().pointer()}
+/>
 ```
 
 A draw list is data in the node tree: an unchanged list costs nothing, and
@@ -562,10 +924,22 @@ transforms and clips the drawing used.
 A **native surface** is a bare window the framework lays out and never
 paints, for an application's own GPU renderer:
 
+**Builder**
+
 ```rust
 Node::native_surface("viewport", LayoutStyle::new().width(SizeMode::Fill).height(SizeMode::Fill))
+```
 
-// in update:
+**Markup**
+
+```rust
+<Surface key="viewport" width={SizeMode::Fill} height={SizeMode::Fill} />
+```
+
+Reaching the handle happens in `update`, away from the tree, so it is the same
+either way:
+
+```rust
 if let Event::SurfaceResized { surface, size, .. } = event {
     let handle = framework_windows::native_surface(surface); // raw-window-handle 0.6
 }
@@ -574,7 +948,13 @@ if let Event::SurfaceResized { surface, size, .. } = event {
 ## Navigation and persistence
 
 Screens are components; a navigation stack is data in the component that
-shows them:
+shows them.
+
+The stack itself is an ordinary value and `NavigationStack::view` an ordinary
+function, so what differs between the two forms is only how each entry's screen
+is spelled — which is also the smallest honest illustration of mixing them.
+
+**Builder**
 
 ```rust
 struct App { stack: NavigationStack<String> }
@@ -588,6 +968,25 @@ fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node 
 }
 fn message(&mut self, command: NavigationCommand<String>) { self.stack.apply(command) }
 ```
+
+**Markup**
+
+```rust
+struct App { stack: NavigationStack<String> }
+// type Message = NavigationCommand<String>;
+
+fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+    let navigator = Navigator::new(context.callback());
+    self.stack.view("stack", |entry| <Screen key={entry.id().key()} navigator={navigator.clone()} />)
+}
+fn message(&mut self, command: NavigationCommand<String>) { self.stack.apply(command) }
+```
+
+`<Screen/>` is a component element: `navigator` is one of `ScreenProps`'
+fields, checked at the attribute, and the element lowers to exactly the
+`child_with_props` call the builder form writes out, through `render`'s
+`context` — which the `.rsx` compiler finds on its own, and which `rsx!`
+would be told with `in context,`.
 
 Every entry stays rendered, all but the top one `hidden`, so a screen
 pushed on top of another never rebuilds it. Tabs work the same way:
@@ -615,13 +1014,22 @@ single-instance: a second launch hands its URL to the running one.
 replacing them:
 
 ```sh
-rustnative new my-app --framework-path .   # a project that compiles, against this checkout
+rustnative new my-app --syntax markup --framework-path .   # or --syntax builder
 cd my-app
 rustnative run windows                     # cargo run, with this project's manifest
 rustnative build windows --release
 rustnative test -- --nocapture             # arguments pass through to cargo test
 rustnative doctor                          # what this machine can build, and what it lacks
 ```
+
+`--syntax` has no default: the generator does not pick a side on a developer's
+behalf, and the two templates are the same application written twice
+(Milestone 53) — the markup one in `.rsx` files with `compile_rsx()` already in
+its build script. The same milestone gives the CLI the tooling `.rsx` files
+need (`rustnative fmt`, `expand`, and `lsp`, and diagnostics from `build`,
+`check`, and `test` reported at the `.rsx` source). Nothing else in the CLI is
+affected, because nothing below the markup lowering can tell the two syntaxes
+apart.
 
 A project is a folder with a `rustnative.toml`: the application's identity (the
 same id its saved state and single-instance mutex use), its display name,
@@ -646,6 +1054,11 @@ awareness, Common Controls v6, and the `supportedOS` entries without which
 layered child windows (animated opacity) and themed tab controls do not
 behave as documented.
 
+A project written in `.rsx` files adds a second line,
+`framework_build::compile_rsx();` (see
+[How `.rsx` files build](#how-rsx-files-build)); nothing about packaging
+differs, because what is packaged is the same compiled program.
+
 `rustnative` builds what people install:
 
 ```sh
@@ -660,6 +1073,20 @@ and URL schemes from the same `rustnative.toml` the running application uses, so
 package cannot disagree with the program inside it.
 
 ## Text input
+
+A text field is a node like any other:
+
+**Builder**
+
+```rust
+Node::text_input("search", self.query.clone())
+```
+
+**Markup**
+
+```rust
+<TextInput key="search" value={self.query.clone()} />
+```
 
 The current Windows backend uses a native Win32 `EDIT` control. Its value is controlled by component state:
 
@@ -731,7 +1158,8 @@ Milestones 25–32 are complete. What remains is the rest of the platform
 matrix — macOS, Linux, Android, iOS, embedded, terminal, and Web — plus the
 core work those targets share: a `no_std`-capable core subset, an executor
 seam for single-threaded hosts, and time from the host clock rather than
-`std::time::Instant`.
+`std::time::Instant`. The markup syntax is core work of the same kind and is
+scheduled with them, in Tier 0 below.
 
 **Milestone 33 — the macOS backend** is next in numbering, but it needs a
 macOS machine to build and verify on and this project has none yet, so the
@@ -742,15 +1170,21 @@ though they were optional.
 Interleaved with the backends, `PLAN.md` section 11 carries the
 production-parity milestones (39–52) in four tiers:
 
-- **Tier 0 (39–40), before the second backend exists** — portable-surface
-  obligations (right-to-left mirroring in the layout model, safe areas,
-  permission states, gesture arbitration, panic and teardown policy, ownership
-  and escape-hatch contracts) and interoperability, so a RustNative tree can be
-  embedded in an existing application and a foreign control embedded in ours.
-  These cost once now and once per backend later.
+- **Tier 0 (53, 39, 40), before the second backend exists** — the markup
+  syntax, so that every later example, template, guide, doc test, and
+  conformance case is written in both syntaxes once rather than retrofitted
+  through a corpus that has grown for years; portable-surface obligations
+  (right-to-left mirroring in the layout model, safe areas, permission states,
+  gesture arbitration, panic and teardown policy, ownership and escape-hatch
+  contracts); and interoperability, so a RustNative tree can be embedded in an
+  existing application and a foreign control embedded in ours. These cost once
+  now and once per backend later. (Milestone numbers are identities, not an
+  order — `PLAN.md` section 8 establishes that convention, and section 11
+  sequences these three.)
 - **Tier 1 (41–45), continuous, and part of section 8's definition of a
   finished backend** — the conformance suites that turn this framework's
-  guarantees into tested ones, CI-enforced budgets, a state-preserving
+  guarantees into tested ones, including the syntax-equivalence suite that
+  keeps the two authoring surfaces from drifting apart, CI-enforced budgets, a state-preserving
   developer loop, a runtime inspection protocol with an inspector, and the
   headless test backend that lets the application layer be tested without one
   machine per target.

@@ -6,7 +6,7 @@ Scored with the rules in [`method-and-stack.md`](method-and-stack.md):
 implementable depth, not built), **Absent** (not specified anywhere).
 
 Evidence is `PLAN.md` sections and milestones and `BUILD_STATUS.md` records.
-"Verified" means `PLAN.md` 2.12's meaning: run on the real host.
+"Verified" means `PLAN.md` 2.13's meaning: run on the real host.
 
 Current reality: Milestones 1–32 complete and verified on Windows/Win32. Every
 other backend is **Planned**. Scores below are therefore given as
@@ -54,8 +54,8 @@ numbers differ enormously and averaging them would hide the real position.
 | Capability | Score | Evidence | Gap |
 | --- | --- | --- | --- |
 | Stable identity, keyed reconciliation, host-object reuse | **Met** | Milestones 2, 4 | — |
-| Portable layout with host intrinsic measurement | **Met** (Windows) | Milestones 6–9, `IntrinsicMeasurer`, 2.10 | — |
-| Transient-state fast path | **Partial** | 2.9 is a principle, not a contract with tests | `W-FG-1` |
+| Portable layout with host intrinsic measurement | **Met** (Windows) | Milestones 6–9, `IntrinsicMeasurer`, 2.11 | — |
+| Transient-state fast path | **Partial** | 2.10 is a principle, not a contract with tests | `W-FG-1` |
 | Invalidation contract + over-invalidation tests | **Absent** | — | `X-L3-1` |
 | Render-cause tracing | **Absent** | — | `X-L3-2` |
 | Right-to-left as a layout-model property | **Absent** | Layout model has no start/end mirroring story | `X-L3-3` |
@@ -64,6 +64,11 @@ numbers differ enormously and averaging them would hide the real position.
 | Text conformance (complex scripts, bidi, clusters, fallback, breaking, caret) | **Partial** | Host measurement delegated; no conformance suite | `X-L3-6` |
 | Theming | **Met** (Windows) | Milestone 21 | — |
 | Design-token pipeline | **Absent** | — | `X-L3-7` / `X-UI-2` |
+| Builder authoring surface | **Met** | Every node kind and modifier since Milestone 1; 2.9 | — |
+| Markup authoring surface at equal capability, in `.rsx` files and `rsx!` | **Planned** | 2.9; Milestone 53 | `X-L3-8` |
+| Markup diagnostics at compiler quality, through both carriers | **Planned** | Milestone 53 compile-failure suite | `X-L3-9` |
+| Markup tooling parity (format, editor, expansion view) | **Planned** | Milestones 53, 43 | `X-L3-10` |
+| `.rsx` compile step invisible in use (source-mapped diagnostics, language-server proxy, whole-file formatter) | **Planned** | Milestones 53, 43 | `X-L3-11` |
 
 ## L4 — Application model
 
@@ -71,7 +76,7 @@ numbers differ enormously and averaging them would hide the real position.
 | --- | --- | --- | --- |
 | Components, props, callbacks, lifecycle | **Met** | Milestones 13–16 | — |
 | Local state, effects, reactive invalidation | **Met** | Milestones 3, 19 | — |
-| Scope-bound async with no post-unmount mutation | **Met** (core) | Milestones 17, 18; 2.11 | `X-L1-4` |
+| Scope-bound async with no post-unmount mutation | **Met** (core) | Milestones 17, 18; 2.12 | `X-L1-4` |
 | Shared/scoped state contract without globals | **Absent** | Props and callbacks only; no shared-state story | `X-L4-1` |
 | Undo/redo and state history | **Absent** | — | `X-L4-2` |
 | Error boundaries with fallback and retry | **Absent** | — | `X-L4-3` |
@@ -155,7 +160,7 @@ F3.3) are made, implemented, and verified on one host. That is a real
 foundation, and it is the expensive half.
 
 **Where the plan is complete but unbuilt.** Every other backend. That is a
-scheduling and hardware fact (2.12), not a gap in this analysis's sense, and it
+scheduling and hardware fact (2.13), not a gap in this analysis's sense, and it
 is not what this document is for.
 
 **Where the plan itself is missing something.** Nine items scored **Absent**

@@ -69,12 +69,14 @@ fidelity/uniformity trade is made, and it is irreversible.
 ### L3 — Semantic UI
 
 Identity across time, the algorithm that turns a new description into host
-mutations, the layout algorithm, the styling model, and the text pipeline
-(shaping, wrapping, bidirectional ordering, measurement).
+mutations, the layout algorithm, the styling model, the text pipeline (shaping,
+wrapping, bidirectional ordering, measurement), and the surface a developer
+actually writes the description in.
 
 Everything about update cost, layout correctness under translation and
 accessibility text scaling, and whether identity survives a rerender is decided
-here.
+here. So is a softer but decisive property: whether the authoring surface a
+framework offers is one surface done well, or several of unequal quality.
 
 ### L4 — Application model
 
@@ -138,7 +140,7 @@ tested, measured, or shown to be absent.
 | L0 | Startup, memory floor, and artifact size are declared numbers, not emergent ones; the foreign-code boundary has stated ownership rules |
 | L1 | One documented thread affinity rule; cancellation is deterministic; no work outlives the scope that owns it; time comes from the host clock |
 | L2 | Host objects reused across updates by stable identity; nothing that exists visually is invisible to the host's accessibility and automation layers |
-| L3 | Layout survives text scaling, translation growth, and right-to-left mirroring; text is shaped and measured by the host's own stack; update cost is proportional to what changed |
+| L3 | Layout survives text scaling, translation growth, and right-to-left mirroring; text is shaped and measured by the host's own stack; update cost is proportional to what changed; every authoring surface offered reaches the whole API, with equality proven rather than claimed |
 | L4 | Illegal UI states unrepresentable where the type system allows; effects and tasks bounded by the lifetime of their component; state local by default |
 | L5 | Verified with the host's own screen reader; IME and complex scripts work; locale formatting, plurals, collation, and bidirectional text supported; system settings honoured without application code |
 | L6 | Data caching, invalidation, optimistic updates, and offline behaviour are framework concerns; routing typed and host-conventional; persistence crash-safe and migratable; capabilities answered honestly |
@@ -155,7 +157,7 @@ tested, measured, or shown to be absent.
 | **Planned** | Specified in `PLAN.md` at implementable depth, not built |
 | **Absent** | Not specified anywhere; a genuine gap this analysis is surfacing |
 
-"Verified" carries `PLAN.md` section 2.12's meaning exactly: run on the real
+"Verified" carries `PLAN.md` section 2.13's meaning exactly: run on the real
 host, recorded in `BUILD_STATUS.md`. Work reasoned through but not run is never
 scored above **Planned**.
 

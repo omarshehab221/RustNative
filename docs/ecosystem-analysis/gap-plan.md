@@ -35,6 +35,54 @@ section 9 does. Milestone numbers below are identities, not an order —
 
 # Tier 0 — Before the second backend
 
+## Milestone 53 — The markup syntax
+
+**Why.** `foundations.md` F3.5: a markup surface is how the largest population
+of UI developers arrives at a framework at all, and it decays into a trap
+unless its equality with the builder surface is enforced by a test. Carried as
+a source dialect — the form that population already writes — it carries a
+second obligation: the compile step must be invisible in use. It is Tier 0
+because the authoring surface is what every later example, template, guide,
+doc test, and conformance case is written in — retrofitting a second syntax
+through that corpus later costs more than every other Tier 0 item, and grows
+with each backend.
+
+**Covers.** `X-L3-8`, `X-L3-9`, `X-L3-10`, `X-L3-11`.
+
+**Scope.**
+
+- `X-L3-8` **Capability equality by construction.** Markup is a compile-time
+  front end that lowers to builder calls and nothing else; every node kind is
+  an element, every builder method or style field an attribute, `..expr`
+  reaches any `Node -> Node` function including an application's own
+  extensions, and `{expr}` splices any builder expression into markup. An
+  equivalence suite asserts both spellings of every node kind and modifier are
+  equal values, with the markup compiled through both carriers.
+- **One grammar, two carriers.** `.rsx` files, where an element is an
+  expression written anywhere Rust accepts one, for code that is mostly UI;
+  and `rsx!`, for markup in `.rs` files, crates without a build step, and
+  runnable documentation. The `.rsx` compile step only wraps markup in
+  `rsx!`, so parsing, lowering, and diagnostics exist once, and the no-bare-text
+  rule keeps the grammar identical in both.
+- Structural constructs markup is good at — conditional and repeated children,
+  fragments, component elements with typed props (their context inferred from
+  the enclosing function in `.rsx` files, named explicitly in `rsx!`) —
+  without narrowing the builder form to match, or the reverse.
+- `X-L3-9` Diagnostics at compiler quality, held by a compile-failure suite
+  run through both carriers.
+- `X-L3-10`, `X-L3-11` Tooling parity and an invisible compile step:
+  diagnostics from `rustnative build`, `check`, and `test` reported at the
+  `.rsx` source; a language-server proxy mapping positions both ways; a
+  whole-file formatter; an expansion view; source-map round trips under test.
+- Both syntaxes in every document, template, and doc example, side by side;
+  project templates that require a choice rather than defaulting to one.
+
+**Done when.** The equivalence suite covers every node kind and modifier
+through both carriers, the diagnostics suite covers every listed error through
+both carriers, a `.rsx` diagnostic lands at its source position in the CLI and
+the editor, both templates build, and no documented example exists in only one
+syntax.
+
 ## Milestone 39 — Portable-surface obligations
 
 **Why.** Three archetype families fail in the same place: a portable API shaped
@@ -111,16 +159,19 @@ expected to satisfy them as part of being called complete.
 are currently implementation properties, not guarantees. An unproven guarantee
 is marketing; a tested one is a moat. This milestone converts each one.
 
-**Covers.** `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L2-1`, `X-L2-2`,
-`X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`, `D-FP-2`,
-`M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`.
+**Covers.** `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L2-1`,
+`X-L2-2`, `X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`,
+`D-FP-2`, `M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`.
 
 **Scope.**
 
+- Syntax equivalence as a standing guarantee: the suite Milestone 53 creates
+  lives here permanently, so a node kind or modifier added in one syntax only
+  fails the build.
 - A documented invalidation contract with tests that fail on
   over-invalidation, plus render-cause tracing that names the state, prop,
   resource, or effect responsible.
-- The transient-state fast path (2.9) as a contract with tests.
+- The transient-state fast path (2.10) as a contract with tests.
 - Scope-bound cancellation as a public guarantee: no task observes or mutates
   state after its owner unmounts, proven per target.
 - Native-object lifetime as a guarantee, with leak detection as a CI gate.
@@ -199,7 +250,7 @@ embedded in reduced form.
 
 ## Milestone 45 — Test infrastructure
 
-**Why.** `PLAN.md` 2.12 caps verification at what hardware we have. A headless
+**Why.** `PLAN.md` 2.13 caps verification at what hardware we have. A headless
 backend lifts most of that cap for everything above L2, and it is the
 prerequisite for testing the application layer built in Tier 2.
 
@@ -390,8 +441,11 @@ growing share of code is now written.
 # Dependency order
 
 ```text
-M39 portable-surface obligations ──┬─→ every later backend
+M53 markup syntax ─────────────────┐
+M39 portable-surface obligations ──┼─→ every later backend
 M40 interoperability ──────────────┘
+
+M53 equivalence suite ──→ owned by M41 thereafter
 
 M41 guarantees        ─┐
 M42 budgets           ─┼─ continuous, gate each backend's completion

@@ -80,11 +80,33 @@ Nothing outside Windows has been run at all, because nothing outside Windows
 has a backend yet. Two of the planned targets are also blocked on hardware
 rather than on work: this project has no macOS machine and no iOS device, so
 Milestones 33 and 36 cannot be built or verified here. They remain fully
-planned and fully specified (`PLAN.md`, 2.12 and section 8); the build order
+planned and fully specified (`PLAN.md`, 2.13 and section 8); the build order
 follows what can be verified, and neither milestone will be called complete
 on reasoning alone. The same rule covers every other target: a backend
 advertises a `Capability` only once it realizes it, and this file records
 what was run and on what.
+
+### Syntax availability
+
+`PLAN.md` 2.9 states that the declarative tree has two equal spellings. One of
+them exists: the builder syntax is what Milestones 1–32 were built and verified
+in, and what every test, example, and doc example in this repository currently
+compiles.
+
+The markup syntax — `.rsx` files and the `rsx!` macro alike — is **specified
+and not implemented.** There is no `framework-markup` or `framework-macros`
+crate, no `markup` feature, no `framework_build::compile_rsx()`, no `.rsx`
+tooling in `rustnative` (`fmt`, `expand`, `lsp`, source-mapped diagnostics),
+and no equivalence suite yet; Milestone 53 is that work. The markup in
+`README.md` and `PLAN.md` is the specification those tests will be written
+against, not code that compiles today, and it is recorded here rather than left
+to be inferred from a missing crate.
+
+The same rule that governs platforms governs this: nothing claims the markup
+syntax is available until it runs, and when it does, "runs" will mean the
+equivalence suite passing over every node kind and modifier through both
+carriers, and a `.rsx` diagnostic reported at its source position — not a
+demo compiling.
 
 ---
 
