@@ -57,6 +57,17 @@ is our stability argument, provided we actually have a stability policy
 on time-to-first-feature for a single-platform team, and a large share of
 desktop software is single-platform.
 
+**Concepts introduced here.** `C15` environment down, preferences up; `C18`
+modifier chains, attached properties, value precedence; `C19` lookless and
+headless controls; `C20` the command model; `C22` adaptive layout; `C25`
+shared-element transitions; `C26` model/view, proxies, identity snapshots;
+`C27` document-based architecture; `C28` host content controls; `C49` surfaces
+beyond the main window; `C55` live previews and catalogues; `C56` round-trip
+visual designers. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `D-FP-1` `[D]` Per-backend fidelity conformance against the host's own
@@ -105,6 +116,11 @@ path that makes that possible.
 **Threats.** None competitively — but its longevity sets the expectation that a
 desktop binary keeps working for a decade, and that is a stability bar we
 inherit.
+
+**Concepts introduced here.** `C20` the command model; `C56` round-trip visual
+designers. Each is analysed on its own merits, independently of this archetype,
+in [`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
 
 **What we must ship.**
 
@@ -155,6 +171,14 @@ shared-state contract (`X-L4-1`) plus forms (`W-SF-7`).
 
 **Threats.** For enterprise line-of-business software this archetype is the
 default, and it is default because of tooling and support, not technology.
+
+**Concepts introduced here.** `C16` scoped dependency injection; `C18` modifier
+chains, attached properties, value precedence; `C19` lookless and headless
+controls; `C23` platform-adaptive components; `C24` per-property native
+mappers; `C55` live previews and catalogues; `C56` round-trip visual designers.
+Each is analysed on its own merits, independently of this archetype, in
+[`concepts-app.md`](concepts-app.md), [`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
 
 **What we must ship.**
 
@@ -207,6 +231,11 @@ neither pure archetype offers.
 not trade it for fidelity. We should not pretend to win that argument; we
 should win the one about accessibility, input methods, and system integration —
 and offer the draw-list path where brand control is non-negotiable.
+
+**Concepts introduced here.** `C19` lookless and headless controls; `C23`
+platform-adaptive components. Each is analysed on its own merits, independently
+of this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md).
 
 **What we must ship.**
 
@@ -262,6 +291,15 @@ printing, charting, and database access — none of which appear in our plan.
 incumbent, with certification precedents and long-term support contracts we
 cannot match for years.
 
+**Concepts introduced here.** `C10` statecharts; `C18` modifier chains,
+attached properties, value precedence; `C20` the command model; `C26`
+model/view, proxies, identity snapshots; `C27` document-based architecture;
+`C56` round-trip visual designers; `C66` generated bindings from interface
+descriptions. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `D-CT-1` `[X]` A stated and demonstrated one-stack span: the same application
@@ -294,6 +332,10 @@ detecting.
 
 **Threats.** Minimal; the archetype is a cautionary example more than a
 competitor.
+
+**Concepts introduced here.** `C23` platform-adaptive components. Each is
+analysed on its own merits, independently of this archetype, in
+[`concepts-app.md`](concepts-app.md).
 
 **What we must ship.**
 
@@ -343,6 +385,10 @@ own L7 and L9 work, not by argument.
 **Threats.** This archetype wins on time-to-market and on hiring, and both
 matter more than footprint to most teams shipping their first version.
 
+**Concepts introduced here.** `C67` multi-process isolation; `C68` capability
+as authorization. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `D-WS-1` `[X]` Published desktop footprint budgets — artifact size, resident
@@ -380,6 +426,10 @@ own service model.
 **Threats.** It is a credible, actively improving competitor that already wins
 the footprint argument against D7a, so we cannot win on footprint alone; the
 differentiator must be L2 and L5.
+
+**Concepts introduced here.** `C67` multi-process isolation; `C68` capability
+as authorization. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-delivery.md`](concepts-delivery.md).
 
 **What we must ship.**
 
@@ -475,6 +525,10 @@ Windows-shaped features other backends imitate.
 **Threats.** Low as a competitor; high as a cautionary pattern we could fall
 into from the other direction, by treating the shipped Windows backend as the
 shape of the portable model.
+
+**Concepts introduced here.** `C22` adaptive layout; `C23` platform-adaptive
+components. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-app.md`](concepts-app.md).
 
 **What we must ship.**
 

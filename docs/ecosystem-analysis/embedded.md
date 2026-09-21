@@ -59,6 +59,11 @@ prerequisite for this entire document.
 **Threats.** Incumbency and inertia are absolute here. Teams do not replace a
 working kernel; they add to it. Any strategy that requires displacing it fails.
 
+**Concepts introduced here.** `C77` allocation strategies and arenas; `C79`
+standard kernel interfaces and POSIX; `C92` kernel-aware tracing. Each is
+analysed on its own merits, independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-K-1` `[E]` A `no_std`-capable core profile: identity, node, reconciliation,
@@ -113,6 +118,12 @@ onto our capability contracts, which is unusual and valuable.
 **Threats.** It is also a plausible *competitor* for the application layer if
 it grows one; and its build system will resist being driven by ours.
 
+**Concepts introduced here.** `C73` hardware described as data; `C78` memory
+protection and supervised isolation; `C80` power-loss-resilient storage; `C81`
+multi-image builds and secure boot; `C82` hardware-in-the-loop testing. Each is
+analysed on its own merits, independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-EC-1` `[E]` A supported integration with at least one configuration-driven
@@ -156,6 +167,10 @@ groundwork exists before it is asked for.
 **Threats.** In regulated device markets, an uncertified stack is not
 considered at all, regardless of technical merit.
 
+**Concepts introduced here.** `C78` memory protection and supervised isolation;
+`C92` kernel-aware tracing. Each is analysed on its own merits, independently
+of this archetype, in [`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-SF-1` `[E]` A stated certification posture: what we do and do not claim,
@@ -190,6 +205,12 @@ expensive later.
 
 **Threats.** None competitively, but a vendor SDK that insists on owning the
 event loop is a real integration hazard and must be designed around (F1.1).
+
+**Concepts introduced here.** `C73` hardware described as data; `C79` standard
+kernel interfaces and POSIX; `C80` power-loss-resilient storage; `C81`
+multi-image builds and secure boot; `C91` peripheral offload. Each is analysed
+on its own merits, independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
 
 **What we must ship.**
 
@@ -244,6 +265,12 @@ needs on constrained targets, where a full inspector transport is impossible.
 and split a small ecosystem. That outcome is avoidable and must be stated as a
 constraint.
 
+**Concepts introduced here.** `C21` typestate; `C74` hardware typestate; `C75`
+stack-resource-policy scheduling; `C76` executors that sleep. Each is analysed
+on its own merits, independently of this archetype, in
+[`concepts-core.md`](concepts-core.md),
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-RS-1` `[E]` The `Executor` contract implementable by existing embedded
@@ -280,6 +307,11 @@ plan currently has neither.
 **Threats.** None; the risk is under-scoping the update story, which is a
 fleet-level liability rather than a feature gap.
 
+**Concepts introduced here.** `C80` power-loss-resilient storage; `C81`
+multi-image builds and secure boot. Each is analysed on its own merits,
+independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-MW-1` `[E]` Firmware update as a first-class `rustnative` capability:
@@ -314,6 +346,12 @@ compliance evidence (`W-EP-3`), and it is generated rather than written.
 
 **Threats.** None; failing to integrate simply excludes us from embedded Linux
 products.
+
+**Concepts introduced here.** `C64` remote builds and build caching; `C83`
+boot-to-UI and direct-to-display. Each is analysed on its own merits,
+independently of this archetype, in
+[`concepts-delivery.md`](concepts-delivery.md),
+[`concepts-embedded.md`](concepts-embedded.md).
 
 **What we must ship.**
 
@@ -367,6 +405,13 @@ same draw-list path.
 advantages, and their simulator-first loop is exactly the L7 experience we must
 match rather than explain away.
 
+**Concepts introduced here.** `C19` lookless and headless controls; `C56`
+round-trip visual designers; `C83` boot-to-UI and direct-to-display. Each is
+analysed on its own merits, independently of this archetype, in
+[`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md),
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-GUI-1` `[E]` Damage-tracked partial redraw on the draw-list path, with
@@ -409,6 +454,10 @@ comparison is against a REPL.
 **Threats.** Low commercially, high in mindshare: developers learn here and
 carry their expectations into professional work.
 
+**Concepts introduced here.** `C90` board managers and registries. Each is
+analysed on its own merits, independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-PR-1` `[E]` A board quickstart path: one command from a supported board to
@@ -442,6 +491,11 @@ operations begin.
 **Threats.** None directly; the risk is scope creep into protocol
 implementation.
 
+**Concepts introduced here.** `C84` device desired-state reconciliation; `C85`
+messaging semantics and device data models; `C86` flow-based integration
+(rejected). Each is analysed on its own merits, independently of this
+archetype, in [`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-IOT-1` `[E]` Messaging, provisioning, and device-identity service
@@ -474,6 +528,11 @@ mapping, not a competing middleware.
 **Threats.** None; attempting to compete with the middleware itself would be a
 scope error.
 
+**Concepts introduced here.** `C87` long-running actions and managed
+lifecycles; `C88` stream recording and replay. Each is analysed on its own
+merits, independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
+
 **What we must ship.**
 
 - `E-RB-1` `[E]` A transport adapter pattern for node-graph middleware: typed
@@ -504,6 +563,11 @@ and presenting results without dropping frames. That is our scheduler and task
 scopes applied to a workload that is increasingly on every device.
 
 **Threats.** None; this is an integration surface, not a competitive one.
+
+**Concepts introduced here.** `C77` allocation strategies and arenas; `C89`
+pluggable accelerators and model assets. Each is analysed on its own merits,
+independently of this archetype, in
+[`concepts-embedded.md`](concepts-embedded.md).
 
 **What we must ship.**
 

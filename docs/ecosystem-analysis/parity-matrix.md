@@ -152,6 +152,148 @@ numbers differ enormously and averaging them would hide the real position.
 
 ---
 
+## Concepts
+
+The concept catalogue ([`concepts-core.md`](concepts-core.md),
+[`concepts-app.md`](concepts-app.md),
+[`concepts-delivery.md`](concepts-delivery.md),
+[`concepts-embedded.md`](concepts-embedded.md)) scores each concept on its own
+page. Summarized here by layer so the two views can be read together; the
+milestone column is where [`gap-plan.md`](gap-plan.md) schedules it.
+
+### Execution and rendering model (L1–L3)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C01` Interruptible rendering and priority lanes | **Absent** | 54 |
+| `C02` Visibility- and lifecycle-aware work | **Absent** | 54 |
+| `C03` Change-detection contract | **Partial** | 54 |
+| `C04` Skipping by props equality | **Partial** | 54 |
+| `C05` Server components | **Absent** | Web H, 49 |
+| `C06` Partial prerendering | **Absent** | Web H |
+| `C07` Per-subtree render modes | **Absent** | Web H, 55 |
+| `C18` Container-owned layout data and value precedence | **Partial** | 48 |
+| `C22` Adaptive layout (size classes, container-relative, posture) | **Absent** | 39 |
+| `C25` Shared-element transitions | **Absent** | 48 |
+
+### State and composition (L4)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C08` Derived state and slice subscription | **Absent** | 47 |
+| `C09` Atomic batching guarantee | **Partial** | 47 |
+| `C10` State-machine pattern | **Absent** | 47 |
+| `C11` Exhaustive effect testing and dependency overrides | **Absent** | 45, 47 |
+| `C12` Stream collection bound to scope | **Partial** | 47 |
+| `C13` Navigation and query parameters as typed state | **Partial** | 47 |
+| `C14` Destination-scoped and saved state | **Partial** | 47 |
+| `C15` Typed environment and upward preferences | **Partial** | 39 |
+| `C16` Service scopes per window, destination, request | **Partial** | 47 |
+| `C17` Supervision policies | **Absent** | 47 |
+| `C19` Headless behaviour layer | **Absent** | 48 |
+| `C20` Command model | **Absent** | 39 |
+| `C21` Typestate as a design rule | **Partial** | 39 |
+
+### UI system and host integration (L3, L5)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C23` Per-host idiom table | **Partial** | 48 |
+| `C24` Per-property native mappers | **Absent** | 39 |
+| `C26` Proxies, animated identity diffs, compositional lists | **Partial** | 48 |
+| `C27` Document architecture | **Absent** | 48 |
+| `C28` Host content controls (web content, media, camera) | **Absent** | 48 |
+| `C49` Surfaces beyond the main window | **Absent** | 39 (vocabulary), 57 |
+
+### Data, sync, and real time (L6)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C29` Data-state contract, colocated data needs | **Absent** | 47 |
+| `C30` Stale-while-revalidate details | **Absent** | 47 |
+| `C31` Live queries, repository pattern | **Absent** | 47 |
+| `C32` Local-first sync, CRDTs | **Absent** | 55 |
+| `C33` Server-interactive mode, channels, presence | **Absent** | 55 |
+| `C34` HTTP interceptors, pinning, declared endpoints | **Partial** | 47 |
+| `C36` Changesets | **Absent** | 47 |
+
+### Server, API, and distributed execution (L6, L8)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C35` API contracts generated from types | **Absent** | 49 |
+| `C37` Ecosystem middleware and typed extractors | **Absent** | 49 |
+| `C38` Generated migrations | **Absent** | 49 |
+| `C39` Data-layer policies; hosted-backend adapters | **Absent** | 49 |
+| `C40` Feature-driven server defaults | **Absent** | 49 |
+| `C41` Web metadata and localized routing | **Absent** | 49, 46 |
+| `C42` Resource loading and user-centric metrics | **Absent** | 42, 50 |
+| `C43` Custom-element export | **Absent** | 40 |
+| `C44` Event-driven triggers | **Absent** | 56 |
+| `C45` Durable execution | **Absent** | 56 |
+| `C46` Single-instance edge actors | **Absent** | 56 |
+| `C47` Revisions and traffic splitting | **Absent** | 50 |
+| `C48` Resource bindings | **Absent** | 50 |
+
+### Product services (L6, L8)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C50` Typed feature flags and remote configuration | **Absent** | 57 |
+| `C51` In-application commerce | **Absent** | 57 |
+| `C52` Secure storage and passkeys | **Absent** | 57 |
+| `C53` Dynamic delivery | **Absent** | 50 |
+| `C54` Remote push | **Partial** | 57 |
+
+### Engineering loop, build, and security (L7–L9)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C55` Previews and catalogue | **Absent** | 43 |
+| `C56` Structural editing API for designers | **Absent** | 53, 43 |
+| `C57` Generators, codemods, feature kits | **Partial** | 43, 52 |
+| `C58` Dev services, continuous tests, error overlay | **Absent** | 43 |
+| `C59` Development builds | **Absent** | 43 |
+| `C60` Semantics-based test queries | **Absent** | 45 |
+| `C61` Record, replay, time travel | **Absent** | 44 |
+| `C62` Startup phases and profile-guided builds | **Absent** | 42 |
+| `C63` Native projects as generated outputs, config plugins | **Partial** | 50 |
+| `C64` Shared build cache, remote builds | **Absent** | 50 |
+| `C65` Platform-group crates | **Absent** | 39 |
+| `C66` Generated bindings from one interface description | **Absent** | 40 |
+| `C67` Optional isolated worker process | **Absent** | 51 |
+| `C68` Capability grants distinct from availability | **Absent** | 39 (shape), 51 (enforcement) |
+| `C69` Web security primitives on by default | **Absent** | 51 |
+| `C70` Vendor-neutral instrumentation | **Absent** | 51 |
+| `C71` Package compatibility metadata and scoping | **Absent** | 52 |
+
+### Embedded and device (L0–L8 on constrained targets)
+
+| Concept | Score | Milestone |
+| --- | --- | --- |
+| `C73` Board metadata from existing descriptions | **Absent** | 52 |
+| `C74` Typed peripherals in framework drivers | **Absent** | 37 |
+| `C75` Executor as a prioritized task | **Absent** | 54 |
+| `C76` Frame pacing that stops; sleeping executor | **Absent** | 54 |
+| `C77` Pools, arenas, high-water marks | **Absent** | 51 |
+| `C78` Unprivileged or supervised framework | **Absent** | 51 |
+| `C79` Standard kernel interface adapter | **Absent** | 52 |
+| `C80` Power-loss-resilient state store, partitions | **Absent** | 51 |
+| `C81` Multi-image build and signing | **Absent** | 50 |
+| `C82` Hardware-in-the-loop runner | **Absent** | 45 |
+| `C83` Direct-to-display profile, boot-to-first-frame | **Absent** | 37, 42 |
+| `C84` Device desired-state reconciliation | **Absent** | 55 |
+| `C85` Messaging semantics, device data models | **Absent** | 55 |
+| `C86` Flow-based integration | **Rejected** | — |
+| `C87` Long-running operations | **Absent** | 56 |
+| `C88` Device-input recording replayed in simulator | **Absent** | 44 |
+| `C89` Accelerator capabilities, model assets | **Absent** | 51, 50 |
+| `C90` On-demand toolchains and board support | **Absent** | 43 |
+| `C91` Asynchronous display region transfer | **Absent** | 37 |
+| `C92` Kernel-aware trace output | **Absent** | 44 |
+
+---
+
 ## Reading the matrix
 
 **Where we are genuinely strong.** L0 through L4 on the core contracts, and L2
@@ -184,6 +326,26 @@ tomorrow:
 9. Interoperability and incremental adoption (`X-INTEROP-1`) — the only
    strategy that has ever worked against an accumulated ecosystem.
 
-Those nine, plus the conformance suites that turn our root-layer advantages
+**Where the concept survey adds to that list.** Scoring the concepts separately
+exposes gaps the layer view hides, because each is small enough to vanish
+inside a larger row:
+
+10. Responsiveness under load — priority lanes, interruptible rendering, and
+    work that pauses when invisible (`C01`, `C02`). No row above covers what
+    happens when a render is expensive.
+11. Reconciliation beyond the screen — local-first sync, server-interactive UI,
+    and device desired-state (`C32`, `C33`, `C84`) — absent, and each is the
+    framework's core idea applied somewhere new.
+12. Event-driven and durable execution (`C44`, `C45`) — the serverless track is
+    request-shaped only.
+13. Surfaces beyond the main window and the product services around them
+    (`C49`–`C54`) — widgets, extensions, push, commerce, flags, secure storage.
+14. Seven structural decisions that belong in Tier 0 because they fix how
+    every backend is written: the typed environment (`C15`), the command model
+    (`C20`), adaptive-layout vocabulary (`C22`), per-property native mappers
+    (`C24`), the surface vocabulary (`C49-1`), platform-group crates (`C65`),
+    and the shape of capability grants (`C68`).
+
+Those fourteen, plus the conformance suites that turn our root-layer advantages
 from claims into tested guarantees, are what [`gap-plan.md`](gap-plan.md)
 schedules.

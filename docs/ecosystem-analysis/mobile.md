@@ -58,6 +58,19 @@ loading with caching. Two of those four have no equivalent in our plan.
 remain so. Our comparison target is the cross-platform archetypes, not this
 one — but this one sets the fidelity bar we are measured against.
 
+**Concepts introduced here.** `C01` interruptible rendering and priority lanes;
+`C02` visibility- and lifecycle-aware work; `C04` positional memoization and
+skipping; `C09` transactional snapshot state; `C12` reactive streams; `C13`
+navigation and URL as typed state; `C14` state scoped to the right lifetime;
+`C15` environment down, preferences up; `C22` adaptive layout; `C25`
+shared-element transitions; `C31` live queries, database as source of truth;
+`C49` surfaces beyond the main window; `C55` live previews and catalogues;
+`C60` semantics-based testing; `C62` profile-guided startup and startup
+tracing. Each is analysed on its own merits, independently of this archetype,
+in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `M-FP-1` `[M]` Fidelity conformance per mobile backend against the host's own
@@ -103,6 +116,13 @@ RustNative subtree inside an existing native screen is how a team would adopt
 us without a rewrite.
 
 **Threats.** None directly; the archetype is in maintenance.
+
+**Concepts introduced here.** `C10` statecharts; `C11` reducer-effect
+architecture with exhaustive tests; `C12` reactive streams; `C13` navigation
+and URL as typed state; `C26` model/view, proxies, identity snapshots; `C34`
+declarative HTTP clients. Each is analysed on its own merits, independently of
+this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md).
 
 **What we must ship.**
 
@@ -166,6 +186,10 @@ gap in our plan and must be matched where each host permits it.
 its managed toolchain makes the first hour of a project dramatically easier —
 which is when most evaluations end.
 
+**Concepts introduced here.** `C59` development builds; `C63` continuous native
+generation. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `M-BR-1` `[M]` Over-the-air update support within each host's rules: signed
@@ -221,6 +245,11 @@ some.
 **Threats.** It is the most technically aligned competitor and is growing; its
 logic-sharing story is already strong and its UI story is improving.
 
+**Concepts introduced here.** `C65` hierarchical platform-group sharing; `C66`
+generated bindings from interface descriptions. Each is analysed on its own
+merits, independently of this archetype, in
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `M-MP-1` `[M]` A library-only integration mode: application model, state,
@@ -255,6 +284,11 @@ framework. That is the `X-ECO-*` requirement, and we have no equivalent.
 **Threats.** For content-shaped applications this archetype ships fast enough
 that quality concerns lose the argument.
 
+**Concepts introduced here.** `C23` platform-adaptive components; `C71` plugin
+encapsulation and registries. Each is analysed on its own merits, independently
+of this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `M-HY-1` `[X]` A third-party capability package contract: a community-authored
@@ -283,6 +317,10 @@ escape hatch (`PLAN.md` 2.6) plus host-binding generation, and it should be a
 first-class, documented workflow rather than an advanced-user note.
 
 **Threats.** Low.
+
+**Concepts introduced here.** `C66` generated bindings from interface
+descriptions. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-delivery.md`](concepts-delivery.md).
 
 **What we must ship.**
 
@@ -316,6 +354,56 @@ engine-rendered core and a native UI shell is a real and underserved shape.
 - `M-EN-1` `[M]` Surface handoff on mobile backends: a tree node owning a
   host-native rendering surface with documented lifetime, resize, and
   present semantics (mobile half of `D-GX-1`).
+
+---
+
+## M8 — The managed toolchain layer
+
+**Root (L0–L2).** Not a UI framework: a layer *around* one (usually M3) that
+takes over everything between source code and an installed application —
+native project generation, native dependency management, cloud builds and
+signing, development clients, over-the-air update hosting, and store
+submission. Its root choice is that native project files are build outputs,
+never edited by hand (`C63`).
+
+**Semantics and model (L3–L4).** Unchanged from the framework it wraps, plus a
+file-based router and a curated set of first-party native modules with a single
+versioned release.
+
+**Integration (L5–L6).** Configuration plugins let libraries declare their
+native requirements, so installing a capability package configures the native
+projects automatically. First-party modules cover the common device
+capabilities with one consistent API.
+
+**Loop and ship (L7–L8).** The defining strength. Development builds separate
+native compilation from the fast loop (`C59`); cloud builds and signing remove
+the need for local platform toolchains (`C64`); update channels, staged rollout,
+and rollback are hosted; store submission is one command.
+
+**Project (L9).** Became the recommended way to start with its underlying
+framework, which is the strongest possible evidence of how much the first hour
+matters.
+
+**Strengths.** The first hour and the release process, both nearly solved;
+upgrades that regenerate native projects rather than asking for manual merges;
+a coherent, versioned set of native capabilities.
+
+**Weaknesses.** Anything not expressible through configuration or a plugin
+requires leaving the managed path; hosted services create a commercial
+dependency; build minutes cost money.
+
+**Opportunities.** Almost every mechanism here maps onto something `rustnative`
+already owns or plans: generation from `rustnative.toml` (Milestone 32),
+capability packages (`X-ECO-1`), updates (`M-BR-1`), and the developer loop
+(Milestone 43). What this archetype adds is the *rule* that native projects are
+outputs (`C63-1`), the *plugin hook* for native configuration (`C63-2`), and
+the *development build* split (`C59-1`) — and the proof that a toolchain layer,
+not a UI layer, is what converts evaluations into adoptions.
+
+**Threats.** It sets the first-hour and release-process bar that every mobile
+framework is now measured against.
+
+**What we must ship.** `C63-1`, `C63-2`, `C59-1`, `C64-2`, `M-BR-4`.
 
 ---
 

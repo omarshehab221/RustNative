@@ -174,8 +174,17 @@ Bottom-up, in the same order, every time:
 5. **Project (L9)** — why it wins or loses regardless of the above.
 6. **SWOT** — strengths, weaknesses, opportunities, threats, derived from the
    climb rather than asserted before it.
-7. **What we must ship** — falsifiable requirements, tagged by target, each one
+7. **Concepts introduced** — the ideas the archetype originated or made
+   mainstream, by identifier into the concept catalogue.
+8. **What we must ship** — falsifiable requirements, tagged by target, each one
    written so a milestone can be derived and a test can prove it.
+
+Concepts are then analysed a second time, independently of any archetype, in
+the concept catalogue (`concepts-*.md`) — mechanism, strengths, weaknesses,
+opportunities, threats, position, requirements — because the archetype view
+and the concept view fail differently. The archetype view misses ideas small
+enough to hide inside a larger row; the concept view misses how choices
+combine. Both are kept, and the parity matrix scores both.
 
 Requirement tags: `[X]` cross-cutting, `[W]` web, `[D]` desktop, `[M]` mobile,
 `[E]` embedded/RTOS, `[T]` terminal.

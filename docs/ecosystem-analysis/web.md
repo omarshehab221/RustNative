@@ -62,6 +62,11 @@ whole rather than eight.
 and familiarity is a genuine technical advantage: a model developers already
 know ships working code faster even when it is worse.
 
+**Concepts introduced here.** `C01` interruptible rendering and priority lanes;
+`C02` visibility- and lifecycle-aware work; `C03` change-detection strategy;
+`C15` environment down, preferences up. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-core.md`](concepts-core.md).
+
 **What we must ship.**
 
 - `W-CL-1` `[X]` Render-cause tracing and a documented invalidation contract
@@ -114,6 +119,11 @@ currently an implementation practice rather than a contract.
 
 **Threats.** Their published numbers define the bar a diff-and-patch
 architecture is measured against, fairly or not.
+
+**Concepts introduced here.** `C03` change-detection strategy; `C04` positional
+memoization and skipping; `C08` derived state and selectors. Each is analysed
+on its own merits, independently of this archetype, in
+[`concepts-core.md`](concepts-core.md).
 
 **What we must ship.**
 
@@ -182,6 +192,16 @@ keeps improving while we build backends. Their component ecosystem is
 immediately usable. Their hosting makes deployment a two-minute operation, and
 harder deployment loses evaluations regardless of merit.
 
+**Concepts introduced here.** `C05` server components; `C06` partial
+prerendering; `C07` per-component render modes; `C13` navigation and URL as
+typed state; `C25` shared-element transitions; `C29` data-state contracts and
+colocated data needs; `C41` web metadata and discoverability; `C42` resource
+loading and user-centric metrics; `C58` dev services, continuous tests, error
+overlays. Each is analysed on its own merits, independently of this archetype,
+in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `W-MF-1` `[W]` Typed server functions: one definition, compile-time checked
@@ -238,6 +258,10 @@ our application surfaces.
 **Threats.** For content sites their defaults are hard to beat — and content
 sites are how many teams first try a framework.
 
+**Concepts introduced here.** `C41` web metadata and discoverability; `C42`
+resource loading and user-centric metrics. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-app.md`](concepts-app.md).
+
 **What we must ship.**
 
 - `W-IS-1` `[W]` Zero client payload for fully static routes: a route with no
@@ -273,6 +297,11 @@ and it is measurable.
 
 **Threats.** If artifact size is ignored, a compiled module can be *larger*
 than a well-split interpreted bundle and their argument lands against us.
+
+**Concepts introduced here.** `C07` per-component render modes; `C42` resource
+loading and user-centric metrics. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md).
 
 **What we must ship.**
 
@@ -310,6 +339,11 @@ pipeline to operate is achievable and should be an explicit mode.
 
 **Threats.** The simplicity argument is genuinely strong for applications that
 are mostly forms and lists — which is most internal software.
+
+**Concepts introduced here.** `C33` persistent-connection server UI, channels,
+presence; `C07` per-component render modes. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md).
 
 **What we must ship.**
 
@@ -372,6 +406,12 @@ convenience. Its security defaults are a documented checklist, not research.
 worse than not building it. Each missing third-party integration is a lost
 evaluation.
 
+**Concepts introduced here.** `C36` changesets; `C37` middleware and typed
+extractors; `C38` generated migrations; `C40` auto-configuration; `C57`
+generators, templates, codemods. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `W-SF-1` `[W]` A server application model: typed request handling,
@@ -424,6 +464,12 @@ independently, so this archetype's users can adopt one at a time.
 **Threats.** For API-only work we offer nothing they do not, and should not
 pretend otherwise.
 
+**Concepts introduced here.** `C35` API contracts from types; `C37` middleware
+and typed extractors; `C71` plugin encapsulation and registries. Each is
+analysed on its own merits, independently of this archetype, in
+[`concepts-app.md`](concepts-app.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `W-MS-1` `[W]` A handler-level integration contract: a RustNative render path
@@ -461,6 +507,13 @@ than research.
 
 **Threats.** In regulated environments their compliance evidence and vendor
 support decide the purchase, and technical superiority does not substitute.
+
+**Concepts introduced here.** `C16` scoped dependency injection; `C40`
+auto-configuration; `C58` dev services, continuous tests, error overlays; `C62`
+profile-guided startup and startup tracing; `C70` vendor-neutral observability.
+Each is analysed on its own merits, independently of this archetype, in
+[`concepts-app.md`](concepts-app.md), [`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
 
 **What we must ship.**
 
@@ -510,6 +563,11 @@ mechanism for. A faithful local emulator attacks their worst daily annoyance.
 **Threats.** Competing on the function body alone wins little when the lock-in
 is the surrounding services.
 
+**Concepts introduced here.** `C44` event-driven triggers; `C45` durable
+execution; `C47` cold-start mitigation, revisions, traffic splitting; `C48`
+resource bindings. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-app.md`](concepts-app.md).
+
 **What we must ship.**
 
 - `W-SL-1` `[W]` Cold-start, memory, and artifact-size budgets for the
@@ -553,6 +611,11 @@ exactly what Web milestones H and K are designed for.
 **Threats.** Abstracting over per-platform storage semantics risks the
 lowest-common-denominator outcome `PLAN.md` section 1 forbids.
 
+**Concepts introduced here.** `C46` single-instance edge actors; `C47`
+cold-start mitigation, revisions, traffic splitting; `C48` resource bindings.
+Each is analysed on its own merits, independently of this archetype, in
+[`concepts-app.md`](concepts-app.md).
+
 **What we must ship.**
 
 - `W-ED-1` `[W]` A first-class edge/WASM host adapter with restrictions
@@ -590,6 +653,11 @@ one-command rollback are cheap once adapters exist.
 that insist on their own; generating artifacts those tools consume is the
 pragmatic position.
 
+**Concepts introduced here.** `C45` durable execution; `C48` resource bindings;
+`C64` remote builds and build caching. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `W-DP-1` `[W]` `rustnative deploy` with a documented adapter contract, plus
@@ -619,6 +687,10 @@ image matters more here than anywhere else, because image pull time *is*
 scale-up latency.
 
 **Threats.** Low volume — this is an adapter, not a workstream.
+
+**Concepts introduced here.** `C44` event-driven triggers; `C47` cold-start
+mitigation, revisions, traffic splitting. Each is analysed on its own merits,
+independently of this archetype, in [`concepts-app.md`](concepts-app.md).
 
 **What we must ship.**
 
@@ -659,6 +731,17 @@ charting.
 existing stack. Choosing which two to match — data caching and design tokens —
 matters more than breadth.
 
+**Concepts introduced here.** `C08` derived state and selectors; `C11`
+reducer-effect architecture with exhaustive tests; `C12` reactive streams;
+`C19` lookless and headless controls; `C22` adaptive layout; `C30`
+stale-while-revalidate, specified; `C35` API contracts from types; `C43`
+micro-frontends and custom elements; `C55` live previews and catalogues; `C60`
+semantics-based testing; `C61` record, replay, time travel; `C64` remote builds
+and build caching. Each is analysed on its own merits, independently of this
+archetype, in [`concepts-app.md`](concepts-app.md),
+[`concepts-core.md`](concepts-core.md),
+[`concepts-delivery.md`](concepts-delivery.md).
+
 **What we must ship.**
 
 - `X-DATA-1` `[X]` An asynchronous data layer in `framework-core`: typed
@@ -678,6 +761,105 @@ matters more than breadth.
 
 ---
 
+## W15 — Backend-as-a-service platforms
+
+**Root (L0–L2).** Not an application framework but a *hosted backend*: a
+managed database, authentication, file storage, realtime subscriptions, and
+per-request functions, reached directly from client code through generated
+APIs. The root choice is that the security boundary is moved from an
+application server into the data layer itself.
+
+**Semantics and model (L3–L4).** The client holds the application logic;
+the backend enforces row-level authorization policies on every query and
+subscription (`C39`). Realtime change feeds push updates into client state.
+The more ambitious members add offline persistence with background
+synchronization (`C32`).
+
+**Integration (L5–L6).** Very strong L6 for small teams: authentication,
+storage, realtime, and sync are provided. L5 is whatever UI layer the client
+uses.
+
+**Loop and ship (L7–L8).** Local emulators for the whole backend, schema
+migrations, generated client types, and hosted deployment. Observability and
+cost controls are the platform's.
+
+**Project (L9).** Large communities, generous free tiers, and heavy adoption by
+small teams and prototypes.
+
+**Strengths.** Time to a working product measured in days; security enforced
+where the data lives; realtime and offline sync without writing a server.
+
+**Weaknesses.** Authorization policies in the database are hard to test and
+review; complex business logic eventually needs a real server; vendor coupling
+at the data layer, which is the hardest layer to migrate; costs that scale
+unpredictably.
+
+**Opportunities.** Two, and they point in different directions. First,
+*adopt the concept*: data-layer policies enforced for every query and
+subscription are the right design for the server model's authorization
+(`C39-1`). Second, *meet the users where they are*: a client-side adapter for
+existing hosted backends lets a team adopt RustNative's UI without changing its
+backend (`C39-2`) — the backend-side analogue of embedding.
+
+**Threats.** For small teams, "no backend to write" beats "a better backend",
+and this archetype plus any UI layer is the fastest route to a launched
+product.
+
+**What we must ship.** `C39-1`, `C39-2`, `C32-1` (see
+[`concepts-app.md`](concepts-app.md)).
+
+---
+
+## W16 — Persistent-connection server-driven UI
+
+**Root (L0–L2).** A long-lived server process *per connected client* holds the
+UI state; the browser holds a thin client that sends events and applies diffs
+over a persistent connection. The strongest members run on a runtime built
+around lightweight isolated processes and supervision (`C17`), which is what
+makes a process per user affordable and fault-isolated.
+
+**Semantics and model (L3–L4).** Server-side components render; the framework
+diffs and sends minimal changes; the client patches the document. State is
+ordinary server-side state; there is no client state store and no API layer.
+Publish/subscribe channels and presence tracking (`C33`) make multi-user
+features trivial.
+
+**Integration (L5–L6).** The server has direct access to the database, jobs,
+and messaging. Optimistic client hooks cover latency-sensitive interactions.
+Offline is impossible by construction.
+
+**Loop and ship (L7–L8).** Very fast loops; live dashboards of the running
+system; deployments must drain or migrate connections.
+
+**Project (L9).** Smaller ecosystems with unusually high developer
+satisfaction; the managed-runtime variants of the same idea have large
+enterprise adoption.
+
+**Strengths.** Rich interactivity with almost no client code; one language and
+one state model; real-time collaboration by default; excellent fault isolation
+in the process-per-client runtimes.
+
+**Weaknesses.** A network round trip on every interaction not covered by
+optimistic hooks; memory per connected client; no offline; reconnection and
+deploy behaviour must be engineered carefully.
+
+**Opportunities.** The server-driven mode (`W-HM-1`) already applies typed
+fragments to the realized tree. A persistent-connection variant uses the same
+reconciler on both ends, so the client patch is ordinary reconciliation, and
+per-connection state is a component tree with scope-bound tasks — the lifetime
+model already exists. Combined with per-subtree render modes (`C07`), a
+component can start server-interactive for instant interactivity and move to
+the client once its module arrives.
+
+**Threats.** For internal tools and real-time applications this archetype is
+among the most productive in the industry, which is exactly the market the
+batteries-included server model (`W-SF-*`) targets.
+
+**What we must ship.** `C33-1`, `C33-2`, `C33-3`, `C07-1`, `C17-1` (see the
+concept documents).
+
+---
+
 ## Summary: the web opening, ranked
 
 1. **The server-full gap (`W-SF-*`).** The largest uncontested opportunity in
@@ -692,3 +874,9 @@ matters more than breadth.
    ecosystem, absent from our plan, portable to every target.
 5. **The engineering loop (`X-L7-*`).** Not optional: being slower here loses
    evaluations before anything above is examined.
+6. **Reconciliation beyond the screen (`C32`, `C33`).** Local-first sync and
+   persistent-connection server UI are both reconciliation problems — the
+   framework's core competency — and both are how their archetypes win.
+7. **Server concepts the substrate improves (`C05`, `C45`).** Server-only
+   components with a type-checked boundary, and durable workflows with
+   determinism enforced by type rather than by lint.

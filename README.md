@@ -6,7 +6,7 @@ The project is being developed around one core idea:
 
 > **Write application semantics once in Rust; let each operating system provide the actual native UI and platform services.**
 
-This is intentionally closer to the architectural philosophy of React Native than to a custom-rendered toolkit. The framework does not paint an imitation of every operating system. It maintains a declarative Rust UI/component model and realizes that model through native platform objects.
+This is intentionally closer to the architectural philosophy of frameworks that drive real native host controls from a portable runtime than to a custom-rendered toolkit. The framework does not paint an imitation of every operating system. It maintains a declarative Rust UI/component model and realizes that model through native platform objects.
 
 That model is written in one of two syntaxes, and they are peers. A **builder
 syntax** of constructors and `with_*` modifiers, and a **markup syntax** —
@@ -1168,7 +1168,7 @@ stay fully planned regardless; nothing in the portable layer is designed as
 though they were optional.
 
 Interleaved with the backends, `PLAN.md` section 11 carries the
-production-parity milestones (39–52) in four tiers:
+production-parity milestones (39–57) in four tiers:
 
 - **Tier 0 (53, 39, 40), before the second backend exists** — the markup
   syntax, so that every later example, template, guide, doc test, and
@@ -1176,29 +1176,37 @@ production-parity milestones (39–52) in four tiers:
   through a corpus that has grown for years; portable-surface obligations
   (right-to-left mirroring in the layout model, safe areas, permission states,
   gesture arbitration, panic and teardown policy, ownership and escape-hatch
-  contracts); and interoperability, so a RustNative tree can be embedded in an
-  existing application and a foreign control embedded in ours. These cost once
-  now and once per backend later. (Milestone numbers are identities, not an
+  contracts, plus a typed environment, a command model, per-property native
+  mappers, platform-group crates, and capability grants distinct from
+  capability availability); and interoperability, so a RustNative tree can be
+  embedded in an existing application and a foreign control embedded in ours.
+  These cost once now and once per backend later. (Milestone numbers are identities, not an
   order — `PLAN.md` section 8 establishes that convention, and section 11
   sequences these three.)
 - **Tier 1 (41–45), continuous, and part of section 8's definition of a
   finished backend** — the conformance suites that turn this framework's
   guarantees into tested ones, including the syntax-equivalence suite that
-  keeps the two authoring surfaces from drifting apart, CI-enforced budgets, a state-preserving
-  developer loop, a runtime inspection protocol with an inspector, and the
-  headless test backend that lets the application layer be tested without one
-  machine per target.
-- **Tier 2 (46–48), before any public release** — internationalization and
-  localization, shared state, error boundaries, the asynchronous data layer,
-  forms and validation, and a native component library with a design-token
-  pipeline.
-- **Tier 3 (49–52), with and after the Web track** — the server application
-  model, deployment and post-ship updates, observability and compliance, and
-  the stability policy, ecosystem contract, and documentation that decide
-  whether the framework gets a second project.
+  keeps the two authoring surfaces from drifting apart, CI-enforced budgets, a
+  state-preserving developer loop with previews and development builds, a
+  runtime inspection protocol with record and replay, and the headless test
+  backend — queried through the accessibility tree — that lets the application
+  layer be tested without one machine per target.
+- **Tier 2 (46–48, 54), before any public release** — internationalization and
+  localization, shared state, error boundaries as supervision, the asynchronous
+  data layer, forms and validation, a native component library with a
+  design-token pipeline, and responsiveness under load: prioritized,
+  interruptible rendering and work that pauses when nobody can see it.
+- **Tier 3 (49–52, 55–57), with and after the Web track** — the server
+  application model, deployment and post-ship updates, observability and
+  compliance, the stability policy, ecosystem contract, and documentation that
+  decide whether the framework gets a second project; reconciliation beyond the
+  screen (local-first sync, server-interactive UI, device fleets); durable and
+  event-driven execution; and the surfaces beyond the main window — widgets,
+  extensions, push, commerce, secure storage, feature flags.
 
 They come out of the standing analysis in
 [`docs/ecosystem-analysis/`](docs/ecosystem-analysis/), which examines the
 framework families this project is measured against from their substrate
-choices upward — naming no product or vendor, deliberately — and scores this
-codebase layer by layer against them.
+choices upward — naming no product or vendor, deliberately — catalogues the
+concepts those families introduced and analyses each on its own merits, and
+scores this codebase layer by layer and concept by concept against them.

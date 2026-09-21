@@ -40,10 +40,21 @@ Read in this order:
    imposes on everything above it. **The most important document here.**
 3. The platform documents — concrete archetypes analysed as paths through those
    root choices: [`web.md`](web.md), [`desktop.md`](desktop.md),
-   [`mobile.md`](mobile.md), [`embedded.md`](embedded.md).
-4. [`parity-matrix.md`](parity-matrix.md) — where RustNative stands on every
-   layer today, with evidence.
-5. [`gap-plan.md`](gap-plan.md) — the workstreams and proposed milestones that
+   [`mobile.md`](mobile.md), [`embedded.md`](embedded.md). Each archetype
+   ends by naming the concepts it introduced.
+4. The concept catalogue — the ninety-odd *ideas* those archetypes introduced,
+   analysed on their own merits, because a concept can outlive the archetype
+   that carried it and become an expectation everywhere:
+   [`concepts-core.md`](concepts-core.md) (scheduling, rendering model, state,
+   composition), [`concepts-app.md`](concepts-app.md) (UI system, data and
+   sync, server and API, distributed execution, platform surfaces),
+   [`concepts-delivery.md`](concepts-delivery.md) (engineering loop, build and
+   packaging, isolation and security, ecosystem, and the concepts deliberately
+   rejected), and [`concepts-embedded.md`](concepts-embedded.md) (hardware,
+   scheduling, memory, storage, fleets, robotics, edge inference).
+5. [`parity-matrix.md`](parity-matrix.md) — where RustNative stands on every
+   layer and every concept today, with evidence.
+6. [`gap-plan.md`](gap-plan.md) — the workstreams and proposed milestones that
    close the delta, tiered and ordered, plus the differentiation statement.
 
 ## The naming rule

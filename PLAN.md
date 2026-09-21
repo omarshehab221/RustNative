@@ -978,6 +978,7 @@ Native AppKit interoperability through Rust Objective-C bindings, with the unsaf
 - sandboxing and entitlements expressed as capability answers rather than build flags the application maintains by hand, and window and state restoration driven through the host's own restoration mechanism (Milestone 39);
 - embedding in both directions: our tree realized into a caller-supplied `NSView`, and an `NSView` adopted as a leaf of our tree, laid out and clipped by our layout model (Milestone 40);
 - locale formatting, collation, and right-to-left mirroring delegated to the host's own facilities rather than reimplemented (Milestone 46);
+- the host's document architecture — autosave, versions, recent documents, per-document undo — behind the portable document model (Milestone 48), and menu-bar extras, dock menus, and widgets from the surface vocabulary (Milestone 57);
 - verification requires a macOS machine (2.13).
 
 ## Milestone 34 — Linux backend
@@ -995,6 +996,7 @@ Start with one supported native toolkit and keep the backend pluggable so additi
 - a desktop-environment conformance matrix — the conventions that differ between environments are answered per environment rather than assumed — and mixed-DPI multi-monitor scaling that survives a monitor configuration change at runtime (Milestone 39);
 - embedding in both directions against the chosen toolkit's widget type (Milestone 40);
 - locale formatting, collation, and mirroring delegated to the host's own facilities (Milestone 46);
+- tray integration through the desktop's status-notifier protocol where the environment provides one, answered as a capability where it does not (Milestone 57);
 - verification on real Linux sessions under both display servers.
 
 ## Milestone 35 — Android backend
@@ -1014,7 +1016,8 @@ Native Android view hierarchy, lifecycle integration, and a disciplined JNI boun
 - safe areas, display cutouts, foldable hinges, split-screen, and configuration changes handled as layout-model properties (Milestone 39);
 - constrained background work, and asset loading with decode, caching, and lifetime-bound cancellation (Milestone 47);
 - embedding in both directions against `View`/`ViewGroup`, plus the library-only mode in which the application model is linked into an existing Android application with no UI dependency (Milestone 40);
-- over-the-air update support within the host's rules, with signing, staged rollout, rollback, and version pinning (Milestone 50);
+- over-the-air update support within the host's rules, with signing, staged rollout, rollback, and version pinning (Milestone 50), and store-delivered dynamic feature and asset packs (Milestone 50);
+- home-screen widgets, quick-settings tiles, share targets, remote push, store billing, and keystore-backed secure storage from the surface and product-service contracts (Milestone 57);
 - verification on an emulator and on a physical device, including the lifecycle conformance suite of Milestone 45 — process death and restoration, configuration change, deep-link entry during restoration, and low-memory trim — and a low-end device profile in the budget matrix (Milestone 42).
 
 ## Milestone 36 — iOS backend
@@ -1034,6 +1037,7 @@ Native UIKit interoperability, sharing the Objective-C interop and Core Text wor
 - embedding in both directions against `UIView`, plus the library-only mode for linking the application model into an existing iOS application (Milestone 40);
 - over-the-air update support within the host's rules — which forbid more here than elsewhere, so the milestone states what is permitted rather than assuming parity with other targets (Milestone 50);
 - privacy manifests and data-use declarations generated from the build rather than hand-maintained (Milestone 51);
+- widgets, live activities, share and action extensions, remote push, store billing, and keychain-backed secure storage from the surface and product-service contracts (Milestone 57), each extension a separate target generated from `rustnative.toml` (Milestone 50);
 - verification requires Apple hardware and a developer account (2.13), and includes the lifecycle conformance suite of Milestone 45.
 
 ## Milestone 37 — Embedded backends
@@ -1060,6 +1064,7 @@ Capability-oriented design is critical here because embedded targets will not im
 - power, watchdog, and allocation obligations: no periodic wake without a pending deadline, documented wake sources and a measured idle current figure on a reference board, watchdog integration with a safe-state panic path, and a bounded-allocation mode in which allocation failure is a handled outcome rather than an abort (Milestone 51);
 - firmware update as a first-class capability: signed images, A/B slots, verification, automatic rollback on failed boot, and staged fleet rollout, delegating to an existing bootloader rather than writing one (Milestone 50);
 - a constrained text profile that declares which scripts it supports, so the limitation is stated rather than discovered (Milestone 48);
+- framework display, input, and storage drivers that take ownership of the ecosystem's typed peripherals rather than raw register handles, so hardware typestate guarantees survive into our layer (`C74-1`); a display driver contract with asynchronous region transfer, so DMA- or programmable-I/O-backed drivers overlap transfer with the next frame's work (`C91-1`); and, for embedded Linux, a direct-to-display profile on the draw-list path with no window system, for appliance-like boot-to-UI times (`C83-1`);
 - declared RAM, flash, and frame budgets per device class, enforced in CI (Milestone 42);
 - verification on device, plus a host-side simulator — the same draw list rendered on a development machine with simulated display size, colour depth, and input — so most of the logic is testable without hardware (Milestone 45).
 
@@ -1271,6 +1276,21 @@ rather than eliminating it:
   work before and without the client runtime — is part of this milestone rather
   than an aspiration.
 
+Three further concepts from the survey belong to this milestone's render path
+rather than to the server model:
+
+- **server-only components**: components that exist only on the server, whose
+  code never reaches the client, whose boundary props are checked for
+  serializability at compile time, and whose output is tree payload merged by
+  the ordinary reconciler (specified in Milestone 49, carried by this renderer);
+- **partial prerendering**: a route served as a prerendered static shell with
+  its dynamic parts streamed into the same response, the split determined by
+  which subtrees read request-scoped state rather than declared by hand, and
+  shown by the inspector (`C06-1`);
+- **render mode per subtree** rather than per build — static, server-rendered,
+  client-interactive, and the server-interactive mode of Milestone 55 — so the
+  three deployment modes are the application-wide case of a per-subtree choice.
+
 The server *application* model — authentication, a data layer with
 compile-time-checked queries, migrations, durable background jobs,
 secure-by-default request handling, and a generated administrative surface —
@@ -1327,7 +1347,7 @@ Section 11 adds to this milestone:
 
 The serverless mode runs Web milestone H's renderer per request in a host that keeps nothing between requests, and it is a distinct milestone because those hosts impose constraints a long-lived server does not:
 
-- **two runtime shapes**, both of which the render path must build for: a native binary invoked per request (AWS Lambda and equivalents, through a runtime adapter) and a WASM sandbox (edge/worker runtimes, and `wasm32-wasip1` hosts);
+- **two runtime shapes**, both of which the render path must build for: a native binary invoked per request (managed function runtimes, through a runtime adapter) and a WASM sandbox (edge/worker runtimes, and `wasm32-wasip1` hosts);
 - **stateless by construction**: nothing durable lives in the process. Anything that must outlive a request goes through a service — storage, HTTP, or a database — and the state store on that path is per request;
 - **cold start and binary size are correctness-adjacent**: no process-wide lazily created runtime on this path (the shared Tokio runtime is exactly what must not be reached for), a single-threaded executor, and a size/startup budget measured in CI like any other regression;
 - **no work outliving the response**: a request owns a task scope bounded by the response, cancelled the way a component's scope is cancelled at unmount. A task that survives the response is a bug, not a background job;
@@ -1337,6 +1357,12 @@ The serverless mode runs Web milestone H's renderer per request in a host that k
 - **host limits surfaced as capabilities**: execution timeouts, memory ceilings, absent or ephemeral filesystems, and response-size limits are answers the application can ask for, not surprises in production;
 - **tooling**: host adapters for at least one function runtime and one edge/WASM runtime, plus a local emulator so the serverless path is runnable and debuggable without deploying;
 - **the equivalence test**: one application, the same state, rendered client-side, server-rendered, and serverless, must produce the same DOM. That test is what keeps the three modes one target instead of three codebases.
+
+This milestone is request-shaped. The per-invocation discipline above — nothing
+durable in the process, a scope bounded by the invocation, configuration read
+per invocation — applies unchanged to event-triggered invocations and to
+durable workflows, which are Milestone 56; revisions, traffic splitting, and
+resource bindings for these hosts are in Milestone 50.
 
 ---
 
@@ -1512,11 +1538,14 @@ platform backends, each finished by section 8's definition
 Web backend, milestones A–K
   client-side → server-rendered → serverless
         ↓
-Tier 2 — the application layer (46–48)
-  localization · state, resilience, data · components and tokens
+Tier 2 — the application layer (46–48, 54)
+  localization · state, resilience, data · components and tokens ·
+  responsiveness under load
         ↓
-Tier 3 — the server model, deployment and updates, operations,
-  and the project around the framework (49–52)
+Tier 3 — the server model, deployment and updates, operations, the
+  project around the framework, reconciliation beyond the screen,
+  durable and event-driven execution, and surfaces beyond the main
+  window (49–52, 55–57)
         ↓
 one application, every target, the same semantics
 ```
@@ -1529,7 +1558,7 @@ The cross-cutting work in section 9 — testing, correctness boundaries, perform
 
 ---
 
-# 11. Production-parity milestones (39–53)
+# 11. Production-parity milestones (39–57)
 
 Sections 1–10 specify the framework's architecture and its targets. They do not
 specify the accumulated answers a mature framework is expected to have —
@@ -1558,9 +1587,9 @@ Tier 0   Milestones 53, 39, 40   before the second backend exists
         ↓
 Tier 1   Milestones 41–45        continuous; gates each backend's completion
         ↓                        (folded into section 8's definition of done)
-Tier 2   Milestones 46–48        before any public release
+Tier 2   Milestones 46–48, 54    before any public release
         ↓
-Tier 3   Milestones 49–52        with and after the Web track
+Tier 3   Milestones 49–52, 55–57 with and after the Web track
 ```
 
 One rule binds the order, and it is the reason Tier 0 exists at all:
@@ -1580,9 +1609,13 @@ Each milestone below lists the requirement identifiers it satisfies. Those
 identifiers are defined in `docs/ecosystem-analysis/` — in `foundations.md` for
 the root-layer ones (`X-L0-*` through `X-L7-*`) and in the platform documents
 for the rest (`W-*` web, `D-*` desktop, `M-*` mobile, `E-*` embedded) — and
-`parity-matrix.md` scores the codebase against them. The identifiers are stable
-so that a later session can check a milestone against the analysis that
-produced it without re-deriving the argument.
+`parity-matrix.md` scores the codebase against them. Concept requirements
+(`Cnn-k`) come from the concept catalogue — `concepts-core.md`,
+`concepts-app.md`, `concepts-delivery.md`, and `concepts-embedded.md` — which
+analyses the ideas the competing framework families introduced independently of
+the families themselves, including the ones deliberately rejected. The
+identifiers are stable so that a later session can check a milestone against
+the analysis that produced it without re-deriving the argument.
 
 ---
 
@@ -1791,7 +1824,9 @@ the moment where that is cheap — one backend exists — and it is the last suc
 moment.
 
 Satisfies: `D-PT-1`, `D-PT-2`, `D-TW-1`, `X-L3-3`, `M-OB-1`, `M-OB-3`,
-`X-L5-2`, `X-L4-4`, `X-L1-2`, `X-L0-5`, `X-L0-6`.
+`X-L5-2`, `X-L4-4`, `X-L1-2`, `X-L0-5`, `X-L0-6`; concepts `C15-1`–`C15-3`,
+`C20-1`, `C20-2`, `C21-1`, `C22-1`, `C22-2`, `C24-1`, `C24-2`, `C49-1`,
+`C65-1`, and the shape of `C68-1`.
 
 - **a desktop-class affordance audit of the portable API** — window
   management, menus, shortcut maps, pointer hover and cursors, drag-and-drop,
@@ -1830,6 +1865,48 @@ Satisfies: `D-PT-1`, `D-PT-2`, `D-TW-1`, `X-L3-3`, `M-OB-1`, `M-OB-3`,
   already treats terminal restoration as a correctness requirement; this
   generalizes that position to every host.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`), seven structural decisions, each of which fixes how every later
+backend is written and therefore belongs here rather than later:
+
+- **a typed environment** (`C15`): values that flow down the tree implicitly
+  and can be overridden per subtree — theme, locale, layout direction, text
+  scale, size class, colour scheme, reduced motion, posture, and service
+  instances — fed from host traits by every backend so no component queries
+  the host directly, with invalidation limited to readers of a changed key;
+  plus *upward preferences*, a typed channel for a descendant to publish a
+  value an ancestor reduces during layout or render;
+- **a command model** (`C20`): an action with identity, label, icon, shortcut,
+  enabled and checked state, bound by menus, toolbars, context menus,
+  shortcuts, and host-level surfaces, routed through the focus chain by each
+  host's own convention — so a disabled command is disabled everywhere and a
+  menu's shortcut is always the shortcut that works;
+- **adaptive-layout vocabulary** (`C22`): size classes per axis and
+  container-relative decisions computed by the portable layout model from the
+  constraints it already has, with posture and hinge geometry delivered as
+  environment values;
+- **per-property native mappers** (`C24`): every backend applies properties
+  to host objects through a per-control table of typed appliers, which
+  applications may extend or replace globally or per instance — the escape
+  hatch at the granularity applications actually need, and a structure every
+  backend is written in from the start;
+- **the surface vocabulary** (`C49-1`): widget, live activity, tile,
+  extension, instant application, companion device, tray or menu-bar extra,
+  jump list, and taskbar progress as capabilities, so every backend answers
+  them honestly from its first day (realization is Milestone 57);
+- **platform-group crates** (`C65`): shared crates for groups of hosts that
+  genuinely agree — Apple hosts, draw-list hosts — each defining trait
+  contracts its members implement, decided before a group's second member is
+  written so shared code is never copied between backends;
+- **the shape of capability grants** (`C68`): 2.5's capabilities answer *does
+  this host have it?*; nothing yet answers *may this part of the application
+  use it?* Services become obtainable only through a scoped grant — paths,
+  origins, windows, packages — so third-party packages receive only what they
+  declare. The shape is fixed here because retrofitting it breaks every
+  application that relied on ambient access; enforcement is Milestone 51;
+- and **typestate as a design rule** (`C21`) for framework APIs whose states
+  permit different operations, applied first to validated form values,
+  capability-gated services, and escape-hatch host handles.
+
 **Done when** a new-backend conformance checklist exists, the Windows backend
 passes it, and every item on it names the test that proves it.
 
@@ -1845,7 +1922,8 @@ constrains how a backend realizes its root — retrofitting it means rewriting
 each backend's realization layer.
 
 Satisfies: `X-INTEROP-1`, `D-LG-1`, `D-LG-2`, `M-AS-1`, `M-AS-2`, `M-MP-1`,
-`M-MP-2`, `D-GX-1`, `M-EN-1`, `W-CL-2`, `W-MS-1`, `E-HAL-1`.
+`M-MP-2`, `D-GX-1`, `M-EN-1`, `W-CL-2`, `W-MS-1`, `E-HAL-1`; concepts `C43-1`,
+`C66-1`.
 
 - **embedding, inward**: the tree realized into a caller-supplied host object —
   a window, a view, or a document node — that the framework did not create and
@@ -1872,6 +1950,17 @@ Satisfies: `X-INTEROP-1`, `D-LG-1`, `D-LG-2`, `M-AS-1`, `M-AS-2`, `M-MP-1`,
   application — with a worked example at each rung, because an adoption story
   that is not demonstrated is not an adoption story.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **one interface description for the library-only surface** (`C66`), with
+  ownership and threading annotated, from which bindings for every supported
+  host language are generated and tested — never written by hand per language;
+- **export of a component as a web custom element** (`C43`), with typed
+  attributes and properties, events surfaced as DOM events, and accessibility
+  relationships preserved: the web rung of the adoption ladder, letting a
+  RustNative component live in any existing page without that page adopting
+  anything else.
+
 **Done when** a sample pre-existing application on each shipped backend hosts a
 RustNative subtree, a sample RustNative application hosts a foreign control,
 and both are under test.
@@ -1892,8 +1981,8 @@ archetypes that must re-implement what it inherits. This milestone converts
 each claim into a suite.
 
 Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L2-1`,
-`X-L2-2`, `X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`,
-`D-FP-2`, `M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`.
+`X-L2-2`, `X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`, `D-FP-2`,
+`M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`; concepts `C09-1`.
 
 - **syntax equivalence as a standing guarantee** (2.9): the equivalence suite
   Milestone 53 creates — builder against markup, with the markup compiled from
@@ -1943,6 +2032,10 @@ Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L2-1`,
   with the methodology published alongside the results. The fidelity argument
   is only worth making if it is measured.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`): **the batching guarantee** (`C09`) as a tested property — every
+state change caused by one message becomes visible in the same render, and no
+render ever observes a partial set of them.
+
 **Done when** every guarantee above names a test, and no backend is called
 complete without passing the suite.
 
@@ -1956,7 +2049,8 @@ numbers, and the substrate advantage that makes those numbers possible is
 squandered if nothing defends it against regression.
 
 Satisfies: `X-L0-1`, `X-L0-3`, `W-RS-1`, `W-RS-2`, `W-SL-1`, `W-ED-2`,
-`M-BR-2`, `D-WS-1`, `E-GUI-4`, `W-SH-1`, `M-OB-4`.
+`M-BR-2`, `D-WS-1`, `E-GUI-4`, `W-SH-1`, `M-OB-4`; concepts `C42-4`, `C62-1`,
+`C62-2`, `C83-2`.
 
 - **a budget file per target**, holding declared numbers rather than
   aspirations: cold start, resident memory, artifact size, frame-time
@@ -1971,6 +2065,17 @@ Satisfies: `X-L0-1`, `X-L0-3`, `W-RS-1`, `W-RS-2`, `W-SL-1`, `W-ED-2`,
   budget file rather than adjectives;
 - **build time is a budget too** — it is the tax this substrate pays and the
   one developers feel hourly.
+
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`), three kinds of budget the list above misses:
+
+- **user-centric web metrics** (`C42-4`): largest content paint, interaction
+  responsiveness, and layout shift, with zero layout shift as the target for
+  framework-controlled content;
+- **a startup phase model** (`C62`) traced on every backend — process start,
+  runtime ready, first frame, first content, interactive — with each phase
+  budgeted separately so a regression is attributable, and optional
+  profile-guided release builds generated from a scripted startup run;
+- **boot-to-first-frame** (`C83-2`) on embedded reference boards.
 
 **Done when** a budget file exists per shipped target, CI enforces it, and no
 performance claim in the project's documentation lacks a number behind it.
@@ -1987,7 +2092,8 @@ pillar developers cite most when choosing between two otherwise equivalent
 frameworks, so leaving it unaddressed loses evaluations before anything else is
 examined.
 
-Satisfies: `X-L7-1`, `X-L7-2`, `X-L3-10`, `X-L3-11`, `M-BR-4`, `E-PR-1`.
+Satisfies: `X-L7-1`, `X-L7-2`, `X-L3-10`, `X-L3-11`, `M-BR-4`, `E-PR-1`;
+concepts `C55-1`, `C55-2`, `C56-1`, `C57-1`, `C58-1`–`C58-3`, `C59-1`, `C90-1`.
 
 - **rebuild and restart with application state preserved**: state serialized
   before teardown and restored into the new process, so the developer stays
@@ -2017,6 +2123,29 @@ Satisfies: `X-L7-1`, `X-L7-2`, `X-L3-10`, `X-L3-11`, `M-BR-4`, `E-PR-1`.
   markup syntax must not get a worse loop for it (2.9), and the same applies in
   reverse — neither surface is allowed to become the one with tooling.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`), the mechanisms that make the loop competitive rather than merely
+fast:
+
+- **previews and a catalogue** (`C55`): a component rendered in isolation from
+  a preview declaration — in either syntax — across a configuration matrix
+  (theme, locale and pseudo-locale, text scale, size class, direction,
+  contrast), browsable in a catalogue shipped with the CLI, on the development
+  machine's backend and on the headless backend;
+- **development builds** (`C59`) per device target, loading the application
+  crate as a separately rebuilt unit so a change reaches a phone or board
+  without reinstalling or re-signing;
+- **development services** (`C58`) derived from declared resource bindings and
+  provisioned locally when absent, a continuous test mode running affected
+  tests on save, and an in-application error overlay on every backend linking
+  to source positions, `.rsx` positions included;
+- **`rustnative generate`** (`C57-1`) for components with their preview and
+  test, screens wired into navigation, services, and server resources, in both
+  syntaxes;
+- **a structural editing API** (`C56`) on the Milestone 53 language server —
+  insert, move, set attribute, preserving formatting and comments — so a visual
+  designer can be built on the markup tooling without a model of its own;
+- **on-demand installation** (`C90`) of toolchains and board support.
+
 **Done when** the loop's wall-clock time is in the budget file and is met on
 every shipped backend, including at least one device target.
 
@@ -2029,7 +2158,8 @@ Section 9's tooling list, made concrete and no longer deferred. Same reasoning
 as Milestone 43: a compiled framework does not inherit introspection, so it
 must expose it.
 
-Satisfies: `X-L7-3`, `X-L7-4`, `X-L3-5`, `D-IM-1`, `E-RS-2`.
+Satisfies: `X-L7-3`, `X-L7-4`, `X-L3-5`, `D-IM-1`, `E-RS-2`; concepts `C04-2`,
+`C18-2`, `C24-2`, `C61-1`–`C61-3`, `C88-1`, `C92-1`.
 
 - **one inspection protocol exposed by the runtime**, covering the declarative
   tree, the realized host objects and the mapping between them, state and props
@@ -2048,6 +2178,22 @@ Satisfies: `X-L7-3`, `X-L7-4`, `X-L3-5`, `D-IM-1`, `E-RS-2`.
 - **capability and service diagnostics**: what this host advertises, what it
   refused, and why.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **record, replay, and time travel** (`C61`): input, messages, and service
+  responses recorded with redaction rules; deterministic replay on the headless
+  backend and on the originating one; stepping backwards through state history
+  in the inspector; and conversion of a recording into a regression test.
+  Message-only state change plus a replaceable clock and executor make this
+  attainable here in a way frameworks with ambient mutation cannot match;
+- device recordings that include sensor and service inputs and replay in the
+  host-side simulator (`C88`);
+- per-component render-or-skip reasons (`C04-2`), property-value provenance by
+  precedence level (`C18-2`), and active mapper customizations (`C24-2`) in the
+  protocol;
+- scheduler, task, frame, and input events emitted to existing embedded trace
+  formats and debugger kernel-awareness where available (`C92`).
+
 **Done when** every backend answers the protocol, including terminal and
 embedded in reduced form, and the inspector is part of the shipped CLI.
 
@@ -2061,7 +2207,8 @@ it is the prerequisite for testing the application layer built in Tier 2 —
 which is otherwise untestable without one machine per target.
 
 Satisfies: `X-L7-5`, `X-L7-6`, `X-L7-7`, `X-L7-8`, `M-OB-2`, `M-OB-4`,
-`E-GUI-2`.
+`E-GUI-2`; concepts `C11-1`, `C11-2`, `C14-1`, `C55-3`, `C60-1`, `C60-2`,
+`C82-1`.
 
 - **a headless reference backend** that realizes the tree into an inspectable
   model, so component, interaction, and golden tests run on any machine;
@@ -2082,6 +2229,23 @@ Satisfies: `X-L7-5`, `X-L7-6`, `X-L7-7`, `X-L7-8`, `M-OB-2`, `M-OB-4`,
   same draw list rendered on a development machine with simulated display size,
   colour depth, and input.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **a test query API over the portable accessibility tree** (`C60`) — by role,
+  accessible name, label, and state — used by component, interaction, and
+  end-to-end tests on every backend, so tests survive refactoring and every UI
+  test is also an accessibility check; a lookup failure lists what the tree does
+  contain;
+- **an exhaustive test mode** (`C11`) in which a task, effect, or outgoing
+  message the test did not assert fails the test, with per-test overrides of
+  clock, network, storage, randomness, and any application service through the
+  service contracts;
+- **every preview doubling as a golden test** (`C55-3`), so previews cannot rot;
+- **a kill-and-restore test** for each destination's saved state (`C14-1`);
+- **a hardware-in-the-loop runner** (`C82`) executing the suites on emulators,
+  the simulator, and connected boards through debug probes, whose per-board
+  results are the only basis on which a board is called supported (2.13).
+
 **Done when** component, interaction, golden, and lifecycle tests for the full
 application layer run on a machine that has none of the target hardware.
 
@@ -2100,7 +2264,7 @@ answer, a framework without one is not viable for commercial software, and
 retrofitting it touches every string, every layout, and every backend — which
 is why it is the first Tier 2 milestone rather than a late one.
 
-Satisfies: `X-L5-3`, `X-L5-4`.
+Satisfies: `X-L5-3`, `X-L5-4`; concepts `C41-2`.
 
 - **typed message catalogues** with plural categories and grammatical gender,
   because placeholder substitution and string concatenation cannot express
@@ -2129,6 +2293,10 @@ Satisfies: `X-L5-3`, `X-L5-4`.
   conformance suite so growth and mirroring defects fail a test rather than
   surfacing in a translated build.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`): locale delivered through the environment (`C15`) so a switch
+invalidates only its readers, and locale-aware web routing with generated
+language alternates (`C41-2`).
+
 **Done when** an example application ships in at least one right-to-left and
 one plural-rich locale, switching at runtime, with the layout suite passing
 under pseudo-localization on every backend.
@@ -2144,7 +2312,10 @@ most-used third-party layer in every competing ecosystem and is portable to
 every target — it is not a web feature.
 
 Satisfies: `X-L4-1`, `X-L4-2`, `X-L4-3`, `X-DATA-1`, `X-DATA-2`, `X-DATA-3`,
-`W-SF-7`, `M-FP-2`, `M-FP-3`, `D-MC-1`.
+`W-SF-7`, `M-FP-2`, `M-FP-3`, `D-MC-1`; concepts `C08-1`, `C08-2`, `C09-2`,
+`C10-1`, `C10-2`, `C12-1`, `C12-2`, `C13-1`–`C13-3`, `C14-1`, `C16-1`, `C17-1`,
+`C17-2`, `C29-1`, `C29-2`, `C30-1`, `C30-2`, `C31-1`, `C31-2`, `C34-1`–`C34-3`,
+`C36-1`, `C87-1`.
 
 - **a shared/scoped state contract**: typed, observable, scoped to a subtree
   rather than global, with defined update ordering and the same lifetime
@@ -2173,6 +2344,54 @@ Satisfies: `X-L4-1`, `X-L4-2`, `X-L4-3`, `X-DATA-1`, `X-DATA-2`, `X-DATA-3`,
 - **asset and image loading** with decode, downscale, memory and disk caching,
   and cancellation tied to component lifetime.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`), the details that separate an application layer from a feature list:
+
+- **derived values** (`C08`) — pure functions of state, cached, recomputed only
+  when their inputs change by value, visible in the inspector — and slice
+  subscription so a component observing part of a shared store is invalidated
+  only by that part;
+- **a move-based "prepare off the UI thread, apply atomically" pattern**
+  (`C09-2`) for large updates;
+- **a state-machine pattern on enums** (`C10`) whose entry and exit effects are
+  tied to task scopes, so leaving a state cancels its work, with optional
+  diagram generation from the type;
+- **stream collection as a component primitive** (`C12`), bound to the
+  component's scope, suspended with it, delivering values as messages, with
+  hot/cold and backpressure semantics stated for every framework stream;
+- **navigation as typed state** (`C13`) from which the host navigation stack is
+  reconciled — deep links, restoration, and programmatic navigation all
+  construct that value — with typed query parameters on the web and state scoped
+  to a destination's time on the stack;
+- **a declared saved-state subset per destination** (`C14`), written to the
+  host's restoration mechanism under a size budget;
+- **service scopes** (`C16`) per application, window, destination, and request,
+  with construction and disposal bound to the scope;
+- **supervision** (`C17`): error boundaries are a supervision policy on a
+  subtree — isolate, restart with backoff, escalate — and the same policies
+  apply to task scopes, with the stated default that a child's failure does not
+  cancel its siblings;
+- **query results as an exhaustive state type** (`C29`) — loading, empty,
+  failure, success, stale-while-refreshing — that components must match, and
+  colocated data requirements batched by an ancestor into one request, each
+  component receiving only its own slice;
+- **stale-while-revalidate, specified** (`C30`): separate freshness and
+  retention lifetimes; revalidation on focus, reconnect, mount, and interval as
+  declared policy; hierarchical key invalidation; prefetch; cancellation when
+  unobserved; retention-based collection; structural sharing so unchanged parts
+  of new results keep their identity;
+- **live queries over local storage** (`C31`) usable as virtualized list
+  sources, and a documented repository pattern in which the network writes to
+  local storage and the UI reads from it, with a gap-filling paging source;
+- **an HTTP interceptor chain** (`C34`) — authentication and token refresh,
+  retry, logging, caching — certificate pinning as declared policy, and declared
+  endpoint interfaces producing typed clients;
+- **a changeset type in the forms model** (`C36`): typed casting, per-field
+  errors, storage constraint violations mapped back to their fields, and a
+  validated output type distinct from raw input;
+- **a long-running operation primitive** (`C87`) — goal, progress stream,
+  cancellation, pre-emption, result — bound to a task scope and shown by
+  standard progress components.
+
 **Done when** an example application demonstrates cached, deduplicated,
 paginated data with optimistic updates and offline queueing on at least two
 backends, and a subtree failure is contained and retried without restarting the
@@ -2188,7 +2407,9 @@ running UI is how applications are actually built. This is also where the
 framework's realization strategy has to prove it can serve design-led teams
 without abandoning host fidelity.
 
-Satisfies: `X-UI-1`, `X-UI-2`, `X-VIZ-1`, `D-SD-1`, `E-GUI-3`.
+Satisfies: `X-UI-1`, `X-UI-2`, `X-VIZ-1`, `D-SD-1`, `E-GUI-3`; concepts
+`C18-1`, `C19-1`, `C19-2`, `C20-3`, `C22-3`, `C23-1`, `C25-1`, `C26-1`–`C26-3`,
+`C27-1`, `C28-1`, `C28-2`.
 
 - **a component library** covering the controls applications need, realized
   natively per backend, with the accessibility semantics of each one
@@ -2210,6 +2431,35 @@ Satisfies: `X-UI-1`, `X-UI-2`, `X-VIZ-1`, `D-SD-1`, `E-GUI-3`.
 - **a constrained text profile** for embedded targets that declares which
   scripts it supports, so the limitation is stated rather than discovered.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **a headless behaviour layer** (`C19`) for composite controls — list
+  selection, combobox, menu, tabs, tree, grid navigation, date entry — carrying
+  focus, keyboard, and accessibility semantics independently of appearance, on
+  which the terminal, embedded, and custom-drawn controls and applications' own
+  composites are built instead of reimplementing that behaviour;
+- **container-owned typed layout data** for children (`C18-1`), in both
+  syntaxes;
+- **a per-host idiom table** for every control (`C23`), including behavioural
+  differences such as button order, dismissal, and destructive-action placement;
+- **an adaptive navigation component** switching between bottom bar, rail, and
+  sidebar by size class, and **a command palette** on the command registry
+  (`C22-3`, `C20-3`);
+- **matched-geometry transitions** (`C25`) keyed by a declared shared identity
+  across navigation and state changes, using the host's own transition
+  mechanism where one exists and respecting reduced motion;
+- **list infrastructure** (`C26`): sort, filter, and group as non-copying views
+  over a source; identity-diffed animated insert, delete, and move; and
+  sectioned compositional layout (list, grid, carousel per section, with
+  headers) on the virtualization of Milestone 28;
+- **a document model** (`C27`): open, save, save as, revert, autosave, dirty
+  state, recent documents, per-document undo bound to the command model,
+  external-change detection, and one window per document, each mapped to the
+  host's convention;
+- **host content controls** (`C28`): embedded web content, media playback with
+  system media controls and picture-in-picture, and camera preview as
+  capability-guarded nodes, plus the documented pattern for adding more.
+
 **Done when** an example application is built entirely from the component
 library and a token set, and renders host-appropriately on every shipped
 backend.
@@ -2218,6 +2468,54 @@ backend.
 Milestone 46 (mirroring and text growth).
 
 ---
+
+## Milestone 54 — Responsiveness under load
+
+Nothing elsewhere in this plan covers what happens when a render is
+*expensive*. Every mature framework family reached the same answer —
+prioritized, interruptible, visibility-aware work — and each had to retrofit it
+onto a render path that was not pure or effects that were not separated. Here
+the preconditions already exist: render is a pure function of state (2.8),
+effects are separated (Milestone 19), and tasks are structured (Milestone 18).
+It is Tier 2 because the first data-heavy application will expose its absence,
+and the scheduler contract is cheaper to extend before Milestone 47 builds the
+application layer on it.
+
+Satisfies: `C01-1`–`C01-4`, `C02-1`–`C02-3`, `C03-1` (the contract), `C04-1`,
+`C75-1`, `C76-1`.
+
+- **update priorities** attached to the message or state change that causes
+  them — immediate for input feedback, normal, and deferrable — rather than
+  introduced as a second API;
+- **interruptible reconciliation** for deferrable updates: work split at
+  component boundaries, yielding to the host between frames, discarded when
+  superseded, with the guarantee that one frame never mixes two versions of the
+  same state;
+- **deferred values and pending transitions**, so a component keeps showing
+  previous content while new content is prepared, and can render that it is
+  stale;
+- **render purity enforced by type**: render receives shared access to state
+  only, so a render that mutates does not compile;
+- **suspendable task scopes** driven by visibility and host lifecycle — a scope
+  can be suspended and resumed, with the rule for in-flight work (complete,
+  cancel, or defer) stated per task kind — and offscreen subtrees (hidden tabs,
+  collapsed panels, backgrounded windows) retained with their state at the
+  lowest priority;
+- **skipping by props equality**: a component whose props equal the previous
+  render's is skipped, decided from the props type, with a report when a
+  component's props cannot participate;
+- **on constrained targets**, the executor running as one task at a declared
+  priority inside a static-priority system and never above the application's
+  real-time work, and frame pacing that stops completely when no animation,
+  input, or pending work exists.
+
+**Done when** a reference application filtering a large data set keeps input
+latency within its Milestone 42 budget while the filtered view updates, on at
+least two backends; a hidden screen performs no periodic work; and an embedded
+reference board shows no periodic wake when idle, by measured current.
+
+**Depends on** Milestone 45 (deterministic scheduling in tests) and the
+host-clock and single-threaded executor core work.
 
 ## Tier 3 — with and after the Web track
 
@@ -2230,7 +2528,9 @@ archetype that owns this space pays for it with a runtime floor and
 production-surfaced type errors; the compiled archetypes that could take it
 deliberately refuse to provide anything above routing.
 
-Satisfies: `W-SF-1` through `W-SF-6`, `W-MF-1`, `W-EP-1`, `W-MS-1`.
+Satisfies: `W-SF-1` through `W-SF-6`, `W-MF-1`, `W-EP-1`, `W-MS-1`; concepts
+`C05-1`, `C05-2`, `C35-1`, `C35-2`, `C37-1`, `C38-1`, `C39-1`, `C39-2`,
+`C40-1`, `C41-1`, `C52-2`, server-side `C54-1`.
 
 - **a server application model** built on the *same* component, scheduler, and
   service contracts as the client — typed request handling, middleware,
@@ -2261,6 +2561,34 @@ Satisfies: `W-SF-1` through `W-SF-6`, `W-MF-1`, `W-EP-1`, `W-MS-1`.
   middleware, and configuration, so adoption does not require replacing a
   running service.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **server-only components** (`C05`) whose code is excluded from the client
+  build, whose boundary props are checked for serializability at compile time,
+  whose output is tree payload merged by the ordinary reconciler, and whose
+  server-only dependencies cause a compile error, not a runtime one, if
+  reachable from client code;
+- **the Rust server ecosystem's established service and middleware
+  abstraction** (`C37`) as the foundation, with typed extractors for framework
+  values (session, principal, request-scoped services) — not a private
+  pipeline, which would split the ecosystem this project most needs to join;
+- **an API schema derived from handler and server-function types** (`C35`),
+  with generated documentation, request validation, generated clients for other
+  languages, and contract tests that fail the build when a published version
+  breaks;
+- **migrations generated from model changes** (`C38`), with rename prompts,
+  attached data migrations, a dry run, and squashing;
+- **data-layer authorization policies** (`C39`) declared next to the schema and
+  enforced for queries and subscriptions alike, with a fixture-driven test
+  harness; and client-side adapters for existing hosted backends, so a team can
+  adopt RustNative's UI without changing its backend;
+- **feature-driven defaults** (`C40`) for pool, health, metrics, and tracing,
+  with a build-time report of what was configured and why;
+- **typed per-route web metadata** (`C41-1`) — head, social cards, structured
+  data — rendered server-side, updated client-side, with generated sitemaps and
+  build-time validation;
+- **passkey sign-in** (`C52-2`) and **server-side push sending** (`C54-1`).
+
 **Done when** an example application serves authenticated, database-backed,
 job-processing traffic from one codebase whose UI runs client-side,
 server-rendered, and serverless without modification.
@@ -2276,8 +2604,10 @@ over-the-air updates as non-negotiable; a device fleet that cannot be updated
 is a liability rather than a product.
 
 Satisfies: `W-MF-6`, `W-MF-7`, `W-DP-1`, `W-DP-2`, `W-DP-3`, `W-SL-2`,
-`W-SL-3`, `W-SL-4`, `W-ED-1`, `W-ED-3`, `W-SH-1`, `M-BR-1`, `E-MW-1`,
-`E-MW-2`, `E-BL-1`, `W-IS-1`, `W-IS-3`, `W-HM-1`, `W-HM-2`.
+`W-SL-3`, `W-SL-4`, `W-ED-1`, `W-ED-3`, `W-SH-1`, `M-BR-1`, `E-MW-1`, `E-MW-2`,
+`E-BL-1`, `W-IS-1`, `W-IS-3`, `W-HM-1`, `W-HM-2`; concepts `C42-1`–`C42-3`,
+`C47-1`, `C47-2`, `C48-1`, `C53-1`, `C63-1`, `C63-2`, `C64-1`, `C64-2`,
+`C81-1`, and model payloads of `C89-1`.
 
 - **deployment adapters as a stable documented contract**, covering at least
   one static host, one long-lived server, one per-request function runtime, and
@@ -2312,6 +2642,32 @@ Satisfies: `W-MF-6`, `W-MF-7`, `W-DP-1`, `W-DP-2`, `W-DP-3`, `W-SL-2`,
 - **single-artifact deployment**: a server binary with embedded assets and no
   separate asset pipeline to operate.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **native project files are generated build outputs** (`C63`) on every
+  backend — never hand-edited, regenerated on upgrade — with a typed
+  configuration-plugin hook through which capability packages declare
+  permissions, entitlements, manifest entries, and native dependencies;
+- **a shared build cache** for local and CI builds, and **remote build and
+  signing** for targets that cannot be built locally (`C64`) — with 2.13
+  preserved: a remote build is not a verification;
+- **immutable revisions and percentage traffic splitting** (`C47`) in the
+  adapter contract, and the rule that nothing unique is initialized outside a
+  per-invocation scope, so snapshot-restore hosts are safe;
+- **resource bindings** (`C48`) declared in project metadata, injected as typed
+  service handles, and used by adapters to derive infrastructure and
+  least-privilege permissions;
+- **the web loading path** (`C42`): an image pipeline (resizing, modern formats,
+  responsive sources, lazy loading, priority hints, reserved intrinsic
+  dimensions), font subsetting with preload and metric-adjusted fallbacks, and
+  route and data prefetch on hover and viewport entry under a data-use policy;
+- **store-delivered dynamic asset and feature packs** (`C53`) driven from
+  project metadata;
+- **multi-image firmware build and signing** (`C81`) with anti-rollback
+  versioning and a documented key-management procedure;
+- **model assets** (`C89`) as a versioned payload type in the mobile and
+  firmware update paths, with compatibility checked before activation.
+
 **Done when** the same application can be deployed in every shape section 8
 names, and updated after deployment on every target whose host permits it.
 
@@ -2327,7 +2683,8 @@ cannot be diagnosed or recovered is not shippable.
 
 Satisfies: `X-OBS-1`, `W-EP-2`, `W-EP-3`, `D-WS-2`, `E-SF-1`, `E-SF-2`,
 `E-BL-2`, `E-OB-1`, `E-OB-2`, `E-OB-3`, `E-IOT-1`, `E-AI-1`, `E-RB-1`,
-`D-CT-2`.
+`D-CT-2`; concepts `C67-1`, enforcement of `C68-1`, `C69-1`, `C70-1`, `C77-1`,
+`C77-2`, `C78-1`, `C80-1`, `C80-2`, and accelerator capabilities of `C89-1`.
 
 - **crash capture with per-target symbolication**, structured logging, metrics,
   and tracing that spans the client/server boundary in one trace;
@@ -2361,6 +2718,32 @@ Satisfies: `X-OBS-1`, `W-EP-2`, `W-EP-3`, `D-WS-2`, `E-SF-1`, `E-SF-2`,
 - **portable industrial services** where they genuinely are portable: printing,
   serial and device I/O, and database access, behind capability contracts.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **capability grants enforced** (`C68`): services obtainable only through a
+  scoped grant, and third-party packages receiving only the grants they
+  declare;
+- **an optional isolated worker process** (`C67`) with a typed message
+  boundary and per-backend sandbox restrictions, for applications that host
+  untrusted content, with crash recovery reported to the supervising scope;
+- **web security primitives on by default** (`C69`): nonce-based content
+  security policy, subresource integrity, typed restrictions on dangerous
+  sinks, cross-origin isolation, and permissions policy;
+- **instrumentation through the vendor-neutral tracing and metrics standard**
+  (`C70`) — renders, tasks, service calls, requests, jobs — with its semantic
+  conventions, an application-chosen exporter, and trace context propagated
+  from client to server;
+- **pools, arenas, and high-water-mark reports** (`C77`) for framework
+  structures on embedded targets, with capacities set from measurement;
+- **the framework running unprivileged or supervised** (`C78`) in a
+  memory-protected domain or as a supervised process, recovering its state
+  after a supervised restart;
+- **a power-loss-resilient state store** (`C80`) with Milestone 30's atomicity
+  contract restated for power loss and verified by power-cut testing, and
+  partition layouts generated from project metadata with encryption where the
+  hardware supports it;
+- **accelerator availability as capability answers** (`C89`).
+
 **Done when** a crash on any shipped target produces a symbolicated report with
 tree state, and every artifact ships with generated compliance evidence.
 
@@ -2374,7 +2757,8 @@ archetypes — migration pain, and ecosystem lock-in — and one is a response t
 how a growing share of code is now written.
 
 Satisfies: `W-MF-8`, `X-DOC-1`, `X-DOC-2`, `X-ECO-1`, `X-ECO-2`, `E-RS-3`,
-`E-PR-2`, `D-CT-1`, `E-RS-1`, `E-EC-1`, `E-EC-2`, `E-HAL-2`, `E-K-3`.
+`E-PR-2`, `D-CT-1`, `E-RS-1`, `E-EC-1`, `E-EC-2`, `E-HAL-2`, `E-K-3`; concepts
+`C03-1`, `C57-2`, `C57-3`, `C71-1`, `C71-2`, `C73-1`, `C79-1`.
 
 - **a published stability and deprecation policy** with a support window, plus
   automated migration for every breaking change. The archetype that dominates
@@ -2409,6 +2793,27 @@ Satisfies: `W-MF-8`, `X-DOC-1`, `X-DOC-2`, `X-ECO-1`, `X-ECO-2`, `E-RS-3`,
   a desktop and for a device, because the claim that the same model spans both
   is the project's strongest differentiator and the easiest to disbelieve.
 
+From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
+
+- **codemods** (`C57-2`) shipped with every breaking release and run by
+  `rustnative upgrade`, tested against a corpus of example applications — the
+  mechanism that makes the stability policy a promise kept by tooling rather
+  than by users' labour — and **feature kits** (`C57-3`) generating working,
+  tested authentication, commerce, and administration;
+- **compatibility metadata** (`C71`) in every capability package — supported
+  backends, required grants, framework version range — checked by `rustnative`
+  and indexed, with package contributions scoped to what the package declares
+  and never registered globally;
+- **a published change-detection contract** (`C03-1`) naming the strategy this
+  framework uses, what triggers invalidation and what does not, with a
+  comparison for developers arriving from the four other strategies in use;
+- **board metadata consumed from existing hardware descriptions** (`C73`) and
+  an executor and clock adapter for a standard RTOS interface (`C79`);
+- **the rejected concepts** recorded in `docs/ecosystem-analysis/
+  concepts-delivery.md` (`C72`) kept current — among them any visual designer
+  that writes a separate format or generated code as the source of truth
+  (`C56-2`) — so a declined idea is found rather than re-proposed.
+
 **Done when** a third party can ship a capability package, a team can upgrade
 across a breaking change with tooling, and the span example runs on both ends
 of the target range.
@@ -2416,6 +2821,116 @@ of the target range.
 **Depends on** everything above it, which is why it is last.
 
 ---
+
+## Milestone 55 — Reconciliation beyond the screen: real time and sync
+
+Three ideas the concept survey surfaced are this framework's own core idea —
+declare desired state, reconcile reality towards it — applied somewhere other
+than a UI tree: local-first data replicated between devices and a server, a
+server-held UI tree reconciled into a browser over a persistent connection, and
+a device fleet reconciled towards a desired configuration. Each is how the
+framework family that owns it wins; none of those families owns the mechanism
+that unifies all three.
+
+Satisfies: `C07-1`, `C32-1`–`C32-3`, `C33-1`–`C33-3`, `C84-1`, `C85-1`,
+`C85-2`.
+
+- **a sync service**: local-first reads and writes, background replication,
+  server push, partial replication, and a declared conflict policy per
+  collection (server authority, last-writer-wins, or a merge function), with at
+  least one adapter; optional conflict-free replicated types for collaborative
+  text, lists, maps, and counters, whose merge functions are property-tested
+  for commutativity, associativity, and idempotence; and schema versioning for
+  replicated data across clients at different application versions;
+- **a server-interactive mode**: per-connection component trees on the server,
+  events over a persistent connection, reconciler-produced diffs applied on the
+  client by the ordinary reconciler, reconnection with state recovery,
+  deployment draining, and optimistic client hooks for latency-sensitive
+  interactions;
+- **render mode per subtree** — static, server-interactive, client-interactive,
+  or automatic (server-interactive until the client module arrives) — with state
+  transfer on a mode switch specified and tested;
+- **channels and presence** as service contracts usable by every mode;
+- **device desired state**: a typed desired/reported contract reconciled on the
+  device, with a conflict policy and offline catch-up, sharing machinery with
+  the sync service; messaging with explicit delivery-guarantee, retained-value,
+  last-will, and persistent-session semantics; and a mapping between typed
+  application state and standard device data models, with commissioning
+  delegated to existing stacks.
+
+**Done when** one collaborative example works offline on two devices and
+converges; one server-interactive example survives a reconnect and a deploy
+without losing state; and one device example converges to a desired
+configuration after a period offline.
+
+**Depends on** Milestone 47 (data layer), Milestone 49 (server model), and Web
+milestone H.
+
+## Milestone 56 — Durable and event-driven execution
+
+Web milestone K is request-shaped, yet most per-invocation workloads are events,
+and business processes need execution that survives restarts. Rust async
+functions are already state machines and structured scopes already model a
+step's lifetime, so the determinism durable execution depends on can be
+enforced by type — a guarantee the dynamic substrates can only lint for.
+
+Satisfies: `C17-1` (server and device processes), `C44-1`, `C44-2`, `C45-1`,
+`C45-2`, `C46-1`, `C87-1` (across the client/server boundary).
+
+- **event handlers** as a serverless entry point: a standard event envelope,
+  batching, partial-failure reporting, retries, dead-letter routing,
+  idempotency keys and deduplication, and the same invocation-bounded task scope
+  as requests;
+- **durable workflows**: steps with recorded results, replay on restart,
+  durable timers, external signals, human-approval waits, and compensation,
+  with versioning rules for in-flight executions — and non-deterministic
+  operations reachable only through the workflow context, so a
+  non-deterministic workflow does not compile; at least one engine adapter;
+- **stateful actors**: identity, single-instance serialized execution, private
+  durable storage, and alarms, with an edge adapter and a single-process local
+  implementation for development;
+- **supervision** for long-lived server and device processes, and long-running
+  operations whose progress and cancellation cross the client/server boundary.
+
+**Done when** a workflow killed mid-step completes with each step executed
+exactly once; an event handler processes a batch with partial failures
+correctly; and an actor-backed collaborative session runs on the local
+implementation and on one edge adapter.
+
+**Depends on** Web milestone K and Milestone 49.
+
+## Milestone 57 — Surfaces beyond the main window, and product services
+
+Cross-platform frameworks are most often abandoned at the moment an application
+needs a widget, an extension, push, purchases, or secure storage and must drop
+to native code to get them. The vocabulary for these surfaces lands in
+Milestone 39 so every backend answers it from the start; this milestone
+realizes it.
+
+Satisfies: `C49-2`, `C49-3`, `C50-1`, `C51-1`, `C52-1`, `C54-1`.
+
+- **widgets and tray or menu-bar extras** realized from a restricted subset of
+  the portable tree on the backends that have them, with data shared with the
+  main application through a declared store; **share and action extensions**
+  receiving typed payloads; and every remaining surface in the Milestone 39
+  vocabulary answered honestly per backend;
+- **remote push**: registration, token rotation, topics, rich and actionable
+  notifications whose actions arrive as messages, and background delivery;
+- **commerce**: catalogue, purchase, entitlements, restoration, and
+  subscription state through each host store's own billing, with server-side
+  receipt validation in the server model;
+- **secure storage**: a contract backed by each host's protected store, with
+  capability answers for hardware backing and biometric gating;
+- **feature flags and remote configuration**: typed flags with compiled
+  defaults, caching, offline behaviour, environment integration and
+  invalidation, and local overrides for development and tests.
+
+**Done when** a reference mobile application ships a widget, a share extension,
+push with actions, an in-application purchase, secure token storage, and a
+remotely toggled feature, with no application-authored native code.
+
+**Depends on** Milestone 39 (vocabulary and grants), the relevant backends, and
+Milestone 49 (receipt validation and push sending).
 
 ## What these milestones do not change
 
@@ -2441,6 +2956,10 @@ than assumed:
 4. **one seam count of one**: UI, state, layout, routing, persistence, data,
    forms, services, packaging, and deployment versioned as one product with one
    stability policy — Milestones 46 through 52;
-5. **adoptable inside what already exists** — Milestone 40, the only one of the
-   five that addresses the asymmetry running against this project, and
-   therefore the one that must not slip.
+5. **adoptable inside what already exists** — Milestone 40, the only clause
+   that addresses the asymmetry running against this project, and therefore
+   the one that must not slip;
+6. **reconciliation as a general capability rather than a UI technique** — the
+   same mechanism drives the UI tree, local-first data sync, server-interactive
+   UI over a persistent connection, and device fleets — Milestone 55, whose
+   done-when criteria are what test whether the claim holds.
