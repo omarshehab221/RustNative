@@ -45,6 +45,8 @@ Application
 
 That application model has two authoring surfaces, not one. A tree can be written with the builder API or in markup — directly, as an expression anywhere in a `.rsx` source file, or inside the `rsx!` macro in an ordinary `.rs` file — and the two are spellings of the same tree rather than two frameworks bolted together: the markup form expands to the builder form at compile time and adds nothing to the runtime. Both are supported natively, both reach the entire API, and neither is treated as the primary one (2.9).
 
+Styling is arranged the same way. One resolved style model sits under the tree — theme tokens, component defaults, per-node overrides, state variants — and it has two spellings: typed style properties, and a utility-class vocabulary written in the styling language the largest population of UI developers already uses. The classes are compiled to those same properties at build time, so no cascade, no selector, and no class string reaches a backend, and a style a backend cannot realize is a diagnostic rather than a silent omission (2.14).
+
 The framework must not become a lowest-common-denominator abstraction that hides the unique capabilities of each operating system. Portable semantics should be consistent, while platform-specific capabilities remain available through explicit capability APIs and native escape hatches.
 
 ---
@@ -221,6 +223,31 @@ Two rules keep that honest, and they apply to every platform the project cannot 
 
 - a backend advertises a `Capability` only once it actually realizes it, never because the plan says it will (the Windows backend already asserts this about itself);
 - `BUILD_STATUS.md` states what was verified and on what. Work reasoned through but not run is recorded as exactly that, and a platform is called supported only after it runs on real hardware.
+
+### 2.14 One style model, two spellings
+
+Milestone 21 established that a node's visual style is *resolved* in the core — theme token, component default, node override, and interaction state merged into concrete values — before any backend sees it. That resolved style is the model, and the only thing a backend is ever handed. Everything above it is a way of writing into it:
+
+```text
+   style properties                    utility classes
+   .with_style(..) / style={..}        .with_class("..") / class=".."
+          │                                   │  resolved at build time
+          └────────────► declarations ◄───────┘
+                              │  tokens stay references
+                              ▼
+                    resolved style — what a backend applies
+```
+
+A **declaration** is a property and a value in the vocabulary the web platform made universal — lengths, colours, the arithmetic and colour functions over them, and references to named tokens. It is the shared value language of both spellings, and it is deliberately the *declaration* half of that platform's styling model and not the other half: there are no selectors, no specificity, no cascade, and no inheritance beyond the text properties that inherit everywhere. A style belongs to the node that declares it, which is what keeps resolution deterministic (Milestone 21) and independent of where a node happens to sit in the tree.
+
+Four rules follow, and they are the whole of the principle:
+
+- **Vocabulary equality.** Every utility class resolves to style properties reachable from both syntaxes, and every style property has a spelling in the utility vocabulary or is documented as having none. A class that does not resolve is a compile error naming the property it was looking for, rather than a class silently dropped — which is how utility vocabularies normally fail.
+- **No second engine.** The utility layer is a compile-time front end, the way markup is (2.9). It introduces no runtime type, no matching step, no style storage, and no capability of its own: `rustnative expand` shows the style properties a class string became, and an equivalence suite asserts that the two spellings resolve to equal values.
+- **Tokens are references, not constants.** A token-valued declaration resolves through the theme at style-resolution time, so a theme change, a colour-scheme change, or a user's own palette is a re-resolution rather than a rebuild; values declared fixed are folded at build time and stated to be fixed. This is also the boundary 2.2 needs — semantic tokens may map to host appearance, while absolute brand values are applied as given.
+- **Capability honesty, per property.** Rounded corners, shadows, gradients, and transforms exist on some hosts and not others, and a terminal cell has neither a radius nor a shadow. Each backend declares, per style property, whether it realizes it, approximates it, or cannot express it, and an application that declares one its target cannot realize is told at build time (2.5, 2.13). A backend never silently ignores a style, and never abandons a native control to owner-drawing in order to satisfy one — that trade is exactly what 2.2 exists to refuse.
+
+Units follow 2.11 rather than the web's: the core keeps one geometry model in logical pixels, `rem` is that model's root text size scaled by the host's text setting, and a backend whose host addresses space differently — points, density-independent pixels, character cells — converts at its own boundary with a documented mapping and rounding rule.
 
 ---
 
@@ -557,6 +584,11 @@ Implemented:
 - live Windows hover, pressed, and focus state repaints, using
   `TrackMouseEvent`/`WM_MOUSELEAVE` plus native focus synchronization, without
   rebuilding the declarative component tree.
+
+The resolved style this milestone produces is the model 2.14 describes, and it
+is what the second spelling compiles into: Milestone 58 adds the declaration
+vocabulary and the utility classes above this resolution step, not beside it.
+Nothing there gives a node a style this milestone cannot already resolve.
 
 ## Milestone 22 — Platform capability abstraction
 
@@ -940,6 +972,13 @@ a backend author never encounters the markup syntax while writing a backend.
 What a backend does owe is documentation: its own examples are written in both,
 like everything else.
 
+Styling is the same in one direction and different in the other. Both style
+spellings (2.14) resolve before a backend is reached, so a backend never sees a
+class string either — but style, unlike syntax, does reach the host, so every
+backend owes two things about it: its per-property capability answer, and its
+unit mapping with the rounding rule (Milestone 58). Those belong in the list
+above, beside its measurement and accessibility obligations.
+
 Section 11 adds the gates that apply to every backend from the second one
 onward, and they are part of this definition rather than separate work:
 
@@ -1079,6 +1118,7 @@ A `framework-tui` backend realizing the same application model onto a terminal. 
 - **focus and traversal** reuse the portable focus model unchanged, including Tab/Shift+Tab and `disabled`;
 - **accessibility belongs to the terminal**: the backend's obligation is a readable, correctly ordered screen and honest capability reporting, not a bridge it cannot provide. Where a terminal exposes an announcement mechanism, live regions from the portable model map onto it;
 - **capabilities, advertised honestly**: no `MultipleWindows`, no native `Menus` or `FileDialogs`, `Clipboard` only where OSC 52 is available, `Notifications` only where the terminal implements them, no `SystemAppearance`, no `Touch`/`Pen`/`Gamepad`;
+- **style, at cell granularity**: colour is the terminal's own depth and text attributes; corner radius, shadows, gradients, and transforms are declared unrealizable rather than approximated (2.14). Lengths convert with this backend's documented pixel-per-cell ratio per axis, a nonzero spacing never rounding to nothing, and the conversion table is a conformance case (Milestone 58) rather than a constant chosen in one place;
 - **scheduling and redraw**: a single-threaded loop with input and redraw decoupled, damage tracking so only changed cells are written, coalesced frames, and a full redraw on resize. Animations run through the same `Timeline`, paced to a sane terminal frame rate, and respect a reduced-motion setting;
 - **terminal restoration is a correctness requirement**: raw mode, the alternate screen, and the cursor are restored on exit, on signal, and on panic. A crashed application must not leave a terminal unusable;
 - **tooling**: `rustnative run tui` and `rustnative build tui` — a new platform value in the CLI, built with Cargo alone — plus a deterministic harness that drives a synthetic terminal of a given size and asserts the resulting cell grid, so most of the backend is testable without a TTY;
@@ -1161,6 +1201,19 @@ This includes:
 - the mapping itself, documented and tested, with every case where it is
   approximate named explicitly rather than discovered by users — this is the
   one backend whose host owns layout, so the negotiation is the deliverable.
+
+Visual style is part of the same negotiation, and this is the one backend whose
+host speaks the declaration vocabulary natively. It is therefore also the
+backend most able to drift, so the rule is explicit: the stylesheet this backend
+serves is generated from the *resolved* style of Milestone 58's compiler — the
+same declarations every other backend applies — and never by running a
+third-party styling toolchain over the sources at build time. Class strings stay
+a compile-time authoring concept and are not a styling channel in the emitted
+DOM; browser CSS is how this host applies the result, in the same sense that
+`WM_CTLCOLOR*` is how Windows applies it. Theme tokens map to custom properties
+so a runtime theme change stays one re-resolution here as well, and any property
+the browser expresses differently from the native backends is named in the
+mapping document rather than left to diverge with a version bump.
 
 ### Web milestone D — Browser input/focus/accessibility
 
@@ -1381,6 +1434,10 @@ Maintain:
   expansion goldens, a compile-failure suite for the markup diagnostics, and
   `.rsx` compiler tests for disambiguation, context inference, and source-map
   round trips;
+- style equivalence tests: both spellings of every documented style property,
+  asserted to resolve to equal values (2.14), plus the class and declaration
+  diagnostics, the colour and unit conversions, and each backend's style
+  capability table;
 - reconciliation tests;
 - layout tests;
 - scheduler tests;
@@ -1518,6 +1575,11 @@ The Web branch ends in three deployment shapes — client-side, server-rendered,
 
 The two authoring surfaces sit at the top of that picture and end at the same place. A builder-written application and a markup-written one produce the same declarative tree, reach the same backends, and are indistinguishable from the reconciler down (2.9). A single application may use both — a screen written in markup can call a function that assembles a subtree with the builder API, and a markup element can be spliced into a builder chain — because there is only one node type between them.
 
+The two style spellings converge in the same way, one step lower: typed
+properties and utility classes both become declarations, declarations resolve
+against the theme, and native realization receives concrete values with no
+record of which spelling produced them (2.14).
+
 The final framework should feel like a native application framework first and a cross-platform abstraction second: one Rust application model, native operating-system behavior, explicit platform capabilities, and strong compile-time/lifetime guarantees wherever Rust can provide them.
 
 ## Long-range roadmap
@@ -1528,8 +1590,8 @@ Everything through Milestone 32 is complete (section 3). What remains, in the or
 core work shared by the remaining targets
   (no_std-capable core subset, non-Send executor seam, host clock)
         ↓
-Tier 0 — the markup syntax, portable-surface obligations, and
-         interoperability (53, 39, 40)
+Tier 0 — the markup syntax, the style spellings, portable-surface
+         obligations, and interoperability (53, 58, 39, 40)
   everything that costs once now and once per backend afterwards
         ↓
 platform backends, each finished by section 8's definition
@@ -1558,7 +1620,7 @@ The cross-cutting work in section 9 — testing, correctness boundaries, perform
 
 ---
 
-# 11. Production-parity milestones (39–57)
+# 11. Production-parity milestones (39–58)
 
 Sections 1–10 specify the framework's architecture and its targets. They do not
 specify the accumulated answers a mature framework is expected to have —
@@ -1583,13 +1645,13 @@ that convention. The sequencing is:
 core work shared by the remaining targets
   (no_std-capable core subset, non-Send executor seam, host clock)
         ↓
-Tier 0   Milestones 53, 39, 40   before the second backend exists
+Tier 0   Milestones 53, 58, 39, 40  before the second backend exists
         ↓
-Tier 1   Milestones 41–45        continuous; gates each backend's completion
-        ↓                        (folded into section 8's definition of done)
-Tier 2   Milestones 46–48, 54    before any public release
+Tier 1   Milestones 41–45           continuous; gates each backend's completion
+        ↓                           (folded into section 8's definition of done)
+Tier 2   Milestones 46–48, 54       before any public release
         ↓
-Tier 3   Milestones 49–52, 55–57 with and after the Web track
+Tier 3   Milestones 49–52, 55–57    with and after the Web track
 ```
 
 One rule binds the order, and it is the reason Tier 0 exists at all:
@@ -1621,8 +1683,11 @@ the analysis that produced it without re-deriving the argument.
 
 ## Tier 0 — before the second backend
 
-Listed first in this tier is Milestone 53, whose number is later than its
-peers' for the reason stated above: numbers are identities, not an order.
+Listed first in this tier are Milestones 53 and 58, whose numbers are later
+than their peers' for the reason stated above: numbers are identities, not an
+order. They are also the two authoring milestones, and they are here for the
+same argument — what a developer types is what every later example, template,
+and conformance case is written in.
 
 ## Milestone 53 — The markup syntax
 
@@ -1815,6 +1880,193 @@ run, and no documented example exists in only one syntax.
 
 **Depends on** nothing. Like Milestone 39, it is deliberately early.
 
+## Milestone 58 — The style spellings
+
+2.14 states that the resolved style is the model and that it has two spellings.
+One of them exists: Milestone 21's typed properties, theme tokens, and state
+variants. This milestone builds the other — a declaration vocabulary and the
+utility classes above it — and lands the per-backend obligations that come with
+it.
+
+It is Tier 0 for two reasons, one per half. The utility vocabulary is an
+authoring surface, so Milestone 53's argument applies to it unchanged: the
+component library, the templates, the guides, and every screenshot in them are
+written in a style spelling, and retrofitting the second one through that corpus
+costs more later than it does now. The other half is a genuine per-backend
+obligation: the style capability table and the unit mapping (2.14) are something
+each backend must answer, and answering them once against one backend is what
+keeps them from being negotiated six more times.
+
+Satisfies: `X-L3-12`, `X-L3-13`, `X-L3-14`, `X-L3-15`, `X-L3-16`, and the
+resolution half of `X-L3-7`; concepts `C22-4`.
+
+### The layers, and what is deliberately not here
+
+```text
+utility classes      p-4  bg-primary  hover:bg-primary/90  md:flex-row  dark:…
+        │            compiled at build time; unknown class = error
+        ▼
+declarations         padding: 1rem;  background: var(--color-primary);
+        │            values, units, calc(), colour functions, token references
+        ▼
+typed style properties  ── the same values a builder chain or a markup
+        │                  attribute sets directly (2.9)
+        ▼
+resolved style       theme + default + override + state (Milestone 21)
+        ▼
+backend              concrete values, per-property capability answered
+```
+
+Each layer lowers into the one below it, which is what makes vocabulary
+equality (2.14) true by construction rather than by maintenance. What is *not*
+in this stack is the rest of the web's styling model: no selector matching, no
+specificity, no cascade, no descendant or sibling rules, and no stylesheet whose
+text decides which nodes it applies to. A framework that adopted those would own
+a second engine competing with its own resolution, on every host, forever — the
+same trade Web milestone C refuses for layout.
+
+### The declaration vocabulary
+
+A small, exactly specified subset of the web's value syntax, owned by a
+`framework-style` library crate and parsed at build time:
+
+- **values and units**: lengths (`px`, `rem`, `em`, `%`, and the viewport and
+  container units where a host can answer them), colours, angles, numbers, and
+  keywords, each admitted only where the typed property accepts it;
+- **`calc()` and its arithmetic**, because the utility layer above generates it;
+- **colour functions** — `rgb()`, `hsl()`, `oklch()`, and `color-mix()`, the
+  last two because the v4 default palette and its opacity modifiers are defined
+  in them — evaluated at build time and converted per backend: 8-bit sRGB for
+  GDI, the terminal's own depth, the host's colour type elsewhere, with
+  out-of-gamut values clipped by one documented rule rather than per backend;
+- **custom properties as token references** (`var(--color-primary)`), which is the
+  representation 2.14's third rule needs: a declaration that still points at a
+  token when it reaches resolution;
+- **no selectors, at any point.** A declaration block is attached to a node by
+  the code that writes it, never matched against the tree.
+
+Every property in the vocabulary maps to exactly one typed style or layout
+property, and the table is part of the crate rather than folklore: adding a
+style property adds its declaration name, its utility spelling, and its
+per-backend capability answer in the same commit (CONTRIBUTING).
+
+### The utility vocabulary
+
+The utility layer is the reason the declaration layer is worth having, and the
+vocabulary is not invented here. The compatibility target is **Tailwind CSS
+v4**, named explicitly because a compatibility claim without a version is not
+one, and chosen because its configuration is itself CSS — a theme block of
+custom properties — which is the half of the styling language this framework
+already needs:
+
+- **utilities**: one class, one set of declarations. Spacing is computed rather
+  than tabulated (`p-13` is as valid as `p-4`), colours come from the theme's
+  token namespaces, and every utility resolves to typed properties or fails;
+- **state variants** — `hover:`, `focus:`, `focus-visible:`, `active:`,
+  `disabled:` — map onto Milestone 21's existing state variants, not onto a new
+  mechanism;
+- **scheme and size variants**: `dark:` on the host's colour scheme, and
+  `sm:`/`md:`/`lg:` on the size classes and breakpoints Milestone 39 puts in the
+  portable layout model (`C22-1`), so one vocabulary answers to the layout model
+  rather than to device guesses (`C22-4`);
+- **arbitrary values** (`w-[37px]`, `bg-[oklch(0.62_0.19_259)]`) through the
+  declaration parser, which is what keeps the vocabulary from being a closed
+  list;
+- **class strings are literals**, resolved where they are written — in
+  `.with_class("…")` on a builder chain, in `class="…"` on a markup element
+  (the same `with_` rule the markup grammar already applies to modifiers), and in
+  the component library's own props. A computed class name is a compile error
+  naming the rule, rather than a string that silently styles nothing;
+- **an unknown or unsupported class is a compile error** with the span of the
+  class inside the string, naming the nearest property it was looking for. This
+  is the one place the framework deliberately diverges from the vocabulary it
+  implements, where dropping unknown classes silently is the normal behaviour
+  and the most common way a utility codebase rots.
+
+### The style file
+
+One file per project — `app.css` by default, read by
+`framework_build::compile_styles()` in the build script beside `compile_rsx()` —
+written in the subset of the v4 directives that survive without a cascade:
+
+- **`@theme`** defines the token namespaces (colour, spacing, radius, text,
+  font, shadow, breakpoint, easing), which become theme tokens in Milestone 21's
+  model. Values stay references so a theme switch is a re-resolution (2.14);
+  values marked inline are folded at build time. A namespace can be cleared and
+  replaced, so a project is never stuck with a default palette;
+- **`@utility`** and **`@apply`** for project-defined utilities built from
+  declarations;
+- **`@custom-variant`** for conditions the framework can actually evaluate —
+  state, colour scheme, size class, pointer coarseness, reduced motion — and a
+  named error for one it cannot;
+- **the default theme** ships vendored from the upstream project under its MIT
+  licence, pinned to a stated v4 version, with the pin recorded where a reader
+  looks for it and updated deliberately;
+- **refused, with a diagnostic that says why**: directives that load JavaScript
+  plugins or a JavaScript configuration file. This framework's build is Cargo
+  and a build script; a Node toolchain is not a dependency it will acquire for
+  styling, and a plugin ecosystem built on selectors could not be honoured
+  anyway. The browser reset shipped by the upstream project is likewise not
+  applicable: a native backend has no browser defaults to reset, and its
+  starting point is the theme.
+
+### What each backend owes
+
+- **a style capability table**: for every property in the vocabulary, realized,
+  approximated (with the approximation documented), or unavailable — the
+  per-property form of 2.5, and the reason an application is told at build time
+  rather than shown nothing at run time;
+- **a unit mapping**: the host's own unit, how `rem` follows the host's text
+  setting, and the rounding rule, with a conformance case asserting the table
+  (`X-L3-16`). The terminal's pixel-per-cell ratio is the sharpest case and is
+  stated in Milestone 38;
+- **runtime token resolution**: a theme, colour-scheme, or text-scale change
+  re-resolves and re-applies style to the existing native objects, with no tree
+  rebuild — the same path Milestone 21's state variants already take (2.10).
+
+### Deferred deliberately, and named so they are not assumed
+
+- **container-relative variants** (`@container`), which depend on a parent's
+  resolved size and therefore on a second pass after layout. The layout model
+  can answer them (`C22-1`); the ordering work is not in this milestone;
+- **relational variants** — a style keyed to an ancestor's or sibling's state —
+  which are selector matching under another name and would need the machinery
+  2.14 refuses. If they are ever added, they arrive as an explicit, typed
+  relationship between nodes, not as a matcher;
+- **arbitrary raw properties** with no typed equivalent, which would break
+  vocabulary equality in the direction that matters.
+
+### Shared with Milestone 53
+
+- **one implementation, three callers**: `framework-style` owns the vocabulary,
+  the parse, the lowering, and the diagnostics; the `rsx!` macro,
+  `framework_build::compile_styles()` in the build script beside
+  `compile_rsx()`, and the CLI link it, exactly as they link
+  `framework-markup`;
+- **diagnostics at compiler quality**, spanned to the class or declaration the
+  developer wrote — in a `.rsx` file, inside `rsx!`, in a builder call, and in
+  `app.css` — held by a compile-failure suite rather than by inspection;
+- **`rustnative expand`** prints the style properties a class string lowers to,
+  the same way it prints the builder form of a markup tree;
+- **the equivalence suite** gains style cases: the utility spelling and the
+  typed-property spelling of every documented style produce equal resolved
+  values, and a property added to one without the other fails the suite
+  (Milestone 41 owns it thereafter);
+- **the documentation obligation**: styling examples appear in both spellings
+  wherever they appear in both syntaxes, and the component library's entries
+  carry both. A style property gains both spellings or neither.
+
+**Done when** the equivalence suite covers every documented style property in
+both spellings, an unknown class and an unrealizable property each fail the
+build with a spanned diagnostic, `app.css` drives the theme with a live token
+switch on Windows, `rustnative expand` shows the lowering, every backend's
+capability table and unit mapping are recorded, and no documented style example
+exists in only one spelling.
+
+**Depends on** Milestone 53 for the attribute surface it shares, and on
+Milestone 39 for the size classes its responsive variants key to. Neither
+dependency is deep enough to sequence it after them.
+
 ## Milestone 39 — Portable-surface obligations
 
 Three families of competing framework fail in the same place: a portable API
@@ -1980,9 +2232,10 @@ marketing; a tested one is the difference between this framework and the
 archetypes that must re-implement what it inherits. This milestone converts
 each claim into a suite.
 
-Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L2-1`,
-`X-L2-2`, `X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`, `W-FG-1`, `D-FP-1`, `D-FP-2`,
-`M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`; concepts `C09-1`.
+Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L3-12`,
+`X-L3-15`, `X-L2-1`, `X-L2-2`, `X-L1-1`, `X-L1-4`, `X-L0-2`, `X-L5-1`,
+`W-FG-1`, `D-FP-1`, `D-FP-2`, `M-FP-1`, `D-WV-1`, `D-SD-2`, `X-L2-3`; concepts
+`C09-1`.
 
 - **syntax equivalence as a standing guarantee** (2.9): the equivalence suite
   Milestone 53 creates — builder against markup, with the markup compiled from
@@ -1990,6 +2243,12 @@ Satisfies: `X-L3-1`, `X-L3-2`, `X-L3-4`, `X-L3-6`, `X-L3-8`, `X-L2-1`,
   modifier added later in one syntax and not the other fails the build rather
   than quietly making one surface smaller than the other. This is the only
   mechanism that keeps two authoring surfaces equal over years;
+- **style equivalence, on the same terms** (2.14): the utility spelling and the
+  typed-property spelling of every documented style resolve to equal values,
+  and each backend's style capability table is asserted rather than described —
+  a property the table calls realized is checked against what the host actually
+  applies, and one it calls unavailable fails the build when an application
+  declares it;
 - **an invalidation contract**: a document stating exactly which subtrees
   re-render for each kind of change, and tests that fail when a change
   re-renders more of the tree than the contract allows;
@@ -2064,7 +2323,9 @@ Satisfies: `X-L0-1`, `X-L0-3`, `W-RS-1`, `W-RS-2`, `W-SL-1`, `W-ED-2`,
 - **the published numbers are the measured numbers**: documentation quotes the
   budget file rather than adjectives;
 - **build time is a budget too** — it is the tax this substrate pays and the
-  one developers feel hourly.
+  one developers feel hourly. The markup and style compile steps are inside it,
+  not beside it: a `.rsx` file and a class string cost compile time, and the
+  budget is where that cost stays visible rather than being absorbed silently.
 
 From the concept survey (`docs/ecosystem-analysis/concepts-*.md`), three kinds of budget the list above misses:
 
@@ -2122,6 +2383,15 @@ concepts `C55-1`, `C55-2`, `C56-1`, `C57-1`, `C58-1`–`C58-3`, `C59-1`, `C90-1`
   file. A developer who chooses the
   markup syntax must not get a worse loop for it (2.9), and the same applies in
   reverse — neither surface is allowed to become the one with tooling.
+  Style spellings are held to the same bar (2.14): completion and hover inside a
+  class string, naming the properties a class sets and the token a value
+  references, and a diagnostic anchored to the class rather than to the string
+  around it;
+- **theme editing without a rebuild**: a change to `app.css`'s token values
+  re-resolves and re-applies style to the running application, because tokens
+  are references rather than constants (Milestone 58). A change that adds or
+  removes a utility is a rebuild, and the loop says which of the two happened
+  rather than leaving it to be inferred from the delay;
 
 From the concept survey (`docs/ecosystem-analysis/concepts-*.md`), the mechanisms that make the loop competitive rather than merely
 fast:
@@ -2164,8 +2434,10 @@ Satisfies: `X-L7-3`, `X-L7-4`, `X-L3-5`, `D-IM-1`, `E-RS-2`; concepts `C04-2`,
 - **one inspection protocol exposed by the runtime**, covering the declarative
   tree, the realized host objects and the mapping between them, state and props
   (readable and, where safe, editable), layout with a per-node explanation of
-  *why* a node has the geometry it has, event and render tracing, task and
-  scope inspection, and host-object lifetimes;
+  *why* a node has the geometry it has, the same explanation for style — which
+  token, which component default, which override, which state variant, and
+  which class if the node was styled by one (2.14) — event and render tracing,
+  task and scope inspection, and host-object lifetimes;
 - **a transport that works locally, on-device, and remotely**, because the
   targets that most need inspection are the ones with no second screen;
 - **an inspector client shipped with the CLI**, working against every backend;
@@ -2284,7 +2556,9 @@ Satisfies: `X-L5-3`, `X-L5-4`; concepts `C41-2`.
   reimplemented per backend, consistent with the text-stack position in 2.2;
 - **bidirectional text and mirroring** joined up with Milestone 39's layout
   work, so a mirrored locale is a layout-model outcome and not an application
-  concern;
+  concern. Both style spellings are expressed in the same terms: the spacing and
+  alignment utilities are start/end rather than left/right, so a screen styled
+  with classes mirrors with the layout model instead of against it (2.14);
 - **runtime locale switching** that updates the realized tree, including
   re-measurement, without restarting the application;
 - **a translator workflow**: extraction, merge, context, and a way to see the
@@ -2420,7 +2694,10 @@ Satisfies: `X-UI-1`, `X-UI-2`, `X-VIZ-1`, `D-SD-1`, `E-GUI-3`; concepts
   documented token schema and an explicit split between semantic roles — mapped
   to host appearance — and absolute brand values applied as given. A token
   system that can only express absolute values cannot honour a host; one that
-  can only express roles cannot express a brand;
+  can only express roles cannot express a brand. The pipeline's output is
+  Milestone 58's token file rather than a format of its own, so a design system
+  exported from a design tool and a theme written by hand are the same artifact,
+  and both spellings read from it;
 - **charting and data visualization** built on Milestone 29's draw-list path,
   with an accessible alternative for every visual encoding rather than an
   image with a label;
@@ -2768,17 +3045,19 @@ Satisfies: `W-MF-8`, `X-DOC-1`, `X-DOC-2`, `X-ECO-1`, `X-ECO-2`, `E-RS-3`,
   runnable example per subsystem and per supported board — every one of them in
   both syntaxes, presented side by side rather than in separate builder and
   markup editions, so that neither becomes the documented path and the other
-  the appendix (2.9);
+  the appendix (2.9) — and, where an example styles something, in both style
+  spellings on the same terms (2.14);
 - **a third-party capability package contract**: a community-authored service
   or control implementing a portable contract with per-backend code,
   discoverable and versioned, usable without forking the framework. Without
   this there is no ecosystem, and the one asymmetry running against this
   project stays open;
 - **a machine-readable description of the framework** — component and service
-  contracts, capabilities, events, layout semantics, and the element/attribute
-  vocabulary of the markup syntax with the builder method each attribute calls
-  — so code-generating tools produce correct code rather than plausible code,
-  in whichever syntax they are asked for. This is increasingly decisive and is
+  contracts, capabilities, events, layout semantics, the element/attribute
+  vocabulary of the markup syntax with the builder method each attribute calls,
+  and the utility vocabulary with the style properties each class sets — so
+  code-generating tools produce correct code rather than plausible code, in
+  whichever syntax and spelling they are asked for. This is increasingly decisive and is
   cheap to maintain if it is generated from the same source as the API
   reference;
 - **a stated non-duplication policy toward the embedded ecosystem**: the
@@ -2937,8 +3216,9 @@ Milestone 49 (receipt validation and push sending).
 Nothing in section 11 overrides sections 1–2. The architecture is unchanged:
 Rust owns application semantics, the OS owns the native UI, every target is
 first-class, the core stays platform-independent, capabilities replace platform
-conditionals, a backend advertises only what it genuinely realizes, and the
-declarative tree has two equal spellings that produce the same tree. These
+conditionals, a backend advertises only what it genuinely realizes, the
+declarative tree has two equal spellings that produce the same tree, and style
+is resolved in the core before a backend sees it. These
 milestones exist because that architecture is necessary and not sufficient —
 they are what turns a correct framework into a chosen one.
 

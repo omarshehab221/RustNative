@@ -70,7 +70,10 @@ verified, what it found while doing so, and what is still open.
 ```
 
 The runtime also carries theme/style data and portable capability discovery;
-platform-specific APIs remain behind explicit service and native-extension boundaries.
+platform-specific APIs remain behind explicit service and native-extension
+boundaries. Style is resolved in the core the same way the tree is built there,
+and it has two spellings of its own — typed properties and utility classes —
+that meet before any backend sees them (see [Styling](#styling)).
 
 ## Two syntaxes
 
@@ -375,8 +378,22 @@ RustNative/
 │   │       ├── expansion/            (expansion goldens)
 │   │       └── ui/                   (compile-failure suite, both carriers)
 │   │
+│   ├── framework-style/              (Milestone 58: the style vocabulary, once)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── value/                (lengths, colours, calc(), colour
+│   │       │                          functions, token references)
+│   │       ├── declaration.rs        (property -> typed style/layout field)
+│   │       ├── utility.rs            (class -> declarations, variants)
+│   │       ├── theme_file.rs         (app.css: @theme, @utility, @apply,
+│   │       │                          @custom-variant)
+│   │       ├── units.rs              (per-host mapping and rounding)
+│   │       └── diagnostics.rs        (spans and messages)
+│   │
 │   ├── framework-build/              (build-script helpers: resources today;
-│   │                                  `compile_rsx()` in Milestone 53)
+│   │                                  `compile_rsx()` and `compile_styles()`
+│   │                                  in Milestones 53 and 58)
 │   │
 │   └── framework-windows/
 │       ├── Cargo.toml
@@ -484,6 +501,27 @@ attribute's own span.
 None of it touches the runtime. Markup emits builder calls, so it cannot add
 behaviour the builder syntax does not already have, and the `equivalence`
 tests are what keep that true as the node API grows.
+
+### The style crate: `framework-style`
+
+Planned for Milestone 58, and arranged like the markup crates for the same
+reason — one implementation, several callers:
+
+- **`framework-style`** owns the declaration vocabulary (values, units,
+  `calc()`, colour functions, token references), the utility-class table
+  compatible with Tailwind CSS v4, the `app.css` directives that survive without
+  a cascade (`@theme`, `@utility`, `@apply`, `@custom-variant`), the lowering to
+  `VisualStyle` and `LayoutStyle`, and the diagnostics.
+- **`framework_build::compile_styles()`** reads the project's style file from
+  the build script, beside `compile_rsx()`, and `rustnative` uses the same
+  tables for completion, hover, and expansion.
+- The `rsx!` macro and the builder's `with_class` resolve class strings through
+  the same crate, so the two syntaxes and the two style spellings cannot
+  disagree about what a class means.
+
+It emits typed style properties and nothing else, so — like markup — it cannot
+give a node a style the typed spelling could not already produce. There is no
+matcher, no stylesheet, and no class string at run time.
 
 ### `framework-windows`
 
@@ -692,6 +730,98 @@ Scrollable container
 ```
 
 Scroll position is transient runtime state and does not itself trigger a component rerender.
+
+## Styling
+
+Style is resolved in the core before a backend sees it. A theme supplies tokens
+and per-component defaults, a node may override them, and the interaction state
+— normal, hover, focus, pressed, disabled — selects a variant. What reaches
+Windows is concrete values applied to real controls through `WM_CTLCOLOR*`,
+`CreateFontIndirectW`, and `WM_ERASEBKGND`; what reaches any other backend is
+the same values in its own terms.
+
+That resolved style has two spellings, the way the tree itself has two syntaxes.
+
+**Typed properties**, today:
+
+```rust
+// builder
+Node::column("card", children)
+    .with_style(VisualStyle::new().background(theme.primary()).border_radius(8).padding(EdgeInsets::all(16)))
+```
+
+```rust
+// card.rsx
+<Column key="card" style={VisualStyle::new().background(theme.primary()).border_radius(8).padding(EdgeInsets::all(16))}>
+    {children}
+</Column>
+```
+
+**Utility classes**, planned for Milestone 58 — the same style, written in the
+vocabulary of Tailwind CSS v4:
+
+```rust
+// builder
+Node::column("card", children).with_class("bg-primary rounded-lg p-4")
+```
+
+```rust
+// card.rsx
+<Column key="card" class="bg-primary rounded-lg p-4">
+    {children}
+</Column>
+```
+
+Classes are compiled where they are written. `bg-primary` becomes a background
+declaration pointing at the `--color-primary` token, `p-4` becomes padding, and
+the result is the same `VisualStyle` the typed spelling builds — so no class
+string, selector, or cascade exists at run time, and `rustnative expand` will
+print exactly which properties a class string set. A class that does not resolve
+is a compile error naming the property it was looking for, rather than a class
+that silently styles nothing — and because the resolution happens at compile
+time, a class string is a literal: a computed one is an error that says so
+rather than a style that quietly disappears.
+
+Tokens come from one file per project:
+
+```css
+/* app.css */
+@import "tailwindcss";
+
+@theme {
+  --color-primary: oklch(0.62 0.19 259);
+  --color-surface: oklch(0.98 0.01 260);
+  --radius-lg:     8px;
+}
+```
+
+Token values stay *references* through resolution, so switching theme, colour
+scheme, or palette re-resolves the existing native objects instead of rebuilding
+the tree. State and condition variants — `hover:`, `focus:`, `disabled:`,
+`dark:`, and the `sm:`/`md:` size classes — map onto mechanisms the framework
+already has rather than adding new ones.
+
+What the framework takes from that vocabulary is the declaration half: property
+names, values, units, colour functions, and token references. What it
+deliberately does not take is the cascade — no selectors, no specificity, no
+descendant rules — because a style that is decided by where a node sits cannot
+be resolved deterministically, and a second styling engine competing with the
+framework's own resolution is the thing every native-realization framework has
+regretted.
+
+Styles are capability-checked per host, like everything else here. A terminal
+cell has no corner radius and no shadow; a Win32 button cannot take a gradient
+without giving up being a Win32 button. Each backend declares, per property,
+whether it realizes, approximates, or cannot express it, and declaring one a
+target cannot realize is a build diagnostic rather than a property that quietly
+disappears.
+
+The typed spelling exists today (Milestone 21). The declaration vocabulary,
+the utility classes, `app.css`, and the per-backend capability tables are
+Milestone 58 and are specified but not built — including the table's first
+honest entry, which is that the Windows backend applies colours and fonts but
+not the corner radius a `VisualStyle` can already carry. `BUILD_STATUS.md`
+records what each backend actually realizes.
 
 ## Advanced input
 
@@ -1158,8 +1288,8 @@ Milestones 25–32 are complete. What remains is the rest of the platform
 matrix — macOS, Linux, Android, iOS, embedded, terminal, and Web — plus the
 core work those targets share: a `no_std`-capable core subset, an executor
 seam for single-threaded hosts, and time from the host clock rather than
-`std::time::Instant`. The markup syntax is core work of the same kind and is
-scheduled with them, in Tier 0 below.
+`std::time::Instant`. The markup syntax and the style spellings are core work of
+the same kind and are scheduled with them, in Tier 0 below.
 
 **Milestone 33 — the macOS backend** is next in numbering, but it needs a
 macOS machine to build and verify on and this project has none yet, so the
@@ -1168,12 +1298,14 @@ stay fully planned regardless; nothing in the portable layer is designed as
 though they were optional.
 
 Interleaved with the backends, `PLAN.md` section 11 carries the
-production-parity milestones (39–57) in four tiers:
+production-parity milestones (39–58) in four tiers:
 
-- **Tier 0 (53, 39, 40), before the second backend exists** — the markup
+- **Tier 0 (53, 58, 39, 40), before the second backend exists** — the markup
   syntax, so that every later example, template, guide, doc test, and
   conformance case is written in both syntaxes once rather than retrofitted
-  through a corpus that has grown for years; portable-surface obligations
+  through a corpus that has grown for years; the style spellings, for the same
+  reason and because the per-property capability table and unit mapping are
+  something every backend has to answer; portable-surface obligations
   (right-to-left mirroring in the layout model, safe areas, permission states,
   gesture arbitration, panic and teardown policy, ownership and escape-hatch
   contracts, plus a typed environment, a command model, per-property native

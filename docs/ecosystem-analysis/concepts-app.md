@@ -47,6 +47,10 @@ flagged by store quality programs.
   layout able to avoid the hinge.
 - `C22-3` `[X]` An adaptive navigation component that switches between bottom
   bar, rail, and sidebar by size class, host-conventionally per backend.
+- `C22-4` `[X]` The same size classes and breakpoints reachable from the styling
+  vocabulary as variants, resolved against the layout model's own constraints
+  rather than against device type, so a screen styled by class adapts on the
+  same terms as one laid out by hand (`X-L3-12`).
 
 ## C23 — Platform-adaptive components
 

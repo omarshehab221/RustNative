@@ -86,6 +86,55 @@ both carriers, a `.rsx` diagnostic lands at its source position in the CLI and
 the editor, both templates build, and no documented example exists in only one
 syntax.
 
+## Milestone 58 — The style spellings
+
+**Why.** `foundations.md` F3.4: the cascading styling model splits cleanly into
+a declaration vocabulary — the most widely known way to express a style — and a
+resolution mechanism this framework already has its own version of. Taking the
+first without the second gives the familiar spelling at the cost of a parser;
+taking both would put a second engine against our own per-node resolution on
+every host. The utility archetype already made that split, which is why it, and
+not a stylesheet, is what a host-native framework can carry. It is Tier 0 on two
+counts: it is an authoring surface, so Milestone 53's corpus argument applies
+unchanged, and the per-property capability table and unit mapping it defines are
+per-backend obligations of exactly the kind this tier exists to land early.
+
+**Covers.** `X-L3-12`, `X-L3-13`, `X-L3-14`, `X-L3-15`, `X-L3-16`, the
+resolution half of `X-L3-7`; concept `C22-4`.
+
+**Scope.**
+
+- `X-L3-13` A declaration vocabulary in a `framework-style` crate — values,
+  units, arithmetic, colour functions and spaces, token references — parsed at
+  build time, with no selector, specificity, or cascade admitted at any point,
+  and every property mapped to exactly one typed style or layout property.
+- `X-L3-12` **Vocabulary equality by construction.** The utility layer is a
+  compile-time front end emitting typed properties, so it cannot carry a style
+  the typed spelling lacks; an equivalence suite asserts both spellings resolve
+  to equal values, an unresolvable class is a compile error naming the property
+  it expected, and an expansion command prints what a class string became.
+  Compatibility target and version are stated rather than implied, and the
+  default token set is vendored under its own licence and pinned.
+- `X-L3-14` Token-valued declarations resolved at resolution time, so theme,
+  colour-scheme, and palette changes re-apply to existing host objects without a
+  rebuild or a tree pass — and so a design-token export and a hand-written theme
+  are the same artifact (`X-L3-7`, with Milestone 48 supplying the pipeline).
+- `X-L3-15`, `X-L3-16` Per-backend style capability tables and unit mappings,
+  asserted by conformance (Milestone 41 thereafter): an unavailable property
+  fails the build rather than vanishing, and the cell-quantized mapping is
+  stated with its rounding rule rather than chosen in one backend's source.
+- `C22-4` State, colour-scheme, and size-class variants bound to mechanisms that
+  already exist — Milestone 21's state variants and Milestone 39's size classes
+  — with container-relative and relational variants deferred explicitly rather
+  than implied.
+- Both style spellings in every document, example, template, and component
+  entry, on the same terms as the two syntaxes.
+
+**Done when.** The equivalence suite covers every documented style property in
+both spellings, an unknown class and an unrealizable property each fail the
+build with a spanned diagnostic, a token change re-themes a running application
+on Windows, and every backend's capability table and unit mapping is recorded.
+
 ## Milestone 39 — Portable-surface obligations
 
 **Why.** Three archetype families fail in the same place: a portable API shaped
@@ -461,8 +510,10 @@ concepts `C18-1`, `C19-1`, `C19-2`, `C20-3`, `C22-3`, `C23-1`, `C25-1`,
 realized natively per backend with documented accessibility semantics for each;
 a design-token pipeline into the theme system with a documented schema and an
 explicit split between semantic roles mapped to host appearance and absolute
-brand values; charting and visualization on the draw-list path with an
-accessible alternative for every visual encoding; a documented hybrid pattern
+brand values, emitting Milestone 58's token file rather than a format of its own
+so an exported design system and a hand-written theme are one artifact; charting
+and visualization on the draw-list path with an accessible alternative for every
+visual encoding; a documented hybrid pattern
 for custom-drawn subtrees inside a natively realized tree; and a constrained
 text profile declaring which scripts each embedded profile supports.
 
@@ -797,10 +848,14 @@ Milestone 49 (server-side validation and sending).
 
 ```text
 M53 markup syntax ─────────────────┐
+M58 style spellings ───────────────┤
 M39 portable-surface obligations ──┼─→ every later backend
 M40 interoperability ──────────────┘
 
-M53 equivalence suite ──→ owned by M41 thereafter
+M53 markup ──→ M58 attribute surface
+M39 size classes ──→ M58 responsive variants
+
+M53 + M58 equivalence suites ──→ owned by M41 thereafter
 
 M41 guarantees        ─┐
 M42 budgets           ─┼─ continuous, gate each backend's completion

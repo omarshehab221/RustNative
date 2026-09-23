@@ -723,13 +723,17 @@ resources and services but no caching, deduplication, invalidation, pagination,
 or optimistic updates, and this is the clearest missing L6 capability in the
 whole plan. It is portable to every target, not a web feature. A design-token
 pipeline into the existing theme system maps a design system to host-native
-appearance per target. A component library covering what every application
-needs. Custom drawing (Milestone 29) is already the correct substrate for
-charting.
+appearance per target. Absorbing the utility styling vocabulary is the same kind
+of move and is cheaper than it looks, because the half of it that transfers is a
+declaration parser over a resolution model we already have (`foundations.md`
+F3.4); doing it inside the framework is also what lets the vocabulary be honest
+per host, which no library sitting above a framework can be. A component library
+covering what every application needs. Custom drawing (Milestone 29) is already
+the correct substrate for charting.
 
 **Threats.** These libraries are the strongest single reason to stay on an
-existing stack. Choosing which two to match — data caching and design tokens —
-matters more than breadth.
+existing stack. Choosing which few to match — data caching, design tokens, and
+the styling vocabulary teams already type — matters more than breadth.
 
 **Concepts introduced here.** `C08` derived state and selectors; `C11`
 reducer-effect architecture with exhaustive tests; `C12` reactive streams;

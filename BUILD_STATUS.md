@@ -108,6 +108,31 @@ equivalence suite passing over every node kind and modifier through both
 carriers, and a `.rsx` diagnostic reported at its source position — not a
 demo compiling.
 
+### Style availability
+
+`PLAN.md` 2.14 states that the resolved style has two spellings. One of them
+exists: `Theme`, `ComponentStyle`, `VisualStyle`, the state variants, and
+`TreeSnapshot::from_node_with_theme` are implemented and verified on
+Windows/Win32 (Milestone 21), and every style in this repository is written that
+way.
+
+The second spelling — the declaration vocabulary, the utility classes, and the
+`app.css` theme file — is **specified and not implemented.** There is no
+`framework-style` crate, no `with_class`/`class` attribute, no
+`framework_build::compile_styles()`, no `app.css` handling, and no per-backend
+style capability table or unit mapping; Milestone 58 is that work. The
+`bg-primary rounded-lg p-4` examples in `README.md` and `PLAN.md` are the
+specification its tests will be written against, not code that compiles today.
+
+The Windows backend's style support is likewise narrower than the vocabulary
+being planned, and narrower than `VisualStyle` itself: foreground and background
+colours and fonts are realized through `WM_CTLCOLOR*`, `WM_SETFONT`, and
+`WM_ERASEBKGND`, while the border colour and corner radius a `VisualStyle` can
+carry are not applied by this backend, and shadows, gradients, and transforms do
+not exist in the model yet. Which of those become realized, approximated, or
+unavailable is Milestone 58's capability table, and it will be recorded here per
+backend as it is answered rather than assumed from this plan.
+
 ---
 
 ## Previous: Milestone 31 — Developer CLI and project tooling — complete.

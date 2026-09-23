@@ -64,6 +64,12 @@ numbers differ enormously and averaging them would hide the real position.
 | Text conformance (complex scripts, bidi, clusters, fallback, breaking, caret) | **Partial** | Host measurement delegated; no conformance suite | `X-L3-6` |
 | Theming | **Met** (Windows) | Milestone 21 | — |
 | Design-token pipeline | **Absent** | — | `X-L3-7` / `X-UI-2` |
+| Typed style spelling (properties, overrides, state variants) | **Met** (Windows) | Milestone 21; `VisualStyle`, `ComponentStyle`, resolved before realization (2.14) | — |
+| Utility-class style spelling at equal vocabulary | **Planned** | 2.14; Milestone 58 | `X-L3-12` |
+| Declaration vocabulary without a cascade | **Planned** | 2.14; Milestone 58 `framework-style` | `X-L3-13` |
+| Tokens resolved at resolution time (runtime theme switch, no rebuild) | **Partial** | Theme resolution exists; declarations and token references do not | `X-L3-14` |
+| Per-backend style capability table | **Planned** | Milestone 58; Windows silently ignores border colour and radius today (`BUILD_STATUS.md`) | `X-L3-15` |
+| Documented unit mapping per host, with rounding | **Partial** | 2.11 states the conversion boundary; no table, no conformance case | `X-L3-16` |
 | Builder authoring surface | **Met** | Every node kind and modifier since Milestone 1; 2.9 | — |
 | Markup authoring surface at equal capability, in `.rsx` files and `rsx!` | **Planned** | 2.9; Milestone 53 | `X-L3-8` |
 | Markup diagnostics at compiler quality, through both carriers | **Planned** | Milestone 53 compile-failure suite | `X-L3-9` |
@@ -173,7 +179,7 @@ milestone column is where [`gap-plan.md`](gap-plan.md) schedules it.
 | `C06` Partial prerendering | **Absent** | Web H |
 | `C07` Per-subtree render modes | **Absent** | Web H, 55 |
 | `C18` Container-owned layout data and value precedence | **Partial** | 48 |
-| `C22` Adaptive layout (size classes, container-relative, posture) | **Absent** | 39 |
+| `C22` Adaptive layout (size classes, container-relative, posture) | **Absent** | 39, 58 |
 | `C25` Shared-element transitions | **Absent** | 48 |
 
 ### State and composition (L4)
@@ -346,6 +352,15 @@ inside a larger row:
     (`C24`), the surface vocabulary (`C49-1`), platform-group crates (`C65`),
     and the shape of capability grants (`C68`).
 
-Those fourteen, plus the conformance suites that turn our root-layer advantages
-from claims into tested guarantees, are what [`gap-plan.md`](gap-plan.md)
-schedules.
+**Where a spelling was missing rather than a capability.** Two mechanisms score
+**Met** above and would still lose a comparison, because what is missing is what
+a developer types rather than what the framework can do: the tree had one syntax
+of two (`X-L3-8`, Milestone 53), and style resolution had one spelling of two
+(`X-L3-12`, Milestone 58). Both are cheap while the corpus of
+examples, templates, and components is small, and both get steadily more
+expensive afterwards, which is why they are scheduled in Tier 0 rather than with
+the application layer they superficially resemble.
+
+Those fourteen, the two missing spellings, and the conformance suites that turn
+our root-layer advantages from claims into tested guarantees are what
+[`gap-plan.md`](gap-plan.md) schedules.

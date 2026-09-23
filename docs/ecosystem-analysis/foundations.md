@@ -572,12 +572,68 @@ host appearance rather than to fixed values.
 appearance; a system that expresses only semantic roles cannot express a brand.
 Both must exist, with the boundary explicit.
 
-**RustNative's position.** A theme system exists (Milestone 21); a token
-pipeline and a documented semantic-versus-absolute boundary do not.
+**The split inside the cascading model, which is the part worth taking.** The
+cascading stylesheet model is two separable things: a *declaration* vocabulary —
+property names, value and unit syntax, arithmetic and colour functions, named
+custom properties — and a *resolution* mechanism, the selector matching,
+specificity, and inheritance that decide which declarations reach which element.
+The first is the most widely known styling vocabulary there is and costs a
+parser. The second is an engine, and for a framework that already resolves style
+deterministically per node it is a *second* engine competing with the first, on
+every host, forever — the same trade a self-drawing renderer makes at L2 and the
+same one a framework makes when it delegates layout to a host that also lays
+out.
+
+The utility-vocabulary archetype is interesting precisely because it already
+took that split. A utility class is a fixed set of declarations attached to the
+element that names it: no descendant rules, no specificity contests, variants
+that are element state rather than tree position. It is therefore portable to a
+non-browser host in a way a stylesheet is not — the ecosystem around
+`mobile.md` M3 compiles a utility vocabulary straight down to that archetype's
+per-element style objects, with no cascade anywhere in the result. The opposite
+experiment is on record too: `desktop.md` D5 accepts a stylesheet dialect over
+its widgets, and applying one moves those widgets onto the dialect's own
+painting path — affordable for an archetype that draws its controls anyway, and
+exactly the trade a host-native framework exists to refuse.
+
+**Ceiling of the utility half.** Two, both real. Unknown classes are silently
+dropped in the archetype's own tooling, so a typo is a styling bug found by
+eye; and a vocabulary that can express what the host cannot realize either
+lies, or forces the framework to draw its own controls to keep the promise. A
+per-property capability answer is the only honest resolution, and it must be a
+build-time answer, because a style that silently disappears at run time is
+indistinguishable from a layout bug.
+
+**RustNative's position.** A theme system exists (Milestone 21) and resolves
+per node, which is the right substrate; a token pipeline, a declaration
+vocabulary, a utility spelling, a documented semantic-versus-absolute boundary,
+and per-backend style capability answers do not exist.
 
 - `X-L3-7` `[X]` A design-token pipeline into the theme system, with a
   documented token schema and an explicit split between semantic roles (mapped
   to host appearance) and absolute brand values (applied as-is).
+- `X-L3-12` `[X]` Vocabulary equality between style spellings: every utility
+  class resolves to typed style properties reachable from both authoring
+  syntaxes, every property has a utility spelling or a documented note that it
+  has none, proven by an equivalence suite; an unresolvable class is a compile
+  error naming what was expected, never a silently dropped class.
+- `X-L3-13` `[X]` A declaration vocabulary without a cascade, stated as a rule
+  rather than as an omission: values, units, arithmetic and colour functions,
+  and named token references, resolved at build time, with no selectors, no
+  specificity, and no inheritance beyond the text properties that inherit
+  everywhere.
+- `X-L3-14` `[X]` Token-valued declarations resolved at style-resolution time
+  rather than folded at build time, so a theme, colour-scheme, or palette change
+  re-resolves and re-applies to existing host objects without a rebuild and
+  without a tree pass.
+- `X-L3-15` `[X]` A per-backend style capability table: every property declared
+  realized, approximated (with the approximation documented), or unavailable,
+  asserted by conformance rather than described, with an application's use of an
+  unavailable property failing the build.
+- `X-L3-16` `[X]` A documented unit mapping per host — the host's own unit, how
+  a root-relative unit follows the host's text setting, and the rounding rule —
+  with a conformance case per backend, including the cell-quantized one where
+  the mapping is coarsest.
 
 ## F3.5 — The authoring surface
 
