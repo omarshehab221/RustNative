@@ -26,6 +26,7 @@ categories = ["gui", "os::windows-apis"]
 framework-build = { path = "crates/framework-build", version = "0.1.0" }
 framework-core = { path = "crates/framework-core", version = "0.1.0" }
 framework-windows = { path = "crates/framework-windows", version = "0.1.0" }
+framework-types = { path = "crates/framework-types", version = "0.1.0" }
 tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 parking_lot = "0.12"
 async-trait = "0.1"

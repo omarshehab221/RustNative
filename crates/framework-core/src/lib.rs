@@ -109,6 +109,7 @@
 //! | [`persistence`] | Component state kept across runs, buffered and flushed at lifecycle points |
 //! | [`window`]/[`menu`] | Window-domain state and native menu definitions |
 //! | [`mod@panic`] | What an application does when a component panics |
+//! | [`clock`] | The host clock every timestamp is read from |
 //! | [`application`] | Multi-window orchestration |
 //! | [`capability`]/[`platform`] | The seam a platform backend implements and declares support through |
 //!
@@ -140,6 +141,7 @@ pub mod accessibility;
 pub mod animation;
 pub mod application;
 pub mod capability;
+pub mod clock;
 pub mod component;
 pub mod event;
 pub mod graphics;
@@ -171,6 +173,7 @@ pub use animation::{
 };
 pub use application::Application;
 pub use capability::{Capability, PlatformCapabilities};
+pub use clock::{Clock, ManualClock, SystemClock};
 pub use component::{
     AnimationRequest, AnimationRequests, Callback, Component, ComponentContext, ComponentHost,
     ComponentTree, EffectCleanup, EffectContext, InputRequest, InputRequests, RenderError,
@@ -208,8 +211,8 @@ pub use persistence::{MemoryStateStore, Persisted, StateStore};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};
 pub use scheduler::{
-    Executor, ExecutorHandle, ManualExecutor, Scheduler, SleepFuture, TaskHandle, TaskId,
-    TaskScope, TokioExecutor,
+    Executor, ExecutorHandle, LocalBoxedTask, LocalExecutor, LocalPool, ManualExecutor, Scheduler,
+    SleepFuture, TaskHandle, TaskId, TaskScope, TokioExecutor,
 };
 pub use services::{
     ClipboardService, FileDialogKind, FileDialogRequest, FileDialogService, HttpRequest,

@@ -358,11 +358,19 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "criterion",
+ "framework-types",
  "parking_lot",
  "proptest",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "framework-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

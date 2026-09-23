@@ -334,6 +334,7 @@ pub struct Services {
     file_dialogs: Option<Arc<dyn FileDialogService>>,
     system: Option<Arc<dyn SystemService>>,
     state: Option<Arc<dyn crate::persistence::StateStore>>,
+    clock: Option<Arc<dyn crate::clock::Clock>>,
 }
 
 impl fmt::Debug for Services {
@@ -345,11 +346,28 @@ impl fmt::Debug for Services {
             .field("file_dialogs", &self.file_dialogs.is_some())
             .field("system", &self.system.is_some())
             .field("state", &self.state.is_some())
+            .field("clock", &self.clock.is_some())
             .finish()
     }
 }
 
 impl Services {
+    /// Returns `self` with the clock set (see [`crate::clock`]).
+    #[must_use]
+    pub fn with_clock(mut self, clock: Arc<dyn crate::clock::Clock>) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// The clock framework code reads "now" from: the one set with
+    /// [`Self::with_clock`], or the process's monotonic
+    /// [`crate::SystemClock`]. Unlike the other services this is never
+    /// absent — every host has a clock.
+    #[must_use]
+    pub fn clock(&self) -> Arc<dyn crate::clock::Clock> {
+        self.clock.clone().unwrap_or_else(|| Arc::new(crate::clock::SystemClock))
+    }
+
     /// Returns `self` with the HTTP service set.
     #[must_use]
     pub fn with_http(mut self, service: Arc<dyn HttpService>) -> Self {

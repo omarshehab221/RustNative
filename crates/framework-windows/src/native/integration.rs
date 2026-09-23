@@ -236,6 +236,45 @@ impl Component for TaskRunner {
     }
 }
 
+/// Spawns a `!Send` task on its first render — before the backend has
+/// installed its scheduler waker — exercising the local executor seam and
+/// the missed-wake catch-up end to end.
+struct LocalTaskRunner {
+    log: Log,
+    spawned: bool,
+}
+
+impl Component for LocalTaskRunner {
+    type Props = Log;
+    type Message = String;
+
+    fn new(props: Self::Props) -> Self {
+        Self { log: props, spawned: false }
+    }
+    fn props(&self) -> &Self::Props {
+        &self.log
+    }
+    fn set_props(&mut self, props: Self::Props) {
+        self.log = props;
+    }
+    fn view(&self) -> Node {
+        Node::label("status", "local")
+    }
+    fn update(&mut self, _event: Event) {}
+    fn message(&mut self, message: Self::Message) {
+        self.log.borrow_mut().push(message);
+    }
+    fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {
+        if !self.spawned {
+            self.spawned = true;
+            // `Rc` is `!Send`: this future can only run on the UI thread.
+            let marker = std::rc::Rc::new("local-task-completed".to_owned());
+            context.spawn_local(async move { (*marker).clone() });
+        }
+        self.view()
+    }
+}
+
 /// Panics from `update`, to drive the `WNDPROC` panic boundary.
 struct Exploder;
 
@@ -680,6 +719,26 @@ fn native_task_wakeup() {
         vec!["task-completed".to_owned()],
         "a completed task must wake the native message loop and reach its component"
     );
+}
+
+/// A `!Send` task spawned during the first render runs on the UI thread and
+/// reaches its component through the real message loop.
+///
+/// Catches: a local task whose spawn-time wake was lost because it happened
+/// before the backend installed its waker, which would leave the task
+/// unpolled until some unrelated input arrived.
+#[test]
+fn native_local_task_runs_on_the_ui_thread() {
+    let log = log();
+    let mut application = Application::new(LocalTaskRunner::new(log.clone()), window("local"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < deadline && entries(&log).is_empty() {
+        harness.pump();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(entries(&log), vec!["local-task-completed".to_owned()]);
 }
 
 /// A panic inside a component is caught at the `WNDPROC` boundary, recorded

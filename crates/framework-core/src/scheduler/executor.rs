@@ -78,6 +78,14 @@ pub trait Executor: Send + Sync + 'static {
     /// backend measures wall-clock time; [`ManualExecutor`] measures a
     /// virtual clock that only moves when explicitly advanced.
     fn sleep(&self, duration: Duration) -> BoxedSleep;
+
+    /// The current time by this executor's own clock: the same clock
+    /// [`Self::sleep`] measures. The default is the process's monotonic
+    /// clock ([`crate::SystemClock`]); [`ManualExecutor`] reports its
+    /// virtual time, so timestamps and delays move together in a test.
+    fn now(&self) -> Duration {
+        crate::clock::process_epoch().elapsed()
+    }
 }
 
 struct TokioHandle {
@@ -399,6 +407,10 @@ impl Executor for ManualExecutor {
         });
         self.inner.tasks.lock().unwrap_or_else(PoisonError::into_inner).push(entry);
         Box::new(ManualHandle { finished, aborted })
+    }
+
+    fn now(&self) -> Duration {
+        ManualExecutor::now(self)
     }
 
     fn sleep(&self, duration: Duration) -> BoxedSleep {

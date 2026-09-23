@@ -131,6 +131,9 @@ pub struct ComponentTree {
     animation_requests: Rc<RefCell<VecDeque<AnimationRequest>>>,
     motion: std::cell::Cell<crate::animation::MotionPreference>,
     scheduler: Scheduler,
+    /// The pool `!Send` component tasks run on (see
+    /// [`crate::LocalExecutor`]), polled by [`Self::pump_tasks`].
+    local: Rc<dyn crate::LocalExecutor>,
     pending_effects: HashMap<ComponentId, Vec<DeclaredEffect>>,
     /// Structured, user-triggerable composition problems collected during
     /// the render pass currently in progress; drained (and the first one
@@ -162,11 +165,25 @@ impl ComponentTree {
 
     /// Creates a tree rooted at `root`, with `services` and `theme`.
     pub fn with_services_and_theme<C: Component>(
-        mut root: C,
+        root: C,
         services: Services,
         theme: Theme,
     ) -> Self {
+        Self::with_scheduler(root, services, theme, Scheduler::new())
+    }
+
+    /// Creates a tree rooted at `root` whose tasks run on `scheduler` — for
+    /// a host with its own executor, and for tests that drive a
+    /// [`crate::ManualExecutor`] so every task and delay is deterministic.
+    pub fn with_scheduler<C: Component>(
+        mut root: C,
+        services: Services,
+        theme: Theme,
+        scheduler: Scheduler,
+    ) -> Self {
         root.mounted();
+        let local: Rc<dyn crate::LocalExecutor> =
+            Rc::new(crate::LocalPool::new(scheduler.host_waker()));
         let state = crate::persistence::StateCache::new(services.state_store().cloned());
         let mut tree = Self {
             components: HashMap::new(),
@@ -181,7 +198,8 @@ impl ComponentTree {
             input_requests: Rc::new(RefCell::new(VecDeque::new())),
             animation_requests: Rc::new(RefCell::new(VecDeque::new())),
             motion: std::cell::Cell::new(crate::animation::MotionPreference::default()),
-            scheduler: Scheduler::new(),
+            scheduler,
+            local,
             pending_effects: HashMap::new(),
             pending_render_errors: Vec::new(),
             last_render_error: None,
@@ -192,7 +210,8 @@ impl ComponentTree {
             paths: HashMap::from([(ComponentId::ROOT, std::any::type_name::<C>().to_owned())]),
             state: Rc::new(RefCell::new(state)),
         };
-        let root_scope = TaskScope::new(tree.scheduler.clone(), ComponentId::ROOT);
+        let root_scope =
+            TaskScope::new(tree.scheduler.clone(), Rc::clone(&tree.local), ComponentId::ROOT);
         tree.components.insert(
             ComponentId::ROOT,
             ComponentEntry {
@@ -327,6 +346,7 @@ impl ComponentTree {
     /// component, re-rendering if any changed state. Returns whether
     /// anything changed.
     pub fn pump_tasks(&mut self) -> bool {
+        self.local.run_until_stalled();
         let completed = self.scheduler.drain();
         if completed.is_empty() {
             return false;
@@ -582,7 +602,7 @@ impl ComponentTree {
                     view: None,
                     node_ids: HashMap::new(),
                     used_generation: generation,
-                    task_scope: TaskScope::new(self.scheduler.clone(), id),
+                    task_scope: TaskScope::new(self.scheduler.clone(), Rc::clone(&self.local), id),
                     effects: HashMap::new(),
                 },
             );
@@ -701,7 +721,7 @@ impl ComponentTree {
             if let Some(mut previous) = entry.effects.remove(&key) {
                 Self::dispose_effect(&mut previous);
             }
-            let scope = TaskScope::new(self.scheduler.clone(), id);
+            let scope = TaskScope::new(self.scheduler.clone(), Rc::clone(&self.local), id);
             let cleanup = (declaration.run)(EffectContext { task_scope: scope.clone() });
             entry.effects.insert(
                 key,

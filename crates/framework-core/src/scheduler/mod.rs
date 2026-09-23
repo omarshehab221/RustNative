@@ -8,10 +8,12 @@
 //! (the P1.5 fix this crate already carried into this rewrite).
 
 mod executor;
+mod local;
 
 pub use executor::{
     BoxedSleep as SleepFuture, BoxedTask, Executor, ExecutorHandle, ManualExecutor, TokioExecutor,
 };
+pub use local::{LocalBoxedTask, LocalExecutor, LocalPool};
 
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
@@ -123,6 +125,7 @@ pub struct TaskScope {
 
 struct TaskScopeInner {
     scheduler: Scheduler,
+    local: Rc<dyn LocalExecutor>,
     target: ComponentId,
     /// Live tasks, plus — transiently — a `None` tombstone for a task that
     /// settled before `spawn` got to register it (see [`TaskScope::spawn`]).
@@ -139,10 +142,15 @@ impl fmt::Debug for TaskScope {
 }
 
 impl TaskScope {
-    pub(crate) fn new(scheduler: Scheduler, target: ComponentId) -> Self {
+    pub(crate) fn new(
+        scheduler: Scheduler,
+        local: Rc<dyn LocalExecutor>,
+        target: ComponentId,
+    ) -> Self {
         Self {
             inner: Rc::new(TaskScopeInner {
                 scheduler,
+                local,
                 target,
                 tasks: Arc::new(Mutex::new(HashMap::new())),
             }),
@@ -158,21 +166,48 @@ impl TaskScope {
         M: Send + 'static,
         F: Future<Output = M> + Send + 'static,
     {
-        let tasks = Arc::clone(&self.inner.tasks);
         let handle = self.inner.scheduler.spawn_with_settlement(
             self.inner.target,
             future,
-            Arc::new(move |id| {
-                let mut tasks = tasks.lock();
-                // Registered already: the ordinary case, remove it. Not
-                // registered yet: the task settled on another thread
-                // before `spawn` below got the lock, so leave a tombstone
-                // telling `spawn` not to register it at all.
-                if tasks.remove(&id).is_none() {
-                    tasks.insert(id, None);
-                }
-            }),
+            self.settlement(),
         );
+        self.register(handle)
+    }
+
+    /// Spawns a `!Send` future owned by this scope, polled on the component
+    /// tree's own thread (see [`LocalExecutor`]).
+    ///
+    /// Ownership is exactly [`Self::spawn`]'s: the task is cancelled when
+    /// the scope is dropped, and its output is delivered as a message.
+    pub fn spawn_local<M, F>(&self, future: F) -> TaskHandle
+    where
+        M: Send + 'static,
+        F: Future<Output = M> + 'static,
+    {
+        let handle = self.inner.scheduler.spawn_local_with_settlement(
+            &*self.inner.local,
+            self.inner.target,
+            future,
+            self.settlement(),
+        );
+        self.register(handle)
+    }
+
+    /// The callback a task runs when it settles. Registered already is the
+    /// ordinary case: remove it. Not registered yet means the task settled
+    /// on another thread before [`Self::register`] got the lock, so a
+    /// tombstone tells `register` not to add it at all.
+    fn settlement(&self) -> Arc<dyn Fn(TaskId) + Send + Sync> {
+        let tasks = Arc::clone(&self.inner.tasks);
+        Arc::new(move |id| {
+            let mut tasks = tasks.lock();
+            if tasks.remove(&id).is_none() {
+                tasks.insert(id, None);
+            }
+        })
+    }
+
+    fn register(&self, handle: TaskHandle) -> TaskHandle {
         // Decided under the same lock the settlement callback takes, so the
         // two can interleave in either order and the registry still ends up
         // without the task once it has settled. An earlier revision inserted
@@ -232,6 +267,10 @@ struct SchedulerInner {
     next_id: AtomicU64,
     completed: Mutex<VecDeque<CompletedTask>>,
     waker: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// Set when [`Scheduler::host_waker`] fired before any waker was
+    /// installed — a local task spawned during the first render — so
+    /// [`Scheduler::set_waker`] can deliver the wake it missed.
+    missed_wake: AtomicBool,
     executor: Arc<dyn Executor>,
 }
 
@@ -270,6 +309,7 @@ impl Scheduler {
                 next_id: AtomicU64::new(1),
                 completed: Mutex::new(VecDeque::new()),
                 waker: Mutex::new(None),
+                missed_wake: AtomicBool::new(false),
                 executor,
             }),
         }
@@ -299,8 +339,15 @@ impl Scheduler {
         // covers it) or after the publish (so it fires the waker itself);
         // the overlap costs at most one extra wake, never a missed one.
         let already_completed = !self.inner.completed.lock().is_empty();
-        *self.inner.waker.lock() = Some(waker);
-        if already_completed {
+        // Published and the missed-wake flag consumed under one lock, which
+        // `host_waker` also takes: a wake either sees the waker or leaves a
+        // flag this read is guaranteed to observe.
+        let missed = {
+            let mut slot = self.inner.waker.lock();
+            *slot = Some(waker);
+            self.inner.missed_wake.swap(false, Ordering::AcqRel)
+        };
+        if already_completed || missed {
             // Re-read rather than keeping a clone: the waker is stored
             // behind the lock, so reading it back is what proves the catch-up
             // wake uses the same callback a real completion would.
@@ -372,6 +419,74 @@ impl Scheduler {
         TaskHandle { id, abort: Arc::from(handle), cancelled, settled }
     }
 
+    pub(crate) fn spawn_local_with_settlement<M, F>(
+        &self,
+        local: &dyn LocalExecutor,
+        target: ComponentId,
+        future: F,
+        settled: Arc<dyn Fn(TaskId) + Send + Sync>,
+    ) -> TaskHandle
+    where
+        M: Send + 'static,
+        F: Future<Output = M> + 'static,
+    {
+        let id = TaskId::next(&self.inner.next_id);
+        // Exactly-once settlement, for the reason `spawn_with_settlement`
+        // gives.
+        let fired = AtomicBool::new(false);
+        let settled: Arc<dyn Fn(TaskId) + Send + Sync> = Arc::new(move |id| {
+            if !fired.swap(true, Ordering::AcqRel) {
+                settled(id);
+            }
+        });
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let inner = Arc::clone(&self.inner);
+        let task_cancelled = Arc::clone(&cancelled);
+        let task_settled = Arc::clone(&settled);
+        let handle = local.spawn_local(Box::pin(async move {
+            let value = future.await;
+            if !task_cancelled.load(Ordering::Acquire) {
+                inner.completed.lock().push_back(CompletedTask {
+                    target,
+                    message: Box::new(value),
+                    cancelled: task_cancelled,
+                });
+                if let Some(waker) = inner.waker.lock().clone() {
+                    waker();
+                }
+            }
+            task_settled(id);
+        }));
+        TaskHandle { id, abort: Arc::from(handle), cancelled, settled }
+    }
+
+    /// A callback that wakes whatever host this scheduler's waker belongs
+    /// to, read at call time so it works even when created before
+    /// [`Self::set_waker`] is called. A [`LocalPool`] is built with this.
+    #[must_use]
+    pub fn host_waker(&self) -> Arc<dyn Fn() + Send + Sync> {
+        let inner = Arc::clone(&self.inner);
+        Arc::new(move || {
+            let waker = {
+                let slot = inner.waker.lock();
+                if slot.is_none() {
+                    inner.missed_wake.store(true, Ordering::Release);
+                }
+                slot.clone()
+            };
+            if let Some(waker) = waker {
+                waker();
+            }
+        })
+    }
+
+    /// The current time according to this scheduler's executor: virtual
+    /// under [`ManualExecutor`], monotonic otherwise.
+    #[must_use]
+    pub fn now(&self) -> Duration {
+        self.inner.executor.now()
+    }
+
     pub(crate) fn drain(&self) -> Vec<CompletedTask> {
         self.inner
             .completed
@@ -440,7 +555,11 @@ mod tests {
     #[test]
     fn task_scope_removes_completed_tasks_from_its_registry() {
         let scheduler = Scheduler::new();
-        let scope = TaskScope::new(scheduler.clone(), ComponentId::next(&mut 1));
+        let scope = TaskScope::new(
+            scheduler.clone(),
+            Rc::new(LocalPool::new(scheduler.host_waker())),
+            ComponentId::next(&mut 1),
+        );
         let handle = scope.spawn::<u32, _>(async { 1 });
         // Poll until the executor reports completion; avoid a fixed sleep,
         // which would make this test flaky under load.
@@ -528,7 +647,11 @@ mod tests {
         const PER_GENERATION: usize = 25;
 
         let scheduler = Scheduler::new();
-        let scope = TaskScope::new(scheduler.clone(), ComponentId::next(&mut 1));
+        let scope = TaskScope::new(
+            scheduler.clone(),
+            Rc::new(LocalPool::new(scheduler.host_waker())),
+            ComponentId::next(&mut 1),
+        );
         let mut high_water = 0usize;
 
         for _ in 0..GENERATIONS {
@@ -581,7 +704,11 @@ mod tests {
         let scheduler = Scheduler::new();
         let ran_to_completion = Arc::new(AtomicBool::new(false));
         {
-            let scope = TaskScope::new(scheduler.clone(), ComponentId::next(&mut 1));
+            let scope = TaskScope::new(
+                scheduler.clone(),
+                Rc::new(LocalPool::new(scheduler.host_waker())),
+                ComponentId::next(&mut 1),
+            );
             let flag = Arc::clone(&ran_to_completion);
             let _handle = scope.spawn::<(), _>(async move {
                 tokio::time::sleep(StdDuration::from_millis(200)).await;

@@ -461,6 +461,25 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
         self.task_scope().spawn(future)
     }
 
+    /// Spawns a `!Send` future — one holding an `Rc` or a thread-bound host
+    /// object — on this component's task scope. It runs on this component
+    /// tree's own thread (see [`crate::LocalExecutor`]) and is owned,
+    /// cancelled, and delivered exactly as [`Self::spawn`]'s tasks are.
+    pub fn spawn_local<F>(&self, future: F) -> TaskHandle
+    where
+        F: std::future::Future<Output = M> + 'static,
+    {
+        self.task_scope().spawn_local(future)
+    }
+
+    /// The current time by this component tree's scheduler — the clock its
+    /// delays are measured on, so a timestamp and a [`Self::sleep`] agree
+    /// (virtual under [`crate::ManualExecutor`]).
+    #[must_use]
+    pub fn now(&self) -> Duration {
+        self.task_scope.scheduler().now()
+    }
+
     /// Returns the structured task scope owned by this component.
     ///
     /// The scope remains owned by the component even when this render-time
