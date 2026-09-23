@@ -442,6 +442,19 @@ impl ComponentTree {
     pub fn services(&self) -> &Services {
         &self.services
     }
+    /// Replaces the theme and re-renders, so every node's style is resolved
+    /// again against it. A backend then applies the resulting diff to the
+    /// native objects it already has: a theme change is a re-resolution,
+    /// never a rebuild (`PLAN.md` 2.14).
+    ///
+    /// # Errors
+    ///
+    /// The re-render's first [`RenderError`], as [`Self::render`] reports it.
+    pub fn set_theme(&mut self, theme: Theme) -> Result<(), RenderError> {
+        self.theme = theme;
+        self.render()
+    }
+
     /// Returns the tree's active theme.
     #[must_use]
     pub fn theme(&self) -> &Theme {

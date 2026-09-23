@@ -11,7 +11,7 @@
 //! are therefore private.
 
 /// A size in logical pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Size {
     /// The width, in logical pixels.
@@ -30,7 +30,7 @@ impl Size {
 
 /// A rectangle in a native parent's local coordinate space (see
 /// `framework_core::LayoutEngine` for the coordinate-space contract).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rect {
     /// The x-coordinate of the rectangle's top-left corner.

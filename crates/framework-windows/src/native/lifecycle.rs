@@ -6,6 +6,7 @@
 //! | `WM_QUERYENDSESSION` (sign-out, shutdown) | `Lifecycle::Terminating` | flushed first |
 //! | `WM_POWERBROADCAST` / `PBT_APMSUSPEND` | `Lifecycle::Suspending` | flushed first |
 //! | `WM_POWERBROADCAST` / `PBT_APMRESUMEAUTOMATIC` | `Lifecycle::Resuming` | — |
+//! | the low-memory resource notification (`native::memory_watch`) | `Lifecycle::LowMemory` | flushed first |
 //! | the last window closed (the loop ends) | `Lifecycle::Terminating` | flushed first |
 //! | a burst of writes went quiet for [`IDLE_FLUSH`] | nothing | flushed |
 //!

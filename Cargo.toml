@@ -27,6 +27,7 @@ framework-build = { path = "crates/framework-build", version = "0.1.0" }
 framework-core = { path = "crates/framework-core", version = "0.1.0" }
 framework-windows = { path = "crates/framework-windows", version = "0.1.0" }
 framework-types = { path = "crates/framework-types", version = "0.1.0" }
+framework-headless = { path = "crates/framework-headless", version = "0.1.0" }
 tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 parking_lot = "0.12"
 async-trait = "0.1"
@@ -36,6 +37,7 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Storage_FileSystem",
+    "Win32_Storage_Xps",
     "Win32_System_LibraryLoader",
     "Win32_System_DataExchange",
     "Win32_System_Memory",

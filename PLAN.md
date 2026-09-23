@@ -1584,7 +1584,7 @@ The final framework should feel like a native application framework first and a 
 
 ## Long-range roadmap
 
-Everything through Milestone 32 is complete (section 3). What remains, in the order the backlog is currently expected to be taken up — subject to 2.13, since the order follows hardware availability and contract readiness rather than importance:
+Everything through Milestone 32 is complete (section 3), and so is the core work shared by the remaining targets (the host clock, the single-threaded executor seam, and the `no_std` value types in `framework-types` — 2026-09-23). What remains, in the order the backlog is currently expected to be taken up — subject to 2.13, since the order follows hardware availability and contract readiness rather than importance:
 
 ```text
 core work shared by the remaining targets
@@ -2520,6 +2520,14 @@ From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
 
 **Done when** component, interaction, golden, and lifecycle tests for the full
 application layer run on a machine that has none of the target hardware.
+
+**Status (2026-09-23): implemented** as `crates/framework-headless` — the
+headless reference backend, `HeadlessApp`'s synthetic input through
+hit-testing and host focus rules, the accessibility query API, goldens and
+Windows `PrintWindow` visual goldens, exhaustive mode, and the lifecycle
+collision suite — plus `Lifecycle::LowMemory`, realized on Windows. Owed by
+Milestone 37: the host-side device simulator and hardware-in-the-loop runner;
+by Milestones 35–37: the device and emulator matrix. See `BUILD_STATUS.md`.
 
 **Depends on** nothing outside the core; it should start early because
 Milestones 41, 42, 46, 47, and 48 all consume it.

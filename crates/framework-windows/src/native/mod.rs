@@ -6,6 +6,8 @@ mod animation;
 #[cfg(test)]
 mod animation_integration;
 mod app;
+#[cfg(test)]
+mod capture;
 mod container;
 pub(crate) mod context;
 pub(crate) mod graphics;
@@ -20,6 +22,7 @@ mod input_integration;
 mod integration;
 mod lifecycle;
 mod measure;
+mod memory_watch;
 mod menu;
 mod message_loop;
 #[cfg(test)]

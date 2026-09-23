@@ -67,6 +67,35 @@ jobs:
       - name: cargo check (MSRV)
         run: cargo check --workspace --all-targets
 
+  no-std:
+    # The roadmap's no_std-capable core subset: `framework-types` must build
+    # for a bare-metal target with neither `std` nor `alloc`.
+    name: no_std value types (thumbv7em-none-eabihf)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+      - name: cargo build framework-types (bare metal)
+        run: cargo build -p framework-types --target thumbv7em-none-eabihf
+
+  headless:
+    # Milestone 45: the application layer's component, interaction, golden,
+    # and lifecycle tests run on a machine with none of the target hardware.
+    # A second, constrained run pins the process to one core — the low-end
+    # reference profile until a device matrix exists.
+    name: headless backend (ubuntu, and one core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test -p framework-headless
+        run: cargo test -p framework-headless
+      - name: cargo test -p framework-headless (one core)
+        run: taskset -c 0 cargo test -p framework-headless -- --test-threads=1
+
   supply-chain:
     name: cargo-deny + cargo-audit
     runs-on: ubuntu-latest

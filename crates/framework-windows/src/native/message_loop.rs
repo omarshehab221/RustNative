@@ -619,6 +619,7 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             0
         }
         super::single_instance::WM_FRAMEWORK_DEEP_LINK
+        | super::memory_watch::WM_FRAMEWORK_LOW_MEMORY
         | WM_QUERYENDSESSION
         | WM_ENDSESSION
         | WM_POWERBROADCAST => session_message(hwnd, message, wparam),
@@ -856,6 +857,14 @@ fn session_message(hwnd: HWND, message: u32, wparam: WPARAM) -> LRESULT {
                     if !runtime.dispatch_or_quit(Event::DeepLink { url }) {
                         return;
                     }
+                }
+            });
+            0
+        }
+        super::memory_watch::WM_FRAMEWORK_LOW_MEMORY => {
+            with_runtime(hwnd, |runtime| {
+                if super::lifecycle::is_primary(runtime) {
+                    super::lifecycle::notify(runtime, framework_core::Lifecycle::LowMemory);
                 }
             });
             0

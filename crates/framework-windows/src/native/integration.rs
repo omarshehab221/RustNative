@@ -741,6 +741,27 @@ fn native_local_task_runs_on_the_ui_thread() {
     assert_eq!(entries(&log), vec!["local-task-completed".to_owned()]);
 }
 
+/// A realized window matches its reviewed image (Milestone 45's visual
+/// regression tier), captured through `PrintWindow`.
+///
+/// Catches: a styling or layout change that alters what a person sees
+/// without changing the tree — the class of regression a structural golden
+/// cannot see.
+#[test]
+fn native_window_matches_its_visual_golden() {
+    let log = log();
+    let mut application = Application::new(Recorder::new(log.clone()), window("visual"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let capture = super::capture::capture_client(harness.hwnd(WindowId::PRIMARY))
+        .expect("PrintWindow captures the client area");
+    super::capture::assert_matches_golden(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens/windows/counter.bmp"),
+        &capture,
+    );
+}
+
 /// A panic inside a component is caught at the `WNDPROC` boundary, recorded
 /// as a typed error, and turned into a clean exit.
 ///

@@ -367,6 +367,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-headless"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "framework-core",
+ "parking_lot",
+ "serde",
+]
+
+[[package]]
 name = "framework-types"
 version = "0.1.0"
 dependencies = [

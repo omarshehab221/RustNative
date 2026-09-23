@@ -88,6 +88,10 @@ pub struct Application {
     theme: Theme,
     panic_policy: PanicPolicy,
     motion: crate::MotionPreference,
+    /// The executor every window's scheduler runs on, when the host supplied
+    /// one (see [`Self::with_executor`]); otherwise each window's scheduler
+    /// uses the shared default.
+    executor: Option<std::sync::Arc<dyn crate::Executor>>,
 }
 
 impl fmt::Debug for Application {
@@ -120,14 +124,46 @@ impl Application {
         services: Services,
         theme: Theme,
     ) -> Self {
+        Self::build(component, window, services, theme, None)
+    }
+
+    /// Creates an application whose every window schedules its tasks on
+    /// `executor` — a host's own executor, or a [`crate::ManualExecutor`] so
+    /// that a test controls every task and every delay.
+    pub fn with_executor<C: Component>(
+        component: C,
+        window: Window,
+        services: Services,
+        theme: Theme,
+        executor: std::sync::Arc<dyn crate::Executor>,
+    ) -> Self {
+        Self::build(component, window, services, theme, Some(executor))
+    }
+
+    fn scheduler_for_new_window(
+        executor: Option<&std::sync::Arc<dyn crate::Executor>>,
+    ) -> Scheduler {
+        executor.map_or_else(Scheduler::new, |executor| {
+            Scheduler::with_executor(std::sync::Arc::clone(executor))
+        })
+    }
+
+    fn build<C: Component>(
+        component: C,
+        window: Window,
+        services: Services,
+        theme: Theme,
+        executor: Option<std::sync::Arc<dyn crate::Executor>>,
+    ) -> Self {
         let primary_window = WindowId::PRIMARY;
         let entry = WindowEntry {
             state: WindowState::new(window.size()),
             window,
-            components: ComponentTree::with_services_and_theme(
+            components: ComponentTree::with_scheduler(
                 component,
                 services.clone(),
                 theme.clone(),
+                Self::scheduler_for_new_window(executor.as_ref()),
             ),
         };
         let mut windows = HashMap::new();
@@ -140,6 +176,7 @@ impl Application {
             theme,
             panic_policy: PanicPolicy::default(),
             motion: crate::MotionPreference::default(),
+            executor,
         };
         // A component may request another window from its first render. The
         // root tree is rendered while this Application is being
@@ -242,7 +279,9 @@ impl Application {
     ) -> Result<(), crate::services::ServiceError> {
         use crate::lifecycle::Lifecycle;
         let flushed = match lifecycle {
-            Lifecycle::Suspending | Lifecycle::Terminating => self.flush_state(),
+            Lifecycle::Suspending | Lifecycle::Terminating | Lifecycle::LowMemory => {
+                self.flush_state()
+            }
             _ => Ok(()),
         };
         self.dispatch(Event::Lifecycle(lifecycle));
@@ -406,10 +445,11 @@ impl Application {
             WindowEntry {
                 state: WindowState::new(window.size()).with_modal_parent(modal_parent),
                 window,
-                components: ComponentTree::with_services_and_theme(
+                components: ComponentTree::with_scheduler(
                     component,
                     self.services.clone(),
                     self.theme.clone(),
+                    Self::scheduler_for_new_window(self.executor.as_ref()),
                 ),
             },
         );
@@ -506,6 +546,17 @@ impl Application {
     #[must_use]
     pub fn services(&self) -> &Services {
         &self.services
+    }
+
+    /// Replaces the theme for every window and re-renders them all. See
+    /// [`ComponentTree::set_theme`]: a backend applies the result to its
+    /// existing native objects, creating none.
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+        for entry in self.windows.values_mut() {
+            let _ = entry.components.set_theme(self.theme.clone());
+        }
+        self.apply_queued_window_commands();
     }
 
     /// Returns the application-wide theme.

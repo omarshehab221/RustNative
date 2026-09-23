@@ -90,6 +90,9 @@ pub(crate) fn run_application(
     if let Some(url) = launch_url {
         super::single_instance::deliver_later(url);
     }
+    // Stopped (and its thread joined) when this function returns, after the
+    // loop has ended and before the registry is dropped.
+    let _memory = super::memory_watch::MemoryWatcher::start();
 
     let looped = run_message_loop();
 

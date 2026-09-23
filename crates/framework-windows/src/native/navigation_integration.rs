@@ -183,6 +183,25 @@ fn ending_the_session_flushes_state_before_the_application_is_told() {
 }
 
 #[test]
+fn low_memory_flushes_state_before_the_application_is_told() {
+    let log = Log::default();
+    let store = MemoryStateStore::new();
+    let mut application = application(&log, &store);
+    // SAFETY: `application` is declared first, so it outlives the harness.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    let tabs = harness.expect_control(WindowId::PRIMARY, "tabs");
+    click_tab(&mut harness, tabs, 1);
+
+    // What the watcher thread posts when the memory resource notification
+    // is signalled; the notification itself cannot be provoked in a test.
+    let window = harness.hwnd(WindowId::PRIMARY);
+    harness.send(window, super::memory_watch::WM_FRAMEWORK_LOW_MEMORY, 0, 0);
+
+    assert!(store.keys().iter().any(|key| key.ends_with("#choices")), "flushed first");
+    assert!(log.events.borrow().contains(&format!("{:?}", Lifecycle::LowMemory)));
+}
+
+#[test]
 fn writes_are_flushed_once_they_go_quiet() {
     let log = Log::default();
     let store = MemoryStateStore::new();

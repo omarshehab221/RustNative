@@ -74,12 +74,16 @@ thread_local! {
 /// add contention with no corresponding safety benefit.
 struct KeyInterner {
     ids: HashMap<Box<str>, u64>,
+    /// The reverse of `ids`, indexed by interned id — what lets a
+    /// diagnostic (a golden file, the inspector, a failed test query) name
+    /// a node by the key its author wrote rather than by a number.
+    keys: Vec<Box<str>>,
     next: u64,
 }
 
 impl KeyInterner {
     fn new() -> Self {
-        Self { ids: HashMap::new(), next: 0 }
+        Self { ids: HashMap::new(), keys: Vec::new(), next: 0 }
     }
 
     #[allow(
@@ -101,7 +105,12 @@ impl KeyInterner {
              `NodeId::from_key` for the identity model this interner backs.",
         );
         self.ids.insert(key.into(), id);
+        self.keys.push(key.into());
         id
+    }
+
+    fn key(&self, id: u64) -> Option<&str> {
+        usize::try_from(id).ok().and_then(|index| self.keys.get(index)).map(AsRef::as_ref)
     }
 }
 
@@ -132,6 +141,34 @@ impl NodeId {
     /// throughout this module.
     pub(crate) const fn scoped(owner: ComponentId, local: Self) -> Self {
         Self(((owner.0 as u128) << 64) | (local.0 & (u64::MAX as u128)))
+    }
+
+    /// The key this node was created with — the component-local part of its
+    /// identity, as its author wrote it — if it was interned on this thread.
+    ///
+    /// For diagnostics only: a golden file, an inspector, or a failed test
+    /// query names a node this way. Identity itself is the id, never the
+    /// string.
+    ///
+    /// ```
+    /// use framework_core::NodeId;
+    ///
+    /// assert_eq!(NodeId::from_key("submit").local_key().as_deref(), Some("submit"));
+    /// ```
+    #[must_use]
+    pub fn local_key(self) -> Option<String> {
+        #[allow(clippy::cast_possible_truncation, reason = "masked to the low 64 bits first")]
+        let local = (self.0 & u128::from(u64::MAX)) as u64;
+        KEY_INTERNER.with(|interner| interner.borrow().key(local).map(str::to_owned))
+    }
+
+    /// The component that owns this node, or `None` for a node the root
+    /// component rendered (whose identity is its bare key).
+    #[must_use]
+    pub fn owner(self) -> Option<ComponentId> {
+        #[allow(clippy::cast_possible_truncation, reason = "the high half of a u128 fits a u64")]
+        let owner = (self.0 >> 64) as u64;
+        (owner != 0).then_some(ComponentId(owner))
     }
 
     /// Returns the raw numeric value. Exposed for backends that need a

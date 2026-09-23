@@ -13,4 +13,8 @@ pub enum Lifecycle {
     /// The application is about to exit: its last window closed, or the
     /// person is signing out or shutting down.
     Terminating,
+    /// The host is short of memory. Persisted state is flushed before this
+    /// is delivered; a component drops what it can rebuild — caches,
+    /// decoded images, prefetched pages — and keeps what it cannot.
+    LowMemory,
 }

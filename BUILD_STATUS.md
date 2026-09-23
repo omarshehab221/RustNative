@@ -1,8 +1,86 @@
 # Build Status — Native Rust Framework
 
-## Current milestone
+## Current work: Milestones 39–58 on the Windows backend
 
-**Milestone 32 — Packaging and deployment (Windows) — complete.**
+Scope, as decided on 2026-09-23 and recorded in
+`docs/superpowers/plans/2026-09-23-milestones-39-58.md`: every remaining
+milestone, every tier, with the exception of backends other than Windows
+(Milestones 33–38 and Web milestones A–K). Where a milestone item can only be
+*realized* on one of those backends, its portable contract and its test double
+are built here and the realization is listed below as **owed** by the backend
+milestone that will do it. The shipped backends are Windows and the headless
+reference backend (Milestone 45); a "done when" that names several backends is
+met on those two, and its other half is listed as owed.
+
+<!-- milestone entries, newest first -->
+
+### Milestone 45 — Test infrastructure — complete (Windows scope)
+
+**Built.** `crates/framework-headless`, a real backend (`HeadlessPlatform`
+implements `Platform` and advertises only what its model realizes) that
+realizes the tree through the same `TreeSnapshot`/`TreeDiff` a native backend
+consumes, lays it out with deterministic metrics (`HeadlessMeasurer`: 8 px per
+character, 32 px lines, a text scale for Milestone 41), and drives it with
+`HeadlessApp`: `click`, `type_text`, `set_text`, `press`, `tab`, `select_tab`,
+`scroll`, `resize`, `open_url`, `lifecycle`, `advance`, `settle`. Every
+interaction goes through hit-testing and host focus rules to the same events
+`framework-windows` produces — a click on a covered or disabled control is an
+error, Tab skips disabled and hidden controls, Enter activates a focused
+button, typing reports one `TextChanged` per keystroke, a virtual list reports
+a range change on its first frame and then only when scrolling leaves the
+range (the Windows backend's rule). Time is a `ManualExecutor`; persisted state
+is flushed after the same 1.5 s debounce Windows uses.
+
+The accessibility query API (`Query::role(..).name(..)`, `Query::label`,
+`Query::text`, `Query::key`) fails with a listing of what the tree contains.
+Goldens (`assert_golden!`, blessed with `RUSTNATIVE_BLESS=1`) describe the
+realized tree; on Windows, `native::capture` captures a real window through
+`PrintWindow` and compares it with a reviewed BMP (per-channel tolerance 12,
+at most 1% of pixels). Exhaustive mode fails a test that leaves a task pending,
+an HTTP expectation unmet (`MockHttp`), an unexpected request, or an input or
+animation request unconsumed. The lifecycle suite tests collisions: process
+death with unflushed state, a polite termination, a deep link arriving during
+restoration, a configuration change during a load, low memory while
+suspended, and kill-and-restore per destination.
+
+Core additions it needed: `Application::with_executor`,
+`Application::set_theme`/`ComponentTree::set_theme` (a theme change is a
+re-render and diff — the headless test asserts it creates no objects),
+`Lifecycle::LowMemory` (flushes first), and `NodeId::local_key`/`owner` for
+diagnostics. Windows: `native::memory_watch` turns the low-memory resource
+notification into `Lifecycle::LowMemory` on the primary window, one event per
+episode.
+
+**Verified.** 30 headless tests (4 unit, 10 interaction, 6 lifecycle
+collisions, 4 exhaustive, 6 doc tests); Windows: the visual golden
+(`tests/goldens/windows/counter.bmp`, blessed on this machine: Windows 10
+19045, 96 DPI), the low-memory flush-then-notify path, and the watcher's
+start/stop. CI gains a `headless` job, run twice — normally and pinned to one
+core with one test thread as the low-end profile.
+
+**Not verified / owed.** The real low-memory notification was not provoked
+(the test posts the message the watcher posts). The visual golden holds on
+this machine class; another DPI or font set needs its own blessing. Owed by
+Milestone 37: the host-side device simulator and the hardware-in-the-loop
+runner; by Milestones 35–37: the device and emulator matrix. Preview goldens
+(`C55-3`) arrive with previews in Milestone 43.
+
+### Core work shared by the remaining targets — complete
+
+`Clock` (`SystemClock`, `ManualClock`, `Services::clock`, `Executor::now`); the
+single-threaded executor seam (`LocalExecutor`, `LocalPool`,
+`ComponentContext::spawn_local`, polled by `pump_tasks`, with a wake that fires
+before the backend installs its waker remembered and delivered); and
+`framework-types`, the `no_std` crate for geometry, `Color`, and `Scalar`,
+built for `thumbv7em-none-eabihf` here and in CI. Verified by unit tests, three
+integration tests (a `!Send` task delivered on virtual time; cancelled with its
+owner and never resumed; `now` and `sleep` on one clock) and a Windows test in
+which a `!Send` task spawned during the first render runs through the real
+message loop.
+
+---
+
+## Previous: Milestone 32 — Packaging and deployment (Windows) — complete.
 
 ### What was built
 

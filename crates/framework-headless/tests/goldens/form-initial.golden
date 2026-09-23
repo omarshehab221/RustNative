@@ -1,0 +1,8 @@
+window "Form" 400x400
+Column #form [0,0 400x400]
+  Label #caption "Your name" [24,24 352x32]
+  TextInput #name "" [24,68 352x32] name="Your name"
+  Button #submit "Submit" [24,112 352x32] disabled
+  Label #result "Not submitted" [24,156 352x32]
+  TabBar #tabs "One     Two" [24,200 352x32] tabs=["One", "Two"] selected=0
+  Label #presses "Keys: 0" [24,244 352x32]
