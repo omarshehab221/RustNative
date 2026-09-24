@@ -127,6 +127,8 @@ The same markup can also be written inside the `rsx!` macro in any `.rs` file:
 ```rust
 // any .rs file
 let header = rsx! { <Label key="title" text="Inbox" /> };
+// …which is the same `Node` as the builder call
+let header = Node::label("title", "Inbox");
 ```
 
 These are two carriers of one grammar, not two syntaxes. Any element moves
@@ -173,7 +175,7 @@ The lowered files live in `target/` and nobody should need to open them:
 - `rustnative expand` prints the builder form any markup lowers to.
 
 Plain `cargo build` still works; it reports positions in the lowered file,
-whose header names the source. That is the one place the compile step shows
+whose source map (`<file>.rs.map`, beside it) names the source. That is the one place the compile step shows
 through, which is why the CLI is the documented way to build a `.rsx` project.
 `rsx!` has no such seam — a proc macro keeps its tokens' real positions, so its
 errors land on the `.rs` file under plain `cargo` too.

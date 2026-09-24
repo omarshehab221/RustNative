@@ -8,7 +8,6 @@ use crate::doctor::Report;
 use crate::error::{Error, Result};
 use crate::platform::Platform;
 use crate::project::{FrameworkSource, Project, create};
-use crate::toolchain::cargo;
 
 /// The version of the framework a generated project depends on when it is
 /// not pointed at a checkout.
@@ -36,7 +35,37 @@ enum Command {
         /// versions — what to use while working on the framework itself.
         #[arg(long, value_name = "DIR")]
         framework_path: Option<PathBuf>,
+        /// Which syntax the project is written in. There is no default:
+        /// neither is the one a developer should prefer (`PLAN.md` 2.9),
+        /// and both templates are the same application.
+        #[arg(long, value_enum)]
+        syntax: crate::project::Syntax,
     },
+    /// Print the builder form a file's markup lowers to — a `.rsx` file, or
+    /// the `rsx!` calls in a `.rs` file.
+    Expand {
+        /// The file.
+        file: PathBuf,
+    },
+    /// Format `.rsx` files (Rust and markup together) and the `rsx!` calls
+    /// in `.rs` files — every such file in the project if none is named.
+    Fmt {
+        /// The files to format.
+        files: Vec<PathBuf>,
+        /// Report files that would change, and fail, instead of writing.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Serve the language server protocol for `.rsx` files, forwarding to
+    /// `rust-analyzer` over the lowered files.
+    Lsp {
+        /// The language server to forward to (a program and its arguments).
+        #[arg(long, default_value = "rust-analyzer")]
+        server: String,
+    },
+    /// A stand-in language server the `lsp` tests forward to.
+    #[command(hide = true, name = "__echo-lsp")]
+    EchoLsp,
     /// Build the application.
     Build {
         /// Which platform to build for.
@@ -98,13 +127,13 @@ impl Cli {
         let here = std::env::current_dir()
             .map_err(|cause| Error::Io { what: "find the current folder".to_owned(), cause })?;
         match self.command {
-            Command::New { name, path, framework_path } => {
+            Command::New { name, path, framework_path, syntax } => {
                 let parent = path.unwrap_or(here);
                 let framework = framework_path.map_or_else(
                     || FrameworkSource::Published(FRAMEWORK_VERSION.to_owned()),
                     FrameworkSource::Path,
                 );
-                let root = create(&parent, &name, &framework)?;
+                let root = create(&parent, &name, &framework, syntax)?;
                 println!("Created {}", root.display());
                 println!("  cd {name}");
                 println!("  rustnative run windows");
@@ -119,8 +148,49 @@ impl Cli {
                 let project = Project::find(&here)?;
                 let mut command = vec!["test".to_owned()];
                 command.extend(arguments);
-                cargo::run(&project.root, command)
+                crate::diagnostics::run_cargo(&project.root, &command)
             }
+            Command::Expand { file } => {
+                print!("{}", crate::markup::expand_file(&file)?);
+                Ok(())
+            }
+            Command::Fmt { files, check } => {
+                let files = if files.is_empty() {
+                    let project = Project::find(&here)?;
+                    crate::markup::project_files(&project.root.join("src"))
+                } else {
+                    files
+                };
+                let mut unformatted = Vec::new();
+                for file in &files {
+                    let formatted = crate::markup::format_file(file)?;
+                    let current = std::fs::read_to_string(file)
+                        .map_err(|cause| Error::Io {
+                            what: format!("read {}", file.display()),
+                            cause,
+                        })?
+                        .replace("\r\n", "\n");
+                    if formatted == current {
+                        continue;
+                    }
+                    if check {
+                        unformatted.push(file.display().to_string());
+                    } else {
+                        std::fs::write(file, formatted).map_err(|cause| Error::Io {
+                            what: format!("write {}", file.display()),
+                            cause,
+                        })?;
+                        println!("Formatted {}", file.display());
+                    }
+                }
+                if unformatted.is_empty() {
+                    Ok(())
+                } else {
+                    Err(Error::Usage(format!("not formatted:\n  {}", unformatted.join("\n  "))))
+                }
+            }
+            Command::Lsp { server } => crate::lsp::serve(&server),
+            Command::EchoLsp => crate::lsp::echo_server(),
             Command::Package { platform, format, sign, password_env } => {
                 if platform.backend().is_none() {
                     return Err(Error::NoBackend {
@@ -186,5 +256,7 @@ fn cargo_for(
         arguments.push("--release".to_owned());
     }
     arguments.extend(extra.iter().map(|argument| (*argument).to_owned()));
-    cargo::run(&project.root, arguments)
+    // Structured diagnostics, so positions in lowered `.rsx` files are
+    // reported in the `.rsx` file (see `diagnostics`).
+    crate::diagnostics::run_cargo(&project.root, &arguments)
 }

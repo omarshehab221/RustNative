@@ -271,6 +271,22 @@ struct Relationships {
 /// let info = volume.accessibility();
 /// assert!(matches!(info.value(), Some(AccessibleValue::Range { .. })));
 /// assert!(info.supports(AccessibleActionKind::Increment));
+///
+/// // The same node in markup:
+/// let markup = framework_core::rsx! {
+///     <Column
+///         key="volume"
+///         accessibility={AccessibilityInfo::new(AccessibilityRole::Slider)
+///             .name("Volume")
+///             .labelled_by("volume-caption")
+///             .range(0.0, 100.0, 35.0, 5.0)
+///             .action(AccessibleActionKind::SetValue)
+///             .action(AccessibleActionKind::Increment)
+///             .action(AccessibleActionKind::Decrement)
+///             .focusable(true)}
+///     ></Column>
+/// };
+/// assert_eq!(markup, volume);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(
@@ -634,6 +650,15 @@ impl AccessibilityInfo {
 ///         )),
 /// );
 /// assert_eq!(chart.accessibility().elements().len(), 1);
+///
+/// // The same node in markup:
+/// let bar = VirtualElement::new(
+///     "q1",
+///     AccessibilityInfo::new(AccessibilityRole::Button).name("Q1: 1.2M").action(AccessibleActionKind::Invoke),
+///     Rect::new(0, 40, 30, 60),
+/// );
+/// let described = AccessibilityInfo::new(AccessibilityRole::Canvas).name("Sales by quarter").element(bar);
+/// assert_eq!(framework_core::rsx! { <Column key="chart" accessibility={described}></Column> }, chart);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VirtualElement {

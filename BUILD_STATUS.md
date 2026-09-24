@@ -14,6 +14,47 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 53 — The markup syntax — complete
+
+**Built.**
+
+- **`crates/framework-markup`**: the one parser (`syn`), the element table
+  (every node kind, its required and optional attributes, the universal
+  modifiers), the lowering to builder calls with spans preserved
+  (`quote_spanned`), the formatter, and the `.rsx` compiler with its
+  source map. Expansion goldens pin the lowering of every element.
+- **Carrier 1, `rsx!`** (`crates/framework-macros`, re-exported as
+  `framework_core::rsx` behind the default `markup` feature): elements,
+  components (`child_with_props`), `if`/`else`, `match`, `for`, braces for
+  any Rust expression, fragments, `IntoChildren`.
+- **Carrier 2, `.rsx` files**: `framework_build::compile_rsx` compiles
+  `src/**/*.rsx` into `OUT_DIR/rsx/…` from `build.rs`, with
+  `rerun-if-changed` per file; `rsx_mod!` includes one. `rustnative
+  build`/`check`/`test`/`run` run Cargo with JSON diagnostics and remap every
+  span in a lowered file back to the `.rsx` line and column
+  (`crates/rustnative/src/diagnostics.rs`).
+- **Tooling**: `rustnative expand`, `rustnative fmt [--check]` (both
+  carriers), `rustnative lsp` (a proxy that presents `.rsx` documents to the
+  Rust language server as their lowered files and maps positions and
+  diagnostics back; markup completion and hover), and `rustnative new
+  --syntax builder|markup` (required; both templates build).
+- **Conformance** (`crates/framework-conformance`): the equivalence suite
+  (every node kind and modifier, builder vs `rsx!` vs `.rsx`), the
+  compile-failure suite (trybuild; unknown element, unknown/missing/duplicate
+  attribute, mismatched tag, wrong type, and the rest, through both
+  carriers), and the documentation-parity check: every section of
+  `README.md`/`PLAN.md`/guides and every runnable doc example that builds a
+  tree shows both syntaxes.
+
+**Verified.** Full gate. The CLI tests build and check a generated markup
+project, report a type error written in `app.rsx` at its `app.rsx:line:col`
+with the `.rsx` line quoted, and drive the LSP proxy end to end.
+
+**Not verified / owed.** The LSP proxy is tested against a scripted echo
+server, not a live rust-analyzer; editor assistance *inside* an `rsx!` in a
+`.rs` file is Milestone 43's. Plain `cargo build` reports positions in the
+lowered file (stated in the plan).
+
 ### Milestone 39 — Portable-surface obligations — complete (Windows scope)
 
 **Built.** Every item of the milestone, with its proving test listed in

@@ -65,6 +65,15 @@ type Factory = Box<dyn Fn(Services, Theme, Arc<dyn Executor>) -> Application>;
 /// let mut app = HeadlessApp::launch(Window::new("Counter", Size::new(320, 200)), || Counter::new(()));
 /// app.click(&Query::role(AccessibilityRole::Button).name("Increment"))?;
 /// assert!(app.find(&Query::text("Count: 1")).is_ok());
+///
+/// // A fresh counter's view, in markup:
+/// let markup = framework_core::rsx! {
+///     <Column key="root">
+///         <Label key="count" text="Count: 0" />
+///         <Button key="increment" text="Increment" />
+///     </Column>
+/// };
+/// assert_eq!(markup, Counter::new(()).view());
 /// # Ok::<(), framework_headless::QueryError>(())
 /// ```
 pub struct HeadlessApp {

@@ -176,6 +176,15 @@ impl TreeNode {
 /// }));
 /// // A text change moves geometry, so layout must run again.
 /// assert!(diff.invalidates_layout());
+///
+/// // The tree before, in markup:
+/// let markup = framework_core::rsx! {
+///     <Column key="root">
+///         <Label key="a" text="first" />
+///         <Label key="b" text="second" />
+///     </Column>
+/// };
+/// assert_eq!(TreeSnapshot::from_node(&markup)?, before);
 /// # Ok::<(), framework_core::TreeError>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

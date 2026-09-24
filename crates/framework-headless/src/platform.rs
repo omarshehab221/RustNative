@@ -40,6 +40,9 @@ use crate::tree::HeadlessTree;
 /// platform.run(&mut application)?;
 /// let tree = platform.realized(framework_core::WindowId::PRIMARY).expect("realized");
 /// assert!(tree.describe().contains("\"Hello\""));
+///
+/// // The view, in markup:
+/// assert_eq!(framework_core::rsx! { <Label key="hello" text="Hello" /> }, application.view());
 /// # Ok::<(), framework_core::UnsupportedPlatform>(())
 /// ```
 #[derive(Debug)]

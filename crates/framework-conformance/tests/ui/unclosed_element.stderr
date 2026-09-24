@@ -1,0 +1,5 @@
+error: `<Column>` is never closed
+ --> tests/ui/unclosed_element.rs:4:20
+  |
+4 |     let _ = rsx! { <Column key="root"> <Label key="a" text="A" /> };
+  |                    ^

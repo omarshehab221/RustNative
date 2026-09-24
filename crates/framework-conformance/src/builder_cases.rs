@@ -1,0 +1,117 @@
+//! The builder spelling of every syntax-equivalence case.
+
+use framework_core::{ColumnStyle, Component, ComponentContext, LayoutStyle, Node, RowStyle};
+
+use crate::syntax::{self, Card, CardProps, values};
+
+/// Every case, by name.
+#[must_use]
+pub fn cases() -> Vec<(&'static str, Node)> {
+    vec![
+        ("label", Node::label("greeting", "Hello")),
+        (
+            "label_layout",
+            Node::label_with_layout(
+                "sized",
+                "Sized",
+                LayoutStyle::default()
+                    .width(values::WIDTH)
+                    .height(values::HEIGHT)
+                    .margin(values::MARGIN)
+                    .align_self(values::CENTER)
+                    .constraints(syntax::constraints())
+                    .direction(values::RTL),
+            ),
+        ),
+        ("button", Node::button("save", "Save")),
+        ("text_input", Node::text_input("name", "Ada")),
+        ("canvas", Node::canvas("swatch", syntax::drawing(), LayoutStyle::default())),
+        ("surface", Node::native_surface("scene", LayoutStyle::default())),
+        ("tab_bar", Node::tab_bar("tabs", ["One", "Two"], 1, LayoutStyle::default())),
+        (
+            "column",
+            Node::column_with_layout(
+                "stack",
+                [Node::label("a", "A"), Node::label("b", "B")],
+                LayoutStyle::default(),
+                ColumnStyle::default()
+                    .padding(values::PADDING)
+                    .gap(4)
+                    .align_items(values::CENTER)
+                    .overflow(values::SCROLL),
+            ),
+        ),
+        (
+            "row",
+            Node::row_with_layout(
+                "line",
+                [Node::button("ok", "OK"), Node::button("cancel", "Cancel")],
+                LayoutStyle::default(),
+                RowStyle::default().gap(2),
+            ),
+        ),
+        (
+            "virtual_list",
+            Node::virtual_list_with_layout(
+                "rows",
+                syntax::list(),
+                LayoutStyle::default(),
+                (0..3).map(|index| {
+                    Node::label(format!("row-{index}"), format!("Row {index}"))
+                        .with_item_index(index)
+                }),
+            ),
+        ),
+        (
+            "accessibility",
+            Node::button("icon", "\u{1F4BE}").with_accessibility(syntax::accessibility()),
+        ),
+        ("style", Node::label("styled", "Styled").with_style(syntax::visual())),
+        ("input", Node::column("pad", []).with_input(syntax::interest())),
+        ("opacity", Node::label("faint", "Faint").with_opacity(0.5)),
+        ("transition", {
+            let (property, transition) = syntax::slide();
+            Node::column("panel", []).with_transition(property, transition)
+        }),
+        ("item_index", Node::label("item", "Item").with_item_index(7)),
+        ("command", Node::button("save", "Save").with_command(syntax::SAVE)),
+        ("cursor", Node::label("link", "Link").with_cursor(framework_core::Cursor::Pointer)),
+        ("disabled", Node::button("off", "Off").disabled(true)),
+        ("hidden", Node::label("gone", "Gone").hidden(true)),
+        ("spread", syntax::emphasized(Node::label("loud", "Loud"))),
+        ("control_flow", control_flow(true, 2, &["x", "y"], Some("extra"))),
+        ("control_flow_else", control_flow(false, 0, &[], None)),
+    ]
+}
+
+/// `if`/`else`, `match`, `for`, fragments, and splices, as the builder
+/// syntax writes them: ordinary Rust.
+#[must_use]
+pub fn control_flow(show: bool, count: u8, items: &[&str], extra: Option<&str>) -> Node {
+    let mut children = Vec::new();
+    if show {
+        children.push(Node::label("shown", "Shown"));
+    } else {
+        children.push(Node::label("hidden-note", "Nothing to show"));
+    }
+    children.push(match count {
+        0 => Node::label("count", "none"),
+        1 => Node::label("count", "one"),
+        _ => Node::label("count", "many"),
+    });
+    children.extend(items.iter().map(|item| Node::label(*item, *item)));
+    children.push(Node::label("first", "1"));
+    children.push(Node::label("second", "2"));
+    children.extend(extra.map(|text| Node::label("extra", text)));
+    Node::column("flow", children)
+}
+
+/// A component element, as the builder syntax composes it.
+pub fn components(context: &mut ComponentContext<'_, ()>) -> Node {
+    let card = context.child_with_props::<Card, _>(
+        "card",
+        CardProps { title: "Welcome".into(), highlighted: true },
+        Card::new,
+    );
+    Node::column("cards", [card])
+}

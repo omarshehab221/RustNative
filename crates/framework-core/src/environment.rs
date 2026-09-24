@@ -42,6 +42,9 @@
 //! tree.set_environment(&keys::COLOR_SCHEME, ColorScheme::Dark);
 //! let Node::Label(label) = tree.view() else { unreachable!() };
 //! assert_eq!(label.text(), "Dark");
+//!
+//! // The rendered label, in markup:
+//! assert_eq!(framework_core::rsx! { <Label key="badge" text="Dark" /> }, tree.view());
 //! ```
 
 use std::any::Any;

@@ -1,0 +1,5 @@
+error: `<Column>` is closed by `</Row>`; close it with `</Column>`
+ --> tests/ui/mismatched_closing_tag.rs:4:20
+  |
+4 |     let _ = rsx! { <Column key="root"></Row> };
+  |                    ^

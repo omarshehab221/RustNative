@@ -110,3 +110,78 @@ rustnative doctor           # check the toolchains this machine has
 identity (used for its saved state and to keep one instance running), the
 name people see, and its version.
 ";
+
+/// The markup template's `src/main.rs`: the same application as
+/// [`MAIN_RS`], with its component in `src/app.rsx`.
+pub const MARKUP_MAIN_RS: &str = r#"#![cfg_attr(windows, windows_subsystem = "windows")]
+
+use framework_core::{Application, Component, Platform, Size, Window};
+use framework_windows::WindowsPlatform;
+
+// The root component is written in markup: see `src/app.rsx`, which the
+// build script lowers with `framework_build::compile_rsx()`.
+framework_core::rsx_mod!(app);
+
+const APP_NAME: &str = "{{display_name}}";
+const APP_ID: &str = "{{app_id}}";
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut application = Application::new(
+        app::App::new(()),
+        Window::new(APP_NAME, Size::new(480, 320)),
+    );
+    WindowsPlatform::new().with_app_id(APP_ID).run(&mut application)?;
+    Ok(())
+}
+"#;
+
+/// The markup template's `src/app.rsx`.
+pub const MARKUP_APP_RSX: &str = r#"// The application's root component: state, a view of it written in
+// markup, and what events do to it.
+
+use framework_core::{Component, Event, Node, NodeId};
+
+pub struct App {
+    clicks: u32,
+}
+
+impl Component for App {
+    type Props = ();
+    type Message = ();
+
+    fn new((): Self::Props) -> Self {
+        Self { clicks: 0 }
+    }
+
+    fn props(&self) -> &Self::Props {
+        static PROPS: () = ();
+        &PROPS
+    }
+
+    fn set_props(&mut self, (): Self::Props) {}
+
+    fn view(&self) -> Node {
+        <Column key="root">
+            <Label key="greeting" text={format!("Hello from {}", super::APP_NAME)} />
+            <Label key="count" text={format!("Clicked {} times", self.clicks)} />
+            <Button key="click" text="Click me" />
+        </Column>
+    }
+
+    fn update(&mut self, event: Event) {
+        if matches!(event, Event::Click { target } if target == NodeId::from_key("click")) {
+            self.clicks += 1;
+        }
+    }
+}
+"#;
+
+/// The markup template's `build.rs`: resources, and the `.rsx` lowering.
+pub const MARKUP_BUILD_RS: &str = r"//! Lowers this application's `.rsx` files, and embeds its icon, version
+//! information, and Windows application manifest (`rustnative.toml`).
+
+fn main() {
+    framework_build::compile_rsx();
+    framework_build::embed_resources();
+}
+";

@@ -147,6 +147,15 @@ impl LayoutResult {
     /// // In right-to-left, the first child sits at the right edge.
     /// let first = physical[&NodeId::from_key("first")];
     /// assert_eq!(first.x + first.width, 200 - RowStyle::new().padding.start);
+    ///
+    /// // The same row in markup:
+    /// let markup = framework_core::rsx! {
+    ///     <Row key="row" gap=0>
+    ///         <Label key="first" text="1" width={SizeMode::Fixed(40)} />
+    ///         <Label key="second" text="2" width={SizeMode::Fixed(40)} />
+    ///     </Row>
+    /// };
+    /// assert_eq!(markup, row);
     /// # Ok::<(), framework_core::TreeError>(())
     /// ```
     #[must_use]
@@ -234,6 +243,15 @@ pub struct MeasuredItem {
 /// // what makes a scrollable container possible.
 /// let narrow = LayoutEngine::new().layout(&snapshot, Size::new(20, 240));
 /// assert!(narrow[&NodeId::from_key("body")].width >= 120);
+///
+/// // The same tree in markup:
+/// let markup = framework_core::rsx! {
+///     <Column key="root">
+///         <Label key="header" text="Header" height={SizeMode::Fixed(40)} />
+///         <Label key="body" text="Body" width={SizeMode::Fill} constraints={Constraints::new().with_min_width(120)} />
+///     </Column>
+/// };
+/// assert_eq!(markup, tree);
 /// # Ok::<(), framework_core::TreeError>(())
 /// ```
 #[derive(Debug, Default)]

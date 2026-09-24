@@ -146,6 +146,10 @@ pub enum InputRequest {
 ///         }
 ///     }
 /// }
+///
+/// // The view in markup:
+/// let markup = framework_core::rsx! { <Column key="track" input={InputInterest::new().pointer()}></Column> };
+/// assert_eq!(markup, Slider::new(()).view());
 /// ```
 #[derive(Clone)]
 pub struct InputRequests {
@@ -267,6 +271,9 @@ pub enum AnimationRequest {
 ///         }
 ///     }
 /// }
+///
+/// // The view in markup:
+/// assert_eq!(framework_core::rsx! { <Label key="toast" text="Saved" /> }, Toast::new(()).view());
 /// ```
 #[derive(Clone)]
 pub struct AnimationRequests {
@@ -435,6 +442,9 @@ impl<M: 'static> Callback<M> {
 /// let mut tree = ComponentTree::new(Parent::new(()));
 /// let Node::Column(root) = tree.view() else { panic!("the root is a column") };
 /// assert_eq!(root.children().len(), 2);
+///
+/// // The view in markup:
+/// assert_eq!(framework_core::rsx! { <Label key="status" text="loading" /> }, Parent::new(()).view());
 /// ```
 pub struct ComponentContext<'a, M: Send + 'static> {
     pub(super) tree: &'a mut ComponentTree,

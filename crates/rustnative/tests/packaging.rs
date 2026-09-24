@@ -51,7 +51,7 @@ fn packaged_project() -> &'static PathBuf {
         let _ = std::fs::remove_dir_all(&parent);
         std::fs::create_dir_all(&parent).expect("a scratch folder");
         let created = rustnative()
-            .args(["new", "packaged", "--path"])
+            .args(["new", "packaged", "--syntax", "builder", "--path"])
             .arg(&parent)
             .arg("--framework-path")
             .arg(workspace())

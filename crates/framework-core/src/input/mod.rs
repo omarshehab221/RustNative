@@ -58,6 +58,10 @@ pub use framework_types::Scalar;
 /// let canvas = Node::column("canvas", []).with_input(InputInterest::new().pointer().wheel());
 /// assert!(canvas.input().wants_pointer());
 /// assert!(!canvas.input().wants_drop());
+///
+/// // The same node in markup:
+/// let markup = framework_core::rsx! { <Column key="canvas" input={InputInterest::new().pointer().wheel()}></Column> };
+/// assert_eq!(markup, canvas);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[allow(clippy::struct_excessive_bools, reason = "independent opt-in flags, not a state machine")]

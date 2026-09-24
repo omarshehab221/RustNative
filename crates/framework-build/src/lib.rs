@@ -29,12 +29,15 @@
 
 pub mod icon;
 pub mod manifest;
+pub mod markup;
 pub mod rc;
 pub mod sdk;
 
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+
+pub use markup::{compile_rsx, try_compile_rsx};
 
 /// What `rustnative.toml` says, as much of it as resources need.
 #[derive(Debug, Clone, Deserialize)]

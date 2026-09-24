@@ -147,6 +147,9 @@ impl StateCache {
 /// let second = run(&store);
 /// let Node::Button(button) = second.view() else { panic!("a button") };
 /// assert_eq!(button.text(), "Clicked 1 times");
+///
+/// // The restored button, in markup:
+/// assert_eq!(framework_core::rsx! { <Button key="add" text="Clicked 1 times" /> }, second.view());
 /// # Ok::<(), framework_core::ServiceError>(())
 /// ```
 pub struct Persisted<T> {

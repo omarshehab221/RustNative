@@ -19,6 +19,7 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
+framework-macros = { workspace = true, optional = true }
 framework-types = { workspace = true, features = ["serde"] }
 tokio.workspace = true
 parking_lot.workspace = true
@@ -30,7 +31,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [features]
-default = []
+# The markup syntax (`rsx!`, and `.rsx` files, which lower to it). On by
+# default so it is not a second-class opt-in; a feature so a constrained
+# profile can drop the proc-macro dependency — which turns off both
+# carriers together (`PLAN.md` Milestone 53).
+default = ["markup"]
+markup = ["dep:framework-macros"]
 # Before Milestone 30 this enabled `Serialize`/`Deserialize` on the id
 # types, ahead of persistence. Persistence is now part of the core, so
 # serde always is; the feature is kept, empty, so a manifest that asks for

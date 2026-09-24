@@ -39,6 +39,16 @@ impl Project {
     }
 }
 
+/// Which syntax a generated project is written in (`PLAN.md` 2.9). Both
+/// templates are the same application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Syntax {
+    /// The builder syntax: `Node::column(…)` and `with_*` modifiers.
+    Builder,
+    /// The markup syntax: `.rsx` files, lowered by the build script.
+    Markup,
+}
+
 /// How a generated project depends on the framework.
 #[derive(Debug, Clone)]
 pub enum FrameworkSource {
@@ -89,7 +99,12 @@ fn normalized(path: &Path) -> String {
 ///
 /// [`Error::Usage`] if the name is not usable or the folder already exists,
 /// and [`Error::Io`] if anything could not be written.
-pub fn create(parent: &Path, name: &str, framework: &FrameworkSource) -> Result<PathBuf> {
+pub fn create(
+    parent: &Path,
+    name: &str,
+    framework: &FrameworkSource,
+    syntax: Syntax,
+) -> Result<PathBuf> {
     let config = Config::template(name);
     config.validate().map_err(|error| match error {
         config::ConfigError::Invalid { field: "app.name", problem } => {
@@ -102,7 +117,13 @@ pub fn create(parent: &Path, name: &str, framework: &FrameworkSource) -> Result<
     if root.exists() {
         return Err(Error::Usage(format!("{} already exists", root.display())));
     }
-    write(&root.join("src"), "main.rs", &fill(templates::MAIN_RS, &config))?;
+    match syntax {
+        Syntax::Builder => write(&root.join("src"), "main.rs", &fill(templates::MAIN_RS, &config))?,
+        Syntax::Markup => {
+            write(&root.join("src"), "main.rs", &fill(templates::MARKUP_MAIN_RS, &config))?;
+            write(&root.join("src"), "app.rsx", &fill(templates::MARKUP_APP_RSX, &config))?;
+        }
+    }
     write(
         &root,
         "Cargo.toml",
@@ -110,7 +131,11 @@ pub fn create(parent: &Path, name: &str, framework: &FrameworkSource) -> Result<
             .replace("{{dependencies}}", &framework.dependencies())
             .replace("{{build-dependencies}}", &framework.build_dependencies()),
     )?;
-    write(&root, "build.rs", templates::BUILD_RS)?;
+    let build_rs = match syntax {
+        Syntax::Builder => templates::BUILD_RS,
+        Syntax::Markup => templates::MARKUP_BUILD_RS,
+    };
+    write(&root, "build.rs", build_rs)?;
     let rf_toml = toml::to_string_pretty(&config).map_err(|cause| Error::Io {
         what: "write rustnative.toml".to_owned(),
         cause: std::io::Error::other(cause.to_string()),
@@ -153,8 +178,13 @@ mod tests {
     #[test]
     fn a_new_project_has_everything_it_needs_and_names_itself_consistently() {
         let parent = scratch("create");
-        let root = create(&parent, "demo-app", &FrameworkSource::Published("0.1".to_owned()))
-            .expect("created");
+        let root = create(
+            &parent,
+            "demo-app",
+            &FrameworkSource::Published("0.1".to_owned()),
+            Syntax::Builder,
+        )
+        .expect("created");
         for file in
             ["Cargo.toml", "rustnative.toml", ".gitignore", "README.md", "src/main.rs", "build.rs"]
         {
@@ -180,6 +210,7 @@ mod tests {
             &parent,
             "linked",
             &FrameworkSource::Path(PathBuf::from("C:\\work\\RustNative")),
+            Syntax::Builder,
         )
         .expect("created");
         let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
@@ -192,8 +223,13 @@ mod tests {
     #[test]
     fn an_unusable_name_is_refused_before_anything_is_written() {
         let parent = scratch("bad-name");
-        let error = create(&parent, "not a name", &FrameworkSource::Published("0.1".to_owned()))
-            .expect_err("refused");
+        let error = create(
+            &parent,
+            "not a name",
+            &FrameworkSource::Published("0.1".to_owned()),
+            Syntax::Builder,
+        )
+        .expect_err("refused");
         assert_eq!(error.exit_code(), 2);
         assert!(!parent.join("not a name").exists());
     }
@@ -202,8 +238,13 @@ mod tests {
     fn creating_over_an_existing_folder_is_refused() {
         let parent = scratch("exists");
         std::fs::create_dir_all(parent.join("taken")).unwrap();
-        let error = create(&parent, "taken", &FrameworkSource::Published("0.1".to_owned()))
-            .expect_err("refused");
+        let error = create(
+            &parent,
+            "taken",
+            &FrameworkSource::Published("0.1".to_owned()),
+            Syntax::Builder,
+        )
+        .expect_err("refused");
         assert!(error.to_string().contains("already exists"));
     }
 

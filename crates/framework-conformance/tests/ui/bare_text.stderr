@@ -1,0 +1,5 @@
+error: text is not allowed between tags: write it as an attribute (`text="…"`) or a braced expression (`{…}`)
+ --> tests/ui/bare_text.rs:4:40
+  |
+4 |     let _ = rsx! { <Column key="root"> "Hello" </Column> };
+  |                                        ^^^^^^^

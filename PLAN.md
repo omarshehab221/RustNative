@@ -1806,7 +1806,8 @@ crate that the proc macro, the build-script compiler, and the CLI all link:
   falls in a lowered file — errors from the markup and ordinary Rust errors
   alike — back through the source map, so the developer is shown the file,
   line, and column they wrote. Plain `cargo build` still works and reports
-  positions in the lowered file, whose header names its source; that is the one
+  positions in the lowered file, `OUT_DIR/rsx/<the source's relative path>.rs`,
+  so the source is named by its path; that is the one
   place the compile step shows through, it is stated here rather than
   discovered, and it is why the CLI is the documented way to build a `.rsx`
   project;
@@ -1877,6 +1878,15 @@ through both carriers, a diagnostic from a `.rsx` file is reported at its
 source position by `rustnative build` and by the editor, `rustnative fmt` and
 `rustnative expand` work on both carriers, both project templates build and
 run, and no documented example exists in only one syntax.
+
+**Status (2026-09-24): implemented** — `crates/framework-markup` (parser,
+element table, lowering, formatter, `.rsx` compiler and source map),
+`rsx!` in `crates/framework-macros`, `.rsx` compilation through
+`framework_build::compile_rsx`, diagnostics remapped by the CLI,
+`rustnative expand`/`fmt`/`lsp`, both project templates, and the
+equivalence, compile-failure, and documentation-parity suites in
+`crates/framework-conformance`. Unverified: the LSP proxy against a live
+rust-analyzer (tested with a scripted server). See `BUILD_STATUS.md`.
 
 **Depends on** nothing. Like Milestone 39, it is deliberately early.
 

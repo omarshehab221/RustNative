@@ -59,6 +59,10 @@ impl Node {
     /// // A label describes itself: static text, and not a keyboard stop.
     /// assert_eq!(label.accessibility().role(), AccessibilityRole::Label);
     /// assert!(!label.accessibility().is_focusable());
+    ///
+    /// // The same node in markup:
+    /// let markup = framework_core::rsx! { <Label key="total" text="Total: 42" /> };
+    /// assert_eq!(markup, label);
     /// ```
     pub fn label(key: impl AsRef<str>, text: impl Into<String>) -> Self {
         Self::Label(Label::new(NodeId::from_key(key.as_ref()), text, LayoutStyle::default()))
@@ -101,6 +105,16 @@ impl Node {
     ///         .focusable(true),
     /// );
     /// assert_eq!(icon.accessibility().name_hint(), Some("Delete this item"));
+    ///
+    /// // The same three in markup:
+    /// use framework_core::rsx;
+    /// assert_eq!(rsx! { <Button key="submit" text="Submit" /> }, submit);
+    /// assert_eq!(
+    ///     rsx! { <Button key="chevron" text=">" accessibility={AccessibilityInfo::new(AccessibilityRole::None)} /> },
+    ///     decorative,
+    /// );
+    /// let named = AccessibilityInfo::new(AccessibilityRole::Button).name("Delete this item").focusable(true);
+    /// assert_eq!(rsx! { <Button key="delete" text="\u{1F5D1}" accessibility={named} /> }, icon);
     /// ```
     ///
     /// [`AccessibilityRole::Button`]: crate::AccessibilityRole::Button
@@ -137,6 +151,17 @@ impl Node {
     ///     LayoutStyle::new().width(SizeMode::Fixed(40)).height(SizeMode::Fixed(40)),
     /// );
     /// assert!(matches!(swatch, Node::Canvas(_)));
+    ///
+    /// // The same canvas in markup:
+    /// let markup = framework_core::rsx! {
+    ///     <Canvas
+    ///         key="swatch"
+    ///         draw_list={DrawList::new().fill_ellipse(RectF::new(0.0, 0.0, 40.0, 40.0), Paint::color(Color::rgb(200, 40, 40)))}
+    ///         width={SizeMode::Fixed(40)}
+    ///         height={SizeMode::Fixed(40)}
+    ///     />
+    /// };
+    /// assert_eq!(markup, swatch);
     /// ```
     pub fn canvas(key: impl AsRef<str>, draw_list: DrawList, layout: LayoutStyle) -> Self {
         Self::Canvas(Canvas::new(NodeId::from_key(key.as_ref()), draw_list, layout))
@@ -169,6 +194,10 @@ impl Node {
     /// let tabs = Node::tab_bar("sections", ["General", "Advanced"], 1, LayoutStyle::new());
     /// let Node::TabBar(bar) = &tabs else { panic!("a tab bar") };
     /// assert_eq!(bar.tabs().selected(), 1);
+    ///
+    /// // The same tab bar in markup:
+    /// let markup = framework_core::rsx! { <TabBar key="sections" labels={["General", "Advanced"]} selected=1 /> };
+    /// assert_eq!(markup, tabs);
     /// ```
     pub fn tab_bar(
         key: impl AsRef<str>,
@@ -458,6 +487,11 @@ impl Node {
     ///     Transition::new(Duration::from_millis(150)),
     /// );
     /// assert_eq!(panel.transitions().len(), 1);
+    ///
+    /// // The same panel in markup:
+    /// let slide = (AnimatedProperty::Position, Transition::new(Duration::from_millis(150)));
+    /// let markup = framework_core::rsx! { <Column key="panel" transition={slide}></Column> };
+    /// assert_eq!(markup, panel);
     /// ```
     #[must_use]
     pub fn with_transition(mut self, property: AnimatedProperty, transition: Transition) -> Self {
@@ -695,6 +729,20 @@ impl Node {
     /// assert_eq!(list.virtualization().expect("a virtual list").item_count, 100_000);
     /// assert_eq!(list.column_style().expect("a vertical list is a column").overflow,
     ///            Overflow::Scroll);
+    ///
+    /// // The same list in markup:
+    /// let markup = framework_core::rsx! {
+    ///     <VirtualList
+    ///         key="rows"
+    ///         list={VirtualListStyle::new(100_000, ItemExtent::Fixed(24))}
+    ///         height={framework_core::SizeMode::Fill}
+    ///     >
+    ///         for index in range.indices() {
+    ///             <Label key={format!("row-{index}")} text={format!("Row {index}")} item_index={index} />
+    ///         }
+    ///     </VirtualList>
+    /// };
+    /// assert_eq!(markup, list);
     /// ```
     pub fn virtual_list(
         key: impl AsRef<str>,
@@ -991,6 +1039,30 @@ impl Node {
             Self::Column(node) => node.id = id,
             Self::Row(node) => node.id = id,
         }
+    }
+}
+
+/// Anything that can stand in child position: one [`Node`], or any
+/// collection of them (`Vec<Node>`, `Option<Node>`, an iterator).
+///
+/// This is how the markup syntax's `{expr}` child accepts "a node or many"
+/// without a second node kind: it only ever extends the parent's
+/// `Vec<Node>`. The builder syntax does not need it — a builder call takes
+/// `IntoIterator<Item = Node>` directly.
+pub trait IntoChildren {
+    /// Appends `self` to `children`.
+    fn extend_into(self, children: &mut Vec<Node>);
+}
+
+impl IntoChildren for Node {
+    fn extend_into(self, children: &mut Vec<Node>) {
+        children.push(self);
+    }
+}
+
+impl<I: IntoIterator<Item = Node>> IntoChildren for I {
+    fn extend_into(self, children: &mut Vec<Node>) {
+        children.extend(self);
     }
 }
 

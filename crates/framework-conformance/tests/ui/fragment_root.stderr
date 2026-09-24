@@ -1,0 +1,5 @@
+error: a markup expression evaluates to one `Node`, so its root must be an element, not a fragment
+ --> tests/ui/fragment_root.rs:4:20
+  |
+4 |     let _ = rsx! { <><Label key="a" text="A" /></> };
+  |                    ^

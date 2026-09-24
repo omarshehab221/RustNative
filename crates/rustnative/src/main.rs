@@ -1,13 +1,16 @@
 //! `rustnative`, the Rust Native command.
 //!
 //! ```text
-//! rustnative new <name> [--path DIR] [--framework-path DIR]
+//! rustnative new <name> --syntax builder|markup [--path DIR] [--framework-path DIR]
 //! rustnative build <platform> [--release]
 //! rustnative run   <platform> [--release]
 //! rustnative check [platform]
 //! rustnative test  [-- cargo test arguments]
 //! rustnative package <platform> [--format zip|msix|all] [--sign CERT --password-env VAR]
 //! rustnative doctor [--json]
+//! rustnative expand <file>
+//! rustnative fmt [files...] [--check]
+//! rustnative lsp [--server rust-analyzer]
 //! ```
 //!
 //! `rustnative` **orchestrates** the toolchains rather than replacing them: a build
@@ -25,8 +28,11 @@
 
 mod cli;
 mod config;
+mod diagnostics;
 mod doctor;
 mod error;
+mod lsp;
+mod markup;
 mod package;
 mod platform;
 mod project;

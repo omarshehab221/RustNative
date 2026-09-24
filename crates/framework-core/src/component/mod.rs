@@ -92,6 +92,15 @@ use crate::node::Node;
 /// let Node::Column(root) = tree.view() else { panic!("the root is a column") };
 /// let Node::Label(label) = &root.children()[0] else { panic!("first child is the label") };
 /// assert_eq!(label.text(), "Count: 1");
+///
+/// // A fresh counter's view, in markup:
+/// let markup = framework_core::rsx! {
+///     <Column key="root">
+///         <Label key="count" text="Count: 0" />
+///         <Button key="increment" text="Increment" />
+///     </Column>
+/// };
+/// assert_eq!(markup, Counter::new(()).view());
 /// ```
 pub trait Component: 'static {
     /// Parent-provided, externally comparable inputs to this component.

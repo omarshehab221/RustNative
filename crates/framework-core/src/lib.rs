@@ -61,6 +61,15 @@
 //! let Node::Column(root) = application.view() else { panic!("the root is a column") };
 //! let Node::Label(label) = &root.children()[0] else { panic!("first child is the label") };
 //! assert_eq!(label.text(), "Hello!");
+//!
+//! // The greeted view, in markup:
+//! let markup = framework_core::rsx! {
+//!     <Column key="root">
+//!         <Label key="greeting" text="Hello!" />
+//!         <Button key="greet" text="Greet" />
+//!     </Column>
+//! };
+//! assert_eq!(markup, application.view());
 //! ```
 //!
 //! On Windows, the last line of `main` hands it to the backend:
@@ -143,6 +152,80 @@
 //! and the lint is now `deny` rather than `warn` so it cannot silently
 //! regress).
 #![deny(missing_docs)]
+
+/// The markup syntax: elements with typed attributes, nested children, and
+/// Rust in braces, evaluating to a [`Node`] (`PLAN.md` 2.9).
+///
+/// | Markup | Builder |
+/// |---|---|
+/// | `<Column key="k" padding={p}>…</Column>` | `Node::column_with_layout("k", children, LayoutStyle::default(), ColumnStyle::default().padding(p))` |
+/// | `<Label key="k" text="Hi" width={w} />` | `Node::label_with_layout("k", "Hi", LayoutStyle::default().width(w))` |
+/// | `disabled`, `hidden` | `.disabled(true)`, `.hidden(true)` |
+/// | `accessibility={a}` (any `with_*` modifier) | `.with_accessibility(a)` |
+/// | `..{f}` | `f(node)` — any `FnOnce(Node) -> Node` |
+/// | `{expr}` in child position | a `Node`, or anything iterable over `Node`s |
+/// | `if`/`else`, `match`, `for`, `<>…</>` | the same Rust control flow over children |
+/// | `<Screen key="s" prop={v} />` | `context.child_with_props::<Screen, _>("s", Props { prop: v }, Screen::new)` |
+///
+/// Builder:
+///
+/// ```
+/// use framework_core::{ColumnStyle, EdgeInsets, LayoutStyle, Node};
+///
+/// let items = ["one", "two"];
+/// let builder = Node::column_with_layout(
+///     "list",
+///     items.iter().map(|item| Node::label(*item, *item)),
+///     LayoutStyle::default(),
+///     ColumnStyle::default().padding(EdgeInsets::all(8)),
+/// );
+/// # let _ = builder;
+/// ```
+///
+/// Markup (in a `.rsx` file, the same element with no `rsx!` around it):
+///
+/// ```
+/// use framework_core::{EdgeInsets, Node, rsx};
+///
+/// let items = ["one", "two"];
+/// let markup: Node = rsx! {
+///     <Column key="list" padding={EdgeInsets::all(8)}>
+///         for item in items {
+///             <Label key={item} text={item} />
+///         }
+///     </Column>
+/// };
+/// # let builder = framework_core::Node::column_with_layout(
+/// #     "list",
+/// #     items.iter().map(|item| Node::label(*item, *item)),
+/// #     framework_core::LayoutStyle::default(),
+/// #     framework_core::ColumnStyle::default().padding(EdgeInsets::all(8)),
+/// # );
+/// assert_eq!(markup, builder);
+/// ```
+#[cfg(feature = "markup")]
+pub use framework_macros::rsx;
+
+// Lets `rsx!` expansions (which name `::framework_core`) work inside this
+// crate's own tests as they do in every other crate.
+extern crate self as framework_core;
+
+/// Declares a module written in a `.rsx` file, which
+/// `framework_build::compile_rsx()` lowered into `OUT_DIR`: the markup
+/// counterpart of `mod name;`.
+///
+/// ```ignore
+/// framework_core::rsx_mod!(inbox); // src/inbox.rsx
+/// ```
+#[macro_export]
+macro_rules! rsx_mod {
+    ($(#[$attribute:meta])* $visibility:vis $name:ident) => {
+        $(#[$attribute])*
+        $visibility mod $name {
+            include!(concat!(env!("OUT_DIR"), "/rsx/", stringify!($name), ".rs"));
+        }
+    };
+}
 pub mod accessibility;
 pub mod affinity;
 pub mod animation;
@@ -224,8 +307,8 @@ pub use navigation::{
     RouteParams, Router, url_path,
 };
 pub use node::{
-    Button, Canvas, Column, Label, Node, NodeKind, NodeTransition, Row, Surface, TabBar, Tabs,
-    TextInput, TreeError,
+    Button, Canvas, Column, IntoChildren, Label, Node, NodeKind, NodeTransition, Row, Surface,
+    TabBar, Tabs, TextInput, TreeError,
 };
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
 pub use permission::{FixedPermissions, Permission, PermissionService, PermissionState};

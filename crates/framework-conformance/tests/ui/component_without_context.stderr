@@ -1,0 +1,5 @@
+error: a component element needs the component context: write `rsx! { in context, … }` (a `.rsx` file finds it from the enclosing function's `ComponentContext` parameter)
+  --> tests/ui/component_without_context.rs:15:39
+   |
+15 |     let _ = rsx! { <Column key="root"><Card key="card" /></Column> };
+   |                                       ^

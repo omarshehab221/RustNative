@@ -15,5 +15,6 @@ categories = ["development-tools::build-utils", "gui"]
 workspace = true
 
 [dependencies]
+framework-markup.workspace = true
 serde = { version = "1", features = ["derive"] }
 toml = "1"

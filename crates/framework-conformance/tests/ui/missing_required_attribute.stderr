@@ -1,0 +1,5 @@
+error: `<Label>` needs `text`
+ --> tests/ui/missing_required_attribute.rs:4:21
+  |
+4 |     let _ = rsx! { <Label key="greeting" /> };
+  |                     ^^^^^

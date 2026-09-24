@@ -1,0 +1,5 @@
+error: `<Label>` takes no children; its content is an attribute
+ --> tests/ui/children_on_a_leaf.rs:4:21
+  |
+4 |     let _ = rsx! { <Label key="a" text="A"><Label key="b" text="B" /></Label> };
+  |                     ^^^^^

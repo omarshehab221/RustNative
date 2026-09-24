@@ -79,6 +79,16 @@ pub struct AccessibleNode {
 /// assert_eq!(accessible.name_of(NodeId::from_key("email")).as_deref(), Some("Email address"));
 /// // ...and, with the column flattened away, both are top-level elements.
 /// assert_eq!(accessible.roots().count(), 2);
+///
+/// // The same tree in markup:
+/// let field = AccessibilityInfo::new(AccessibilityRole::TextInput).labelled_by("caption").focusable(true);
+/// let markup = framework_core::rsx! {
+///     <Column key="form" accessibility={AccessibilityInfo::new(AccessibilityRole::None)}>
+///         <Label key="caption" text="Email address" />
+///         <TextInput key="email" value="" accessibility={field} />
+///     </Column>
+/// };
+/// assert_eq!(markup, tree);
 /// # Ok::<(), framework_core::TreeError>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

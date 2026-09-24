@@ -42,11 +42,17 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
-/// Creates a project in a scratch folder, depending on this workspace.
+/// Creates a builder-syntax project in a scratch folder, depending on this
+/// workspace.
 fn new_project(name: &str) -> PathBuf {
+    new_project_in(name, "builder")
+}
+
+/// Creates a project written in `syntax`.
+fn new_project_in(name: &str, syntax: &str) -> PathBuf {
     let parent = scratch(name);
     let output = rustnative()
-        .args(["new", name, "--path"])
+        .args(["new", name, "--syntax", syntax, "--path"])
         .arg(&parent)
         .arg("--framework-path")
         .arg(workspace())
@@ -229,7 +235,7 @@ fn creating_over_an_existing_project_is_refused() {
     let project = new_project("twice");
     let parent: &Path = project.parent().unwrap();
     let output = rustnative()
-        .args(["new", "twice", "--path"])
+        .args(["new", "twice", "--syntax", "builder", "--path"])
         .arg(parent)
         .arg("--framework-path")
         .arg(workspace())
@@ -258,4 +264,140 @@ fn building_a_generated_project_produces_an_executable() {
         "an executable at {}",
         target.join("debug").join("builds.exe").display()
     );
+}
+
+#[test]
+fn new_requires_a_syntax_and_offers_both() {
+    let parent = scratch("no-syntax");
+    let output = rustnative()
+        .args(["new", "undecided", "--path"])
+        .arg(&parent)
+        .output()
+        .expect("rustnative runs");
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+    let message = stderr(&output);
+    assert!(message.contains("--syntax"), "{message}");
+}
+
+#[test]
+fn a_generated_markup_project_compiles() {
+    let project = new_project_in("markup-compiles", "markup");
+    assert!(project.join("src/app.rsx").is_file());
+    let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+        .current_dir(&project)
+        .args(["check", "--offline"])
+        .env("CARGO_TARGET_DIR", workspace().join("target"))
+        .output()
+        .expect("cargo runs");
+    assert!(output.status.success(), "the markup project must compile:\n{}", stderr(&output));
+}
+
+#[test]
+fn a_diagnostic_in_an_rsx_file_is_reported_where_it_was_written() {
+    let project = new_project_in("rsx-diagnostic", "markup");
+    let app = project.join("src/app.rsx");
+    let source = std::fs::read_to_string(&app).unwrap();
+    let broken = source.replace(
+        r#"<Button key="click" text="Click me" />"#,
+        r#"<Button key="click" text={42_u32} />"#,
+    );
+    assert_ne!(broken, source, "the template has the button this test edits");
+    std::fs::write(&app, &broken).unwrap();
+    let line = broken.lines().position(|line| line.contains("42_u32")).unwrap() + 1;
+    let column = broken.lines().nth(line - 1).unwrap().find("42_u32").unwrap() + 1;
+
+    let output = rustnative()
+        .current_dir(&project)
+        .args(["check", "windows"])
+        .env("CARGO_TARGET_DIR", workspace().join("target"))
+        .output()
+        .expect("rustnative runs");
+    assert!(!output.status.success(), "the error fails the check");
+    let message = stderr(&output);
+    let expected = format!("app.rsx:{line}:{column}");
+    assert!(message.contains(&expected), "reported at {expected}:\n{message}");
+    assert!(message.contains("text={42_u32}"), "the quoted line is the .rsx line:\n{message}");
+    assert!(
+        !message.contains("::framework_core::rsx!"),
+        "the lowering does not show through:\n{message}"
+    );
+}
+
+#[test]
+fn expand_and_fmt_work_on_a_markup_project() {
+    let project = new_project_in("rsx-tools", "markup");
+    let output = rustnative()
+        .current_dir(&project)
+        .args(["expand", "src/app.rsx"])
+        .output()
+        .expect("rustnative runs");
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("column_with_layout"), "{}", stdout(&output));
+
+    let output = rustnative()
+        .current_dir(&project)
+        .args(["fmt", "--check"])
+        .output()
+        .expect("rustnative runs");
+    assert!(output.status.success(), "the template is formatted: {}", stderr(&output));
+}
+
+/// The editor proxy, end to end: a `.rsx` document opened through
+/// `rustnative lsp` reaches the language server as its lowered file, and
+/// the server's diagnostic comes back at the `.rsx` position.
+#[test]
+fn the_lsp_proxy_maps_documents_and_diagnostics() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let project = new_project_in("rsx-lsp", "markup");
+    let app = project.join("src/app.rsx");
+    let text = std::fs::read_to_string(&app)
+        .unwrap()
+        .replace(r#"<Column key="root">"#, r#"<Column key="root" gap=4>"#);
+    let server = format!("{} __echo-lsp", env!("CARGO_BIN_EXE_rustnative"));
+    let mut child = rustnative()
+        .args(["lsp", "--server", &server])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("rustnative lsp starts");
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let send = |input: &mut std::process::ChildStdin, value: serde_json::Value| {
+        let body = value.to_string();
+        write!(input, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+        input.flush().unwrap();
+    };
+    let receive = |output: &mut BufReader<std::process::ChildStdout>| -> serde_json::Value {
+        let mut length = 0;
+        loop {
+            let mut header = String::new();
+            output.read_line(&mut header).unwrap();
+            let header = header.trim();
+            if header.is_empty() {
+                break;
+            }
+            if let Some(value) = header.strip_prefix("Content-Length:") {
+                length = value.trim().parse().unwrap();
+            }
+        }
+        let mut body = vec![0; length];
+        output.read_exact(&mut body).unwrap();
+        serde_json::from_slice(&body).unwrap()
+    };
+    let uri = format!("file:///{}", app.display().to_string().replace('\\', "/"));
+    send(
+        &mut input,
+        serde_json::json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": { "textDocument": { "uri": uri, "languageId": "rsx", "version": 1, "text": text } } }),
+    );
+    let diagnostic = receive(&mut output);
+    assert_eq!(diagnostic["params"]["uri"], serde_json::json!(uri), "{diagnostic}");
+    let line = text.lines().position(|line| line.contains("gap=4")).unwrap();
+    let column = text.lines().nth(line).unwrap().find("gap").unwrap();
+    assert_eq!(
+        diagnostic["params"]["diagnostics"][0]["range"]["start"],
+        serde_json::json!({ "line": line, "character": column })
+    );
+    send(&mut input, serde_json::json!({ "jsonrpc": "2.0", "method": "exit" }));
+    drop(input);
+    let _ = child.wait();
 }
