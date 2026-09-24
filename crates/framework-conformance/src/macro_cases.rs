@@ -29,6 +29,7 @@ pub fn cases() -> Vec<(&'static str, Node)> {
         ("text_input", rsx! { <TextInput key="name" value="Ada" /> }),
         ("canvas", rsx! { <Canvas key="swatch" draw_list={syntax::drawing()} /> }),
         ("surface", rsx! { <Surface key="scene" /> }),
+        ("foreign", rsx! { <Foreign key="date" kind="month-calendar" /> }),
         ("tab_bar", rsx! { <TabBar key="tabs" labels={["One", "Two"]} selected=1 /> }),
         (
             "column",

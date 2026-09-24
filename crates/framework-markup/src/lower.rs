@@ -153,6 +153,10 @@ fn lower_element(element: &Element, context: Option<&Expr>) -> syn::Result<Token
         Constructor::Surface => {
             quote_spanned!(span=> ::framework_core::Node::native_surface(#key, __layout))
         }
+        Constructor::Foreign => {
+            let kind = arg("kind");
+            quote_spanned!(span=> ::framework_core::Node::foreign(#key, #kind, __layout))
+        }
         Constructor::TabBar => {
             let labels = arg("labels");
             let selected = arg("selected");

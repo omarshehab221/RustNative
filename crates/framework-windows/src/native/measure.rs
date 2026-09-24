@@ -24,6 +24,10 @@ pub(crate) struct WindowsIntrinsicMeasurer {
 }
 
 impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
+    fn measure_foreign(&self, kind: &str) -> Size {
+        super::foreign::preferred_size(kind).unwrap_or(Size::new(0, 0))
+    }
+
     fn measure(&self, kind: NodeKind, text: Option<&str>, max_width: Option<i32>) -> Size {
         const DT_WORDBREAK: u32 = 0x0000_0010;
         const DT_CALCRECT: u32 = 0x0000_0400;

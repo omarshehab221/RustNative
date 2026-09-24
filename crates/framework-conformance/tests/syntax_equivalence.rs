@@ -45,6 +45,7 @@ fn framework_markup_names() -> Vec<String> {
         ("TextInput", "text_input"),
         ("Canvas", "canvas"),
         ("Surface", "surface"),
+        ("Foreign", "foreign"),
         ("TabBar", "tab_bar"),
         ("Column", "column"),
         ("Row", "row"),

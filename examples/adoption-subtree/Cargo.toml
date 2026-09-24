@@ -1,0 +1,21 @@
+[package]
+name = "adoption-subtree"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The second rung of the adoption ladder: a pre-existing Win32 application, written against windows-sys alone, hosting a Rust Native subtree"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+framework-core.workspace = true
+framework-windows.workspace = true
+windows-sys.workspace = true

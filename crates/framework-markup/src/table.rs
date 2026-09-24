@@ -21,6 +21,8 @@ pub enum Constructor {
     Canvas,
     /// `Node::native_surface(key, layout)`.
     Surface,
+    /// `Node::foreign(key, kind, layout)`.
+    Foreign,
     /// `Node::tab_bar(key, labels, selected, layout)`.
     TabBar,
     /// `Node::column_with_layout(key, children, layout, style)`.
@@ -174,6 +176,12 @@ pub fn element_table() -> Vec<ElementSpec> {
             false,
         ),
         element("Surface", Constructor::Surface, vec![], false),
+        element(
+            "Foreign",
+            Constructor::Foreign,
+            vec![required("kind", AttrKind::Argument, "Node::foreign")],
+            false,
+        ),
         element(
             "TabBar",
             Constructor::TabBar,

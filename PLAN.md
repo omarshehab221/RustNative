@@ -2244,6 +2244,14 @@ From the concept survey (`docs/ecosystem-analysis/concepts-*.md`):
 RustNative subtree, a sample RustNative application hosts a foreign control,
 and both are under test.
 
+**Status (2026-09-24): implemented** on Windows — library-only mode
+(`crates/framework-interop`: the `.ril` description, C/C#/Rust generation,
+`rustnative bindgen`), embedding inward (`WindowsPlatform::embed`) and
+guest-runtime mode (`start_external`), embedding outward (`Node::foreign`,
+`register_foreign`), the surface hand-off contract with `WM_DPICHANGED`, and
+the three-rung adoption ladder under test. Owed: the web custom element (Web
+milestone B) and embedding on the deferred backends. See `BUILD_STATUS.md`.
+
 **Depends on** Milestone 39's escape-hatch and ownership contracts.
 
 ---

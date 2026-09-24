@@ -65,7 +65,7 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 use windows_sys::Win32::Foundation::HWND;
-use windows_sys::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor};
+use windows_sys::Win32::UI::WindowsAndMessaging::{GA_PARENT, GA_ROOT, GetAncestor};
 
 use super::runtime::Runtime;
 use super::user_data::RuntimeSlot;
@@ -221,11 +221,38 @@ fn current_thread() -> u32 {
 /// null handle as "no runtime" — `GetWindowLongPtrW` is documented to
 /// accept any handle value, including an invalid one, and simply return
 /// `0`.
+///
+/// "Top-level" means the nearest ancestor (or `hwnd` itself) that is one of
+/// this backend's root windows — which, for a tree embedded in a host's
+/// window (`EmbeddedRoot`), is a child window, not `GA_ROOT`'s answer (the
+/// host's own top-level window, which has no runtime). A window with no
+/// such ancestor answers as `GA_ROOT` does.
 pub(crate) fn root_window(hwnd: HWND) -> HWND {
+    let mut current = hwnd;
+    while !current.is_null() {
+        if is_framework_root(current) {
+            return current;
+        }
+        // SAFETY: `GetAncestor` accepts any window handle and returns null
+        // past the top; it takes no pointer arguments.
+        current = unsafe { GetAncestor(current, GA_PARENT) };
+    }
     // SAFETY: `GetAncestor` accepts any window handle, including a null or
     // already-destroyed one, and returns null when there is no such
     // ancestor; it takes no pointer arguments.
     unsafe { GetAncestor(hwnd, GA_ROOT) }
+}
+
+/// Whether `hwnd` is of this backend's root window class.
+fn is_framework_root(hwnd: HWND) -> bool {
+    let expected: Vec<u16> = super::WINDOW_CLASS_NAME.encode_utf16().collect();
+    let mut name = [0_u16; 64];
+    // SAFETY: `name` is a writable buffer of the length passed; the call
+    // accepts any window handle and returns 0 for an invalid one.
+    let length = unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::GetClassNameW(hwnd, name.as_mut_ptr(), 64)
+    };
+    usize::try_from(length).is_ok_and(|length| name.get(..length) == Some(expected.as_slice()))
 }
 
 #[cfg(test)]

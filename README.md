@@ -382,20 +382,26 @@ RustNative/
 │   │
 │   ├── framework-style/              (the style vocabulary, once — Milestone 58)
 │   │   ├── Cargo.toml
+│   │   ├── VENDORED.md               (the pinned Tailwind v4 theme)
+│   │   ├── vendor/                   (tailwind-theme-4.1.13.css, licence)
 │   │   └── src/
-│   │       ├── lib.rs
-│   │       ├── value/                (lengths, colours, calc(), colour
-│   │       │                          functions, token references)
-│   │       ├── declaration.rs        (property -> typed style/layout field)
-│   │       ├── utility.rs            (class -> declarations, variants)
-│   │       ├── theme_file.rs         (app.css: @theme, @utility, @apply,
+│   │       ├── model.rs              (properties, values, conditions,
+│   │       │                          DeclarationSet)
+│   │       ├── value.rs, color.rs    (lengths, calc(), colour functions,
+│   │       │                          the gamut rule)
+│   │       ├── vocabulary.rs         (classes and declarations -> model)
+│   │       ├── sheet.rs              (app.css: @theme, @utility, @apply,
 │   │       │                          @custom-variant)
-│   │       ├── units.rs              (per-host mapping and rounding)
-│   │       └── diagnostics.rs        (spans and messages)
+│   │       ├── token_table.rs        (run-time tokens)
+│   │       ├── capability.rs         (per-backend tables, unit mappings)
+│   │       └── tokens.rs             (model -> Rust, for the macros)
 │   │
-│   ├── framework-build/              (build-script helpers: resources today;
-│   │                                  `compile_rsx()` and `compile_styles()`
-│   │                                  in Milestones 53 and 58)
+│   ├── framework-interop/            (library-only mode — Milestone 40:
+│   │                                  the .ril description, C/C#/Rust
+│   │                                  generators, the shims' runtime)
+│   │
+│   ├── framework-build/              (build-script helpers: resources,
+│   │                                  `compile_rsx()`, `compile_styles()`)
 │   │
 │   └── framework-windows/
 │       ├── Cargo.toml
@@ -528,6 +534,26 @@ several callers:
 It emits typed style properties and nothing else, so — like markup — it cannot
 give a node a style the typed spelling could not already produce. There is no
 matcher, no stylesheet, and no class string at run time.
+
+### Interoperability: embedding both ways, and library-only mode
+
+Milestone 40's adoption ladder, each rung with a worked example under test
+(`docs/interop/adoption-ladder.md`):
+
+- **library-only mode** — `framework-interop`: one interface description
+  (`.ril`) with ownership and threading annotated, from which the C header, C#
+  bindings, and Rust implementation shims are generated
+  (`rustnative bindgen`); `examples/adoption-library` is driven by a C and a C#
+  program under test;
+- **embedding inward** — `WindowsPlatform::embed(parent, application)` realizes
+  the tree inside a window the host owns, driven by the host's loop
+  (`examples/adoption-subtree`, a `windows-sys`-only program); without a parent
+  it is **guest-runtime mode** (`start_external`);
+- **embedding outward** — `Node::foreign` / `<Foreign>` adopts a control the
+  framework did not write, from a factory registered with `register_foreign`
+  (`examples/adoption-foreign`, the system month calendar and date picker);
+- **the rendering-surface hand-off** — `Node::native_surface`'s lifetime,
+  resize, DPI, and present contract, in `docs/interop/surface-handoff.md`.
 
 ### `framework-windows`
 

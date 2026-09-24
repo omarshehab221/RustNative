@@ -14,6 +14,55 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 40 — Interoperability and incremental adoption — complete (Windows scope)
+
+**Built.**
+
+- **Library-only mode** (`crates/framework-interop`): the `.ril` interface
+  description (services, constructors, methods, events; `bool`, integers,
+  `f64`, UTF-8 `string`; `[thread = owner|any]`), generators for a C header,
+  C# 5 P/Invoke bindings with an `IDisposable` wrapper per service, and the
+  Rust implementation shims (a trait per service, its events, and an
+  `export_<library>!` macro), over a runtime that contains every failure as a
+  status code with a message — panics, wrong thread, stale handle, invalid
+  UTF-8, and re-entrant calls (`BUSY`). Owner-only services may hold `!Send`
+  models. `rustnative bindgen <file.ril> --lang c|csharp|rust`.
+- **Embedding inward** (`WindowsPlatform::embed` → `EmbeddedRoot`): the
+  primary window realized as a `WS_CHILD` of a host window, with
+  `set_bounds`, `handle_message` for the host's loop, and teardown that
+  destroys the framework's windows only. **Guest-runtime mode**
+  (`start_external` → `ExternalLoop`): the framework's windows under the
+  host's `main` and loop. Under a host's loop the framework records quit
+  requests (`finished`, `error`) instead of posting `WM_QUIT`; the scheduler
+  wake is also handled by the window procedure; the framework root is found
+  by class, not `GA_ROOT`.
+- **Embedding outward** (`Node::foreign` / `<Foreign kind="…">`,
+  `SurfaceContent`, `register_foreign`, `ForeignControl`, `Ownership`):
+  factory-made objects sized by `IntrinsicMeasurer::measure_foreign`, laid
+  out and clipped by layout, destroyed when owned or hidden and handed back
+  when borrowed (also when the window closes), never subclassed or pooled.
+- **The rendering-surface hand-off**: `docs/interop/surface-handoff.md`, and
+  `WM_DPICHANGED` handled — the window takes the suggested rectangle and every
+  surface is re-reported with its new scale factor.
+- **The adoption ladder** (`docs/interop/adoption-ladder.md`):
+  `examples/adoption-library`, `examples/adoption-subtree`,
+  `examples/adoption-foreign`.
+
+**Verified.** Full gate. A C program (MSVC, `/W4 /WX`) and a C# program (the
+.NET Framework compiler, `/warnaserror`) drive the library DLL through the
+generated bindings; a `windows-sys`-only Win32 program embeds a subtree,
+clicks into it, resizes, and drops it; a Rust Native program adopts a month
+calendar and a date picker at their factories' sizes and removes them;
+guest-runtime close posts no `WM_QUIT`; the DPI hand-off test; the syntax
+equivalence and compile-failure suites cover `<Foreign>`; `bindgen` CLI test.
+
+**Not verified / owed.** The web rung — a component exported as a web custom
+element (`C43`) — is owed by Web milestone B. Embedding into the other hosts
+(a view, a widget, a document node) is owed by Milestones 33–38. A foreign
+object's keyboard traversal is the framework's only when its node declares
+itself focusable. The headless backend measures foreign nodes at zero unless
+their layout fixes a size.
+
 ### Milestone 58 — The style spellings — complete (Windows scope)
 
 **Built.**

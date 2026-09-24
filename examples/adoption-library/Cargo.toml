@@ -1,0 +1,31 @@
+[package]
+name = "adoption-library"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The first rung of the adoption ladder: a Rust Native application model, with no UI, used from C and C# through generated bindings"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[lib]
+# The C symbol prefix and the DLL a host loads are both `counter`.
+name = "counter"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+framework-core.workspace = true
+framework-interop.workspace = true
+
+[build-dependencies]
+framework-interop.workspace = true
+
+[dev-dependencies]
+cc = "1"

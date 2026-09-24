@@ -31,6 +31,7 @@ framework-headless = { path = "crates/framework-headless", version = "0.1.0" }
 framework-markup = { path = "crates/framework-markup", version = "0.1.0" }
 framework-macros = { path = "crates/framework-macros", version = "0.1.0" }
 framework-style = { path = "crates/framework-style", version = "0.1.0" }
+framework-interop = { path = "crates/framework-interop", version = "0.1.0" }
 tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 parking_lot = "0.12"
 async-trait = "0.1"

@@ -836,6 +836,10 @@ impl LayoutEngine {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar => {
                 measurer.measure(node.kind, node.text.as_deref(), None).width as i32
             }
+            // A foreign object has the size its factory reports.
+            NodeKind::Surface if node.foreign.is_some() => {
+                measurer.measure_foreign(node.foreign.as_deref().unwrap_or_default()).width as i32
+            }
             // A picture has no natural size: it is as big as layout makes
             // it, so it must be given one.
             NodeKind::Canvas | NodeKind::Surface => 0,
@@ -878,6 +882,9 @@ impl LayoutEngine {
         match node.kind {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar => {
                 measurer.measure(node.kind, node.text.as_deref(), max_width).height as i32
+            }
+            NodeKind::Surface if node.foreign.is_some() => {
+                measurer.measure_foreign(node.foreign.as_deref().unwrap_or_default()).height as i32
             }
             NodeKind::Canvas | NodeKind::Surface => 0,
             NodeKind::Column => {

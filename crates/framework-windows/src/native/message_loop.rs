@@ -2,7 +2,7 @@
 //! implements the top-level `WNDPROC`.
 
 use framework_core::{Event, PanicAction, PanicReport};
-use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     COLOR_WINDOW, GetSysColorBrush, HDC, SetBkColor, SetBkMode, SetTextColor, TRANSPARENT,
 };
@@ -12,14 +12,15 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BN_CLICKED, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW, DestroyWindow,
-    DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PostMessageW, PostQuitMessage,
-    RegisterClassW, TranslateMessage, WM_CAPTURECHANGED, WM_CHAR, WM_CLOSE, WM_COMMAND,
-    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_ENDSESSION, WM_KEYDOWN,
-    WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_NOTIFY,
-    WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE, WM_POWERBROADCAST, WM_QUERYENDSESSION, WM_QUIT,
-    WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN,
-    WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
+    DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PostMessageW, RegisterClassW,
+    SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos, TranslateMessage, WM_CAPTURECHANGED, WM_CHAR,
+    WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY,
+    WM_DPICHANGED, WM_ENDSESSION, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_NOTIFY, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE,
+    WM_POWERBROADCAST, WM_QUERYENDSESSION, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK,
+    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
 };
 
 use super::container::container_proc;
@@ -139,6 +140,19 @@ pub(crate) fn handle_message(message: &MSG) -> Result<LoopStep, Error> {
     // that obviously change focus.
     with_runtime(root, sync_focus);
     Ok(LoopStep::Continue)
+}
+
+/// [`handle_message`] for a host-owned loop (`native::embed`): handles a
+/// message for one of the framework's windows and returns `true`, or
+/// returns `false` for a message that is the host's.
+pub(crate) fn handle_for_host(message: &MSG) -> Result<bool, Error> {
+    let ours = message.message == WM_FRAMEWORK_SCHEDULE
+        || with_runtime(root_window(message.hwnd), |_| ()).is_some();
+    if !ours {
+        return Ok(false);
+    }
+    handle_message(message)?;
+    Ok(true)
 }
 
 /// Whether a message this loop pre-processed still needs Win32's ordinary
@@ -300,8 +314,7 @@ fn key_down(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
         Ok(false) => {}
         Err(error) => {
             runtime.error = Some(error);
-            // SAFETY: `PostQuitMessage` takes an exit code and no pointers.
-            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::PostQuitMessage(1) };
+            super::embed::request_quit(1);
             return MessageFlow::Consumed;
         }
     }
@@ -541,12 +554,43 @@ pub(crate) fn poison_runtime_and_quit(runtime_ptr: *mut Runtime, message: String
     }
 }
 
+/// `WM_DPICHANGED`: the window moved to a monitor of another DPI (or the
+/// DPI changed under it). It takes the size Windows suggests, and every
+/// surface is told its new scale — the surface hand-off contract
+/// (`docs/interop/surface-handoff.md`).
+fn dpi_changed(hwnd: HWND, wparam: WPARAM, lparam: LPARAM) {
+    let dpi = u32::try_from(wparam & 0xFFFF).unwrap_or(96);
+    let suggested = lparam as *const RECT;
+    if !suggested.is_null() {
+        // SAFETY: for `WM_DPICHANGED`, `lParam` points at the
+        // suggested window rectangle, valid for this message.
+        let rect = unsafe { *suggested };
+        with_runtime(hwnd, |runtime| runtime.renderer.set_dpi(dpi));
+        // SAFETY: `hwnd` is this procedure's live window; no
+        // pointers.
+        let moved = unsafe {
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+        } != 0;
+        best_effort(moved, "SetWindowPos(WM_DPICHANGED)", "the window keeps its old size");
+    }
+    with_runtime(hwnd, |runtime| {
+        runtime.renderer.set_dpi(dpi);
+        runtime.renderer.collect_surface_changes();
+        runtime.report_surface_changes();
+    });
+}
+
 /// Asks the message loop to exit through its ordinary path.
 fn quit_message_loop() {
-    // SAFETY: `PostQuitMessage` takes no pointer arguments and is always
-    // valid to call; it only queues `WM_QUIT` so the message loop unwinds
-    // through its ordinary exit path.
-    unsafe { PostQuitMessage(1) };
+    super::embed::request_quit(1);
 }
 
 /// Extracts a human-readable message from a caught panic's payload.
@@ -590,6 +634,26 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
     let default = || unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
 
     match message {
+        // The window moved to a monitor of another DPI (or the DPI changed
+        // under it): take the size Windows suggests, and tell every
+        // surface its new scale — the surface hand-off contract
+        // (`docs/interop/surface-handoff.md`).
+        WM_DPICHANGED => {
+            dpi_changed(hwnd, wparam, lparam);
+            0
+        }
+        // Under this backend's own loop the wake is handled before dispatch
+        // (`handle_message`); under a host's loop (`ExternalLoop`,
+        // `EmbeddedRoot`) it arrives here.
+        WM_FRAMEWORK_SCHEDULE => {
+            with_runtime(hwnd, |runtime| {
+                if let Err(error) = runtime.pump_tasks() {
+                    runtime.error = Some(error);
+                    super::embed::request_quit(1);
+                }
+            });
+            0
+        }
         WM_NCCREATE => {
             let create = lparam as *const CREATESTRUCTW;
             if create.is_null() {
@@ -802,6 +866,8 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             }
             with_runtime(hwnd, |runtime| {
                 runtime.destroyed = true;
+                // Before Windows destroys the children with this window.
+                runtime.renderer.registry.release_borrowed_foreign();
                 super::animation::release(runtime);
                 input::drop_target::revoke(runtime);
                 clipboard::stop_listening(runtime);
@@ -832,10 +898,9 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                     // disabled state, not whether the call worked.
                     ignored_by_contract(unsafe { EnableWindow(runtime.modal_parent, 1) });
                 }
-                if runtime.window_id == framework_core::WindowId::PRIMARY {
-                    // SAFETY: `PostQuitMessage` takes no pointer
-                    // arguments.
-                    unsafe { PostQuitMessage(0) };
+                // An embedded root going away ends nothing but itself.
+                if runtime.window_id == framework_core::WindowId::PRIMARY && !runtime.embedded {
+                    super::embed::request_quit(0);
                 }
             });
             0

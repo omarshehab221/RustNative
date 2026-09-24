@@ -202,7 +202,55 @@ impl Node {
     /// the handle its backend gives out, and learns its size from
     /// [`crate::Event::SurfaceResized`]. See [`crate::graphics`].
     pub fn native_surface(key: impl AsRef<str>, layout: LayoutStyle) -> Self {
-        Self::Surface(Surface::new(NodeId::from_key(key.as_ref()), (), layout))
+        Self::Surface(Surface::new(
+            NodeId::from_key(key.as_ref()),
+            SurfaceContent::Rendered,
+            layout,
+        ))
+    }
+
+    /// Adopts a foreign native object — a control the framework did not
+    /// write — as a leaf of the tree (embedding outward, `PLAN.md`
+    /// Milestone 40).
+    ///
+    /// `kind` names a factory the application registered on its backend
+    /// (on Windows, `framework_windows::register_foreign`), which creates the
+    /// object inside the window the framework gives it. The framework then
+    /// measures it (the factory's preferred size), lays it out, clips it,
+    /// and destroys it on the same rules as any object it realized itself —
+    /// unless the factory declares it borrowed, when it is only hidden and
+    /// handed back. Its accessibility is the object's own.
+    ///
+    /// ```
+    /// use framework_core::{LayoutStyle, Node, SizeMode};
+    ///
+    /// let calendar = Node::foreign("date", "month-calendar", LayoutStyle::new().width(SizeMode::Auto));
+    /// assert_eq!(calendar.foreign_kind(), Some("month-calendar"));
+    ///
+    /// // The same node in markup:
+    /// let markup = framework_core::rsx! {
+    ///     <Foreign key="date" kind="month-calendar" width={SizeMode::Auto} />
+    /// };
+    /// assert_eq!(markup, calendar);
+    /// ```
+    pub fn foreign(key: impl AsRef<str>, kind: impl Into<String>, layout: LayoutStyle) -> Self {
+        Self::Surface(Surface::new(
+            NodeId::from_key(key.as_ref()),
+            SurfaceContent::Foreign(kind.into()),
+            layout,
+        ))
+    }
+
+    /// The factory kind of a [`Self::foreign`] node.
+    #[must_use]
+    pub fn foreign_kind(&self) -> Option<&str> {
+        match self {
+            Self::Surface(surface) => match surface.content() {
+                SurfaceContent::Foreign(kind) => Some(kind),
+                SurfaceContent::Rendered => None,
+            },
+            _ => None,
+        }
     }
 
     /// Creates a strip of tabs labelled `labels`, with `selected` chosen.
@@ -1346,7 +1394,7 @@ leaf_node!(Label, text: String, text, role = Label, focusable = false);
 leaf_node!(Button, text: String, text, role = Button, focusable = true);
 leaf_node!(TextInput, value: String, value, role = TextInput, focusable = true);
 leaf_node!(Canvas, draw_list: DrawList, draw_list, role = Canvas, focusable = false);
-leaf_node!(Surface, reserved: (), reserved, role = Group, focusable = false);
+leaf_node!(Surface, content: SurfaceContent, content, role = Group, focusable = false);
 leaf_node!(TabBar, tabs: Tabs, tabs, role = TabList, focusable = true);
 
 /// The labels of a [`TabBar`] and which one is selected.
@@ -1399,6 +1447,28 @@ impl Button {
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
+    }
+}
+
+/// What fills a [`Surface`] node: pixels the application renders, or a
+/// native object the application supplies.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum SurfaceContent {
+    /// The framework creates a bare native surface; the application renders
+    /// into it ([`Node::native_surface`]).
+    #[default]
+    Rendered,
+    /// A foreign native object — a control the framework did not write —
+    /// supplied by the factory the application registered on its backend
+    /// under this kind ([`Node::foreign`]).
+    Foreign(String),
+}
+
+impl Surface {
+    /// What fills the surface.
+    #[must_use]
+    pub fn content(&self) -> &SurfaceContent {
+        &self.content
     }
 }
 

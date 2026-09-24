@@ -1,0 +1,16 @@
+/// The interface a host application sees: a counter whose state and rules
+/// are a Rust Native component, run with no UI.
+library counter;
+
+/// A counter with a name.
+service Counter {
+    new(start: u32);
+    /// Adds one, as a click on the component's button would.
+    fn increment(&mut self) -> u32;
+    /// The component's label, as it would be shown.
+    fn label(&self) -> string;
+    /// Renames the counter, as typing in the component's field would.
+    fn rename(&mut self, name: string);
+    /// Raised after every increment with the new count.
+    event changed(count: u32);
+}

@@ -24,6 +24,7 @@ clap = { version = "4", features = ["derive"] }
 # same parser and lowering the `rsx!` macro uses.
 framework-markup.workspace = true
 framework-style.workspace = true
+framework-interop.workspace = true
 # The style file's location, read the way the build script reads it.
 framework-build.workspace = true
 prettyplease = "0.2"

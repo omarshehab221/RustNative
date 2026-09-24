@@ -243,6 +243,17 @@ pub enum Error {
         /// Which window's callback the panic escaped from.
         context: NativeContext,
     },
+    /// A foreign node's object could not be had: no factory is registered
+    /// for its kind, or the factory made nothing (`Node::foreign`,
+    /// `register_foreign`).
+    ForeignUnavailable {
+        /// The factory kind the node named.
+        kind: String,
+        /// Why.
+        reason: &'static str,
+        /// Which node.
+        context: NativeContext,
+    },
 }
 
 #[cfg(windows)]
@@ -278,7 +289,8 @@ impl Error {
         let slot = match &mut self {
             Self::WindowsApi { context, .. }
             | Self::MenuCommandExhausted { context }
-            | Self::ComponentPanicked { context, .. } => context,
+            | Self::ComponentPanicked { context, .. }
+            | Self::ForeignUnavailable { context, .. } => context,
             Self::DuplicateNodeId { .. } | Self::UnsupportedHost => return self,
         };
         if slot.is_empty() {
@@ -314,9 +326,9 @@ impl Error {
         match self {
             #[cfg(windows)]
             Self::WindowsApi { context, .. } => *context,
-            Self::MenuCommandExhausted { context } | Self::ComponentPanicked { context, .. } => {
-                *context
-            }
+            Self::MenuCommandExhausted { context }
+            | Self::ComponentPanicked { context, .. }
+            | Self::ForeignUnavailable { context, .. } => *context,
             Self::DuplicateNodeId { .. } | Self::UnsupportedHost => NativeContext::none(),
         }
     }
@@ -342,6 +354,10 @@ impl fmt::Display for Error {
             Self::UnsupportedHost => f.write_str("framework-windows is only runnable on Windows"),
             Self::ComponentPanicked { message, context } => {
                 write!(f, "a component panicked inside the native message loop: {message}")?;
+                write_context(f, context)
+            }
+            Self::ForeignUnavailable { kind, reason, context } => {
+                write!(f, "foreign object `{kind}`: {reason}")?;
                 write_context(f, context)
             }
         }

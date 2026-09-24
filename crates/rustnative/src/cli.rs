@@ -41,6 +41,18 @@ enum Command {
         #[arg(long, value_enum)]
         syntax: crate::project::Syntax,
     },
+    /// Generate a binding from an interface description (`.ril`): the C
+    /// header, the C# bindings, or the Rust implementation shims.
+    Bindgen {
+        /// The `.ril` file.
+        file: PathBuf,
+        /// The language to generate.
+        #[arg(long, value_enum)]
+        lang: BindgenLanguage,
+        /// Where to write it (standard output if omitted).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Print the builder form a file's markup lowers to — a `.rsx` file, or
     /// the `rsx!` calls in a `.rs` file — or, with `--classes`/`--styles`,
     /// the declarations and typed values a class string or declaration
@@ -158,6 +170,27 @@ impl Cli {
                 let mut command = vec!["test".to_owned()];
                 command.extend(arguments);
                 crate::diagnostics::run_cargo(&project.root, &command)
+            }
+            Command::Bindgen { file, lang, out } => {
+                let source = std::fs::read_to_string(&file).map_err(|cause| Error::Io {
+                    what: format!("read {}", file.display()),
+                    cause,
+                })?;
+                let idl = framework_interop::parse_idl(&source)
+                    .map_err(|error| Error::Usage(format!("{}:{error}", file.display())))?;
+                let text = match lang {
+                    BindgenLanguage::C => framework_interop::generate::c(&idl),
+                    BindgenLanguage::Csharp => framework_interop::generate::csharp(&idl),
+                    BindgenLanguage::Rust => framework_interop::generate::rust(&idl),
+                };
+                match out {
+                    Some(path) => std::fs::write(&path, text).map_err(|cause| Error::Io {
+                        what: format!("write {}", path.display()),
+                        cause,
+                    })?,
+                    None => print!("{text}"),
+                }
+                Ok(())
             }
             Command::Expand { file, classes, styles } => {
                 let text = match (file, classes, styles) {
@@ -280,4 +313,15 @@ fn cargo_for(
     // Structured diagnostics, so positions in lowered `.rsx` files are
     // reported in the `.rsx` file (see `diagnostics`).
     crate::diagnostics::run_cargo(&project.root, &arguments)
+}
+
+/// The languages `rustnative bindgen` writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum BindgenLanguage {
+    /// A C header.
+    C,
+    /// C# P/Invoke bindings.
+    Csharp,
+    /// The Rust implementation shims.
+    Rust,
 }

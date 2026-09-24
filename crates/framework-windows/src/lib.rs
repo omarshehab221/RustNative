@@ -89,6 +89,10 @@ pub use mappers::{
     MappedProperty, MapperContext, MapperInfo, MapperMode, MapperTarget, active_mappers,
     clear_mappers, register_mapper,
 };
+#[cfg(windows)]
+pub use native::embed::{EmbeddedRoot, ExternalLoop};
+#[cfg(windows)]
+pub use native::foreign::{ForeignControl, Ownership, register_foreign};
 pub use platform::WindowsPlatform;
 #[cfg(windows)]
 pub use services::clipboard::WindowsClipboard;

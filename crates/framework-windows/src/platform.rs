@@ -50,6 +50,38 @@ impl WindowsPlatform {
     pub fn app_id(&self) -> Option<&str> {
         self.app_id.as_deref()
     }
+
+    /// Realizes `application`'s primary window as a child of `parent`, a
+    /// window the host created and owns (embedding inward, `PLAN.md`
+    /// Milestone 40). The host's message loop drives it; see
+    /// [`crate::EmbeddedRoot`].
+    ///
+    /// # Errors
+    ///
+    /// `parent` is not a window, or the root cannot be created.
+    #[cfg(windows)]
+    pub fn embed<'a>(
+        &self,
+        parent: windows_sys::Win32::Foundation::HWND,
+        application: &'a mut Application,
+    ) -> Result<crate::EmbeddedRoot<'a>, Error> {
+        crate::native::embed::EmbeddedRoot::start(application, parent)
+    }
+
+    /// Brings up `application`'s windows without running a message loop:
+    /// the host's loop drives them (guest-runtime mode, `PLAN.md`
+    /// Milestone 40). See [`crate::ExternalLoop`].
+    ///
+    /// # Errors
+    ///
+    /// A window cannot be created.
+    #[cfg(windows)]
+    pub fn start_external<'a>(
+        &self,
+        application: &'a mut Application,
+    ) -> Result<crate::ExternalLoop<'a>, Error> {
+        crate::native::embed::ExternalLoop::start(application, std::ptr::null_mut())
+    }
 }
 
 #[cfg(windows)]

@@ -88,7 +88,11 @@ pub(crate) struct Renderer {
     pool: ControlPool,
     /// Each native surface's last reported size, so a relayout that did not
     /// change it does not tell the application to rebuild its swapchain.
-    surface_sizes: HashMap<NodeId, Size>,
+    /// The size and DPI each surface was last reported at.
+    surface_sizes: HashMap<NodeId, (Size, u32)>,
+    /// The window's DPI as `WM_DPICHANGED` last announced it, which is what
+    /// a surface's scale factor follows once the window has moved.
+    dpi: Option<u32>,
     /// Surface size changes not yet reported (see
     /// [`Renderer::take_surface_changes`]).
     surface_changes: Vec<SurfaceChange>,
@@ -128,6 +132,7 @@ impl Renderer {
             virtual_lists: VirtualLists::default(),
             pool: ControlPool::default(),
             surface_sizes: HashMap::new(),
+            dpi: None,
             surface_changes: Vec::new(),
             accessibility: AccessibilityBridge::default(),
             layout_engine: LayoutEngine,
@@ -235,7 +240,7 @@ impl Renderer {
     /// Queues a `SurfaceResized` for every native surface whose laid-out
     /// size differs from the one last reported — including a surface
     /// reported for the first time.
-    fn collect_surface_changes(&mut self) {
+    pub(crate) fn collect_surface_changes(&mut self) {
         let snapshot = &self.snapshot;
         self.surface_sizes.retain(|id, _| snapshot.contains(*id));
         for (id, object) in self
@@ -250,12 +255,14 @@ impl Renderer {
                 continue;
             };
             let size = Size::new(dimension_to_u32(rect.width), dimension_to_u32(rect.height));
-            if self.surface_sizes.insert(id, size) == Some(size) {
-                continue;
-            }
             // SAFETY: `hwnd` is a live window owned by this renderer's
             // registry; the call takes no pointers.
-            let dpi = unsafe { GetDpiForWindow(*hwnd) };
+            let dpi = self.dpi.unwrap_or_else(|| unsafe { GetDpiForWindow(*hwnd) });
+            // Reported again when either changes: a DPI change without a
+            // size change still changes what a swapchain must render at.
+            if self.surface_sizes.insert(id, (size, dpi)) == Some((size, dpi)) {
+                continue;
+            }
             #[allow(
                 clippy::cast_precision_loss,
                 reason = "a DPI value, far below f32's exact range"
@@ -268,6 +275,11 @@ impl Renderer {
                 scale_factor: Scalar::new(scale),
             });
         }
+    }
+
+    /// Records the DPI `WM_DPICHANGED` announced for this window.
+    pub(crate) fn set_dpi(&mut self, dpi: u32) {
+        self.dpi = Some(dpi);
     }
 
     /// Native surfaces whose size changed, for the runtime to report.
@@ -466,7 +478,8 @@ impl Renderer {
             return Ok(());
         }
         controls::create(&mut self.registry, node, parent)?;
-        if let Some(object) = self.registry.get(node.id) {
+        // A foreign object's accessibility is its own: no subclass.
+        if let Some(object) = self.registry.get(node.id).filter(|_| node.foreign.is_none()) {
             AccessibilityBridge::attach(object.hwnd(), node.kind);
             // Creation applied the text; registered text mappers still run
             // (a replacement overrides what creation wrote).
@@ -486,6 +499,10 @@ impl Renderer {
     /// belongs to changes, which is what makes a recycled row answer as the
     /// row it now is.
     fn reuse_node(&mut self, node: &TreeNode, parent: HWND) -> Result<bool, Error> {
+        // A foreign object is one factory's, not interchangeable.
+        if node.foreign.is_some() {
+            return Ok(false);
+        }
         let Some(object) = self.pool.take(parent, node.kind) else {
             return Ok(false);
         };
@@ -531,9 +548,11 @@ impl Renderer {
     fn apply_semantics_and_style(&mut self, node: &TreeNode) {
         if let Some(hwnd) = self.registry.get(node.id).map(NativeObject::hwnd) {
             let accessibility = &mut self.accessibility;
-            crate::mappers::apply(hwnd, node, crate::MappedProperty::Accessibility, (), || {
-                accessibility.apply(hwnd, node);
-            });
+            if node.foreign.is_none() {
+                crate::mappers::apply(hwnd, node, crate::MappedProperty::Accessibility, (), || {
+                    accessibility.apply(hwnd, node);
+                });
+            }
             crate::mappers::apply(hwnd, node, crate::MappedProperty::Visibility, (), || {
                 set_visible(hwnd, !node.hidden);
             });
@@ -563,7 +582,7 @@ impl Renderer {
     /// to answer for a different row, and tearing that down only to build
     /// it again is the churn recycling exists to avoid.
     fn remove_or_park(&mut self, node: &TreeNode, window: HWND) {
-        if !self.is_virtual_item(node) {
+        if !self.is_virtual_item(node) || node.foreign.is_some() {
             self.remove_node(node.id);
             return;
         }

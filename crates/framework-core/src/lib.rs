@@ -376,7 +376,7 @@ pub use navigation::{
 };
 pub use node::{
     Button, Canvas, Column, IntoChildren, Label, Node, NodeKind, NodeTransition, Row, Surface,
-    TabBar, Tabs, TextInput, TreeError,
+    SurfaceContent, TabBar, Tabs, TextInput, TreeError,
 };
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
 pub use permission::{FixedPermissions, Permission, PermissionService, PermissionState};

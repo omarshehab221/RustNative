@@ -18,6 +18,14 @@ pub trait IntrinsicMeasurer {
     /// Returns the natural size a node of `kind` with `text` content wants,
     /// wrapping within `max_width` if given.
     fn measure(&self, kind: NodeKind, text: Option<&str>, max_width: Option<i32>) -> Size;
+
+    /// The natural size of a foreign object of the given factory `kind`
+    /// ([`crate::Node::foreign`]): what the backend's factory reports, or
+    /// nothing (the layout must size it) when this measurer knows none.
+    fn measure_foreign(&self, kind: &str) -> Size {
+        let _ = kind;
+        Size::new(0, 0)
+    }
 }
 
 /// A platform-independent measurement heuristic used by tests and any

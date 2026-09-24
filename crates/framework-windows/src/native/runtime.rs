@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use framework_core::{Application, Event, NodeId, WindowId};
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CW_USEDEFAULT, CreateWindowExW, PostMessageW, SW_SHOW, SetMenu, ShowWindow, WM_CLOSE,
-    WS_OVERLAPPEDWINDOW,
+    CW_USEDEFAULT, CreateWindowExW, PostMessageW, SW_SHOW, SetMenu, ShowWindow, WM_CLOSE, WS_CHILD,
+    WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 
 use super::animation::{self, AnimationState};
@@ -45,6 +45,10 @@ pub(crate) struct Runtime {
     pub(crate) hovered: Option<NodeId>,
     pub(crate) pressed: Option<NodeId>,
     pub(crate) destroyed: bool,
+    /// Whether this is the root of a tree embedded in a host's window
+    /// (`EmbeddedRoot`): a child window whose destruction does not end
+    /// the application and whose placement is the host's.
+    pub(crate) embedded: bool,
     /// Advanced-input bookkeeping (pointers, capture, IME, drag-and-drop,
     /// controllers) — see `native::input`.
     pub(crate) input: InputState,
@@ -144,7 +148,7 @@ impl Runtime {
     /// Taken before any is dispatched, so a render caused by answering one
     /// (which lays out, and could find more) reports what it finds itself
     /// rather than this loop reporting it twice.
-    fn report_surface_changes(&mut self) {
+    pub(crate) fn report_surface_changes(&mut self) {
         for change in self.renderer.take_surface_changes() {
             let event = Event::SurfaceResized {
                 target: change.node,
@@ -181,7 +185,7 @@ impl Runtime {
                 // SAFETY: `PostQuitMessage` takes a plain exit-code integer
                 // and no pointer arguments; it only queues `WM_QUIT` so the
                 // loop unwinds through its ordinary exit path.
-                unsafe { windows_sys::Win32::UI::WindowsAndMessaging::PostQuitMessage(1) };
+                super::embed::request_quit(1);
                 false
             }
         }
@@ -287,6 +291,9 @@ pub(crate) struct WindowRegistry {
     // message is delivered synchronously even earlier than that, from
     // inside `CreateWindowExW` itself.
     creating: std::collections::HashSet<WindowId>,
+    /// The host window the primary window is created inside, or null for
+    /// an ordinary top-level application (`EmbeddedRoot`).
+    pub(crate) embed_parent: HWND,
 }
 
 impl WindowRegistry {
@@ -305,6 +312,7 @@ impl WindowRegistry {
             application: unsafe { HostRef::new(application) },
             runtimes: HashMap::new(),
             creating: std::collections::HashSet::new(),
+            embed_parent: std::ptr::null_mut(),
         }
     }
 
@@ -393,6 +401,14 @@ impl WindowRegistry {
         let owner = modal_parent
             .and_then(|parent_id| self.runtimes.get(&parent_id))
             .map_or(std::ptr::null_mut(), |runtime| runtime.window);
+        // The primary window of an embedded application is a child of the
+        // host's window (`EmbeddedRoot`), not a top-level window.
+        let embedded = id == WindowId::PRIMARY && !self.embed_parent.is_null();
+        let (style, x, y, parent) = if embedded {
+            (WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0, self.embed_parent)
+        } else {
+            (WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, owner)
+        };
 
         // SAFETY: `self` is borrowed mutably for this call and lives in
         // `run_application`'s stack frame for the whole message loop (point
@@ -415,6 +431,7 @@ impl WindowRegistry {
             hovered: None,
             pressed: None,
             destroyed: false,
+            embedded,
             input: InputState::default(),
             animation: AnimationState::default(),
         });
@@ -446,12 +463,12 @@ impl WindowRegistry {
                 0,
                 wide(WINDOW_CLASS_NAME).as_ptr(),
                 title.as_ptr(),
-                WS_OVERLAPPEDWINDOW,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
+                style,
+                x,
+                y,
                 width,
                 height,
-                owner,
+                parent,
                 std::ptr::null_mut(),
                 module_instance(),
                 runtime_ptr.cast(),
@@ -487,7 +504,7 @@ impl WindowRegistry {
         let runtime =
             self.runtimes.get_mut(&id).expect("just inserted this window's runtime above");
 
-        if let Some(menu) = &menu {
+        if let (Some(menu), false) = (&menu, embedded) {
             // The menu builder does not know which window it is building
             // for, so name it here — see `Error::or_context`.
             let built = build_native_menu(menu)
@@ -542,7 +559,7 @@ impl WindowRegistry {
             .map_err(|error| error.or_context(NativeContext::none().with_window(id)))?;
         // A primary window that was open last run comes back where it was
         // (which also shows it); otherwise it opens at the default place.
-        if !super::lifecycle::restore_placement(runtime) {
+        if !embedded && !super::lifecycle::restore_placement(runtime) {
             // SAFETY: `hwnd` was checked non-null above and is a live,
             // just-created top-level HWND.
             //

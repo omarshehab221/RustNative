@@ -104,6 +104,18 @@ pub(crate) fn create(
             canvas::attach(hwnd, node.draw_list.clone().unwrap_or_default());
             adopt(registry, node, hwnd, NativeObject::Canvas, "CANVAS")
         }
+        NodeKind::Surface if node.foreign.is_some() => {
+            let kind = node.foreign.clone().unwrap_or_default();
+            let control = super::super::foreign::create(&kind, parent, node.id)?;
+            let ownership = control.ownership;
+            if let Err(error) = registry
+                .insert(node.id, NativeObject::Foreign { hwnd: control.hwnd, kind, ownership })
+            {
+                super::super::foreign::release(control.hwnd, ownership);
+                return Err(error);
+            }
+            Ok(())
+        }
         NodeKind::Surface => {
             let hwnd = create_own(node, parent, SURFACE_CLASS_NAME)?;
             let id = surface::register(hwnd);
@@ -161,16 +173,21 @@ fn create_own(node: &TreeNode, parent: HWND, class_name: &'static str) -> Result
 /// change a live window's class, so the only correct response is to tear
 /// the old window down and build the new one.
 pub(crate) fn needs_replacement(registry: &NativeObjectRegistry, node: &TreeNode) -> bool {
-    !matches!(
-        (node.kind, registry.get(node.id)),
+    let fits = match (node.kind, registry.get(node.id)) {
         (NodeKind::Column | NodeKind::Row, Some(NativeObject::Container { .. }))
-            | (NodeKind::Label, Some(NativeObject::Label(_)))
-            | (NodeKind::Button, Some(NativeObject::Button(_)))
-            | (NodeKind::TextInput, Some(NativeObject::TextInput(_)))
-            | (NodeKind::Canvas, Some(NativeObject::Canvas(_)))
-            | (NodeKind::TabBar, Some(NativeObject::TabBar(_)))
-            | (NodeKind::Surface, Some(NativeObject::Surface { .. }))
-    )
+        | (NodeKind::Label, Some(NativeObject::Label(_)))
+        | (NodeKind::Button, Some(NativeObject::Button(_)))
+        | (NodeKind::TextInput, Some(NativeObject::TextInput(_)))
+        | (NodeKind::Canvas, Some(NativeObject::Canvas(_)))
+        | (NodeKind::TabBar, Some(NativeObject::TabBar(_))) => true,
+        (NodeKind::Surface, Some(NativeObject::Surface { .. })) => node.foreign.is_none(),
+        // A different factory kind is a different object.
+        (NodeKind::Surface, Some(NativeObject::Foreign { kind, .. })) => {
+            node.foreign.as_deref() == Some(kind.as_str())
+        }
+        _ => false,
+    };
+    !fits
 }
 
 /// Writes `node`'s text to its native control, if that control displays

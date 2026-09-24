@@ -27,6 +27,7 @@ pub fn cases() -> Vec<(&'static str, Node)> {
         ("text_input", Node::text_input("name", "Ada")),
         ("canvas", Node::canvas("swatch", syntax::drawing(), LayoutStyle::default())),
         ("surface", Node::native_surface("scene", LayoutStyle::default())),
+        ("foreign", Node::foreign("date", "month-calendar", LayoutStyle::default())),
         ("tab_bar", Node::tab_bar("tabs", ["One", "Two"], 1, LayoutStyle::default())),
         (
             "column",

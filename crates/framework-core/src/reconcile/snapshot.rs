@@ -104,6 +104,9 @@ pub struct TreeNode {
     /// [`crate::Node::with_cursor`]); a backend shows the nearest declared
     /// cursor walking up from the node under the pointer.
     pub cursor: Option<crate::input::Cursor>,
+    /// The factory kind of a foreign object this node adopts (see
+    /// [`crate::Node::foreign`]).
+    pub foreign: Option<String>,
 }
 
 impl TreeNode {
@@ -138,6 +141,7 @@ impl TreeNode {
             opacity: Scalar::new(node.opacity()),
             transitions: node.transitions().to_vec(),
             item_index: node.item_index(),
+            foreign: node.foreign_kind().map(str::to_owned),
             virtualization: node.virtualization(),
             draw_list: node.draw_list().cloned(),
             tabs: node.tabs().cloned(),

@@ -451,3 +451,32 @@ fn a_mistake_in_app_css_fails_the_build_where_it_was_written() {
     );
     assert!(message.contains("no selectors"), "{message}");
 }
+
+#[test]
+fn bindgen_writes_each_language_from_one_description() {
+    let description = workspace().join("examples/adoption-library/counter.ril");
+    for (language, expected) in [
+        ("c", "int32_t counter_Counter_increment(counter_Counter self, uint32_t* out);"),
+        ("csharp", "public uint Increment()"),
+        ("rust", "macro_rules! export_counter"),
+    ] {
+        let output = rustnative()
+            .args(["bindgen"])
+            .arg(&description)
+            .args(["--lang", language])
+            .output()
+            .expect("rustnative runs");
+        assert!(output.status.success(), "{}", stderr(&output));
+        assert!(stdout(&output).contains(expected), "{language}: {}", stdout(&output));
+    }
+    let broken = scratch("bindgen").join("broken.ril");
+    std::fs::write(&broken, "library x;\nservice S {\n    fn f(&self) -> float;\n}\n").unwrap();
+    let output = rustnative()
+        .args(["bindgen"])
+        .arg(&broken)
+        .args(["--lang", "c"])
+        .output()
+        .expect("rustnative runs");
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("broken.ril:3:"), "{}", stderr(&output));
+}

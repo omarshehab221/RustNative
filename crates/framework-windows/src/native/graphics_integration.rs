@@ -12,7 +12,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::UpdateWindow;
 use windows_sys::Win32::System::SystemServices::MK_LBUTTON;
-use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_LBUTTONDOWN};
+use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_DPICHANGED, WM_LBUTTONDOWN};
 
 use super::graphics::canvas;
 use super::harness::NativeHarness;
@@ -22,6 +22,7 @@ struct Log {
     renders: Rc<Cell<u32>>,
     regions: Rc<RefCell<Vec<Option<u32>>>>,
     surfaces: Rc<RefCell<Vec<(SurfaceId, Size)>>>,
+    scales: Rc<RefCell<Vec<f32>>>,
 }
 
 /// A canvas whose color a button toggles, next to a label that never
@@ -91,8 +92,9 @@ impl Component for Scene {
             Event::PointerDown { pointer, .. } => {
                 self.log.regions.borrow_mut().push(pointer.region());
             }
-            Event::SurfaceResized { surface, size, .. } => {
+            Event::SurfaceResized { surface, size, scale_factor, .. } => {
                 self.log.surfaces.borrow_mut().push((surface, size));
+                self.log.scales.borrow_mut().push(scale_factor.get());
             }
             _ => {}
         }
@@ -211,4 +213,35 @@ fn a_native_surface_is_laid_out_reported_and_handed_out() {
     harness.click(WindowId::PRIMARY, "drop-surface");
     assert!(crate::native_surface(surface).is_none(), "a removed surface has no handle");
     assert!(handle.window_handle().is_err(), "and a kept handle reports it unavailable");
+}
+
+/// The surface hand-off's DPI contract (`docs/interop/surface-handoff.md`):
+/// on `WM_DPICHANGED` the window takes the rectangle Windows suggests, and
+/// every surface is told its new scale factor even though its size in
+/// layout units is unchanged — what a swapchain needs to re-create at.
+#[test]
+fn a_dpi_change_moves_the_window_and_re_reports_every_surface() {
+    let log = Log::default();
+    let mut application = application(&log);
+    // SAFETY: `application` is declared first, so it outlives the harness.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    let window = harness.hwnd(WindowId::PRIMARY);
+    let before = log.surfaces.borrow().len();
+    let suggested = RECT { left: 40, top: 50, right: 40 + 540, bottom: 50 + 630 };
+    harness.send(window, WM_DPICHANGED, 0x0090_0090, (&raw const suggested) as isize);
+    harness.pump();
+    let after = rect(window);
+    assert_eq!(
+        (after.left, after.top, after.right, after.bottom),
+        (40, 50, 580, 680),
+        "the suggested rectangle"
+    );
+    let surfaces = log.surfaces.borrow();
+    assert!(surfaces.len() > before, "the surface was reported again");
+    assert_eq!(
+        surfaces.last().map(|(_, size)| *size),
+        Some(Size::new(120, 80)),
+        "its layout size is unchanged"
+    );
+    assert_eq!(log.scales.borrow().last().copied(), Some(1.5), "and its scale is the new DPI's");
 }

@@ -37,6 +37,12 @@ pub(crate) enum NativeObject {
         hwnd: HWND,
         id: framework_core::SurfaceId,
     },
+    /// A foreign object a registered factory made (see `native::foreign`).
+    Foreign {
+        hwnd: HWND,
+        kind: String,
+        ownership: super::foreign::Ownership,
+    },
 }
 
 impl NativeObject {
@@ -48,7 +54,8 @@ impl NativeObject {
             | Self::TextInput(hwnd)
             | Self::Canvas(hwnd)
             | Self::TabBar(hwnd)
-            | Self::Surface { hwnd, .. } => *hwnd,
+            | Self::Surface { hwnd, .. }
+            | Self::Foreign { hwnd, .. } => *hwnd,
         }
     }
 
@@ -60,6 +67,10 @@ impl NativeObject {
     }
 
     pub(crate) fn destroy(self) {
+        if let Self::Foreign { hwnd, ownership, .. } = self {
+            super::foreign::release(hwnd, ownership);
+            return;
+        }
         // SAFETY: the registry exclusively owns every HWND stored here.
         unsafe {
             DestroyWindow(self.hwnd());
@@ -69,18 +80,27 @@ impl NativeObject {
 
 /// The top-level window `hwnd` belongs to, as an integer.
 fn top_level(hwnd: HWND) -> isize {
-    // SAFETY: `hwnd` is a live window this registry owns; `GetAncestor`
-    // with `GA_ROOT` only walks its parent chain.
-    let root = unsafe {
-        windows_sys::Win32::UI::WindowsAndMessaging::GetAncestor(
-            hwnd,
-            windows_sys::Win32::UI::WindowsAndMessaging::GA_ROOT,
-        )
-    };
+    // The framework root, which for an embedded tree is not `GA_ROOT`.
+    let root = super::context::root_window(hwnd);
     if root.is_null() { hwnd as isize } else { root as isize }
 }
 
 impl NativeObjectRegistry {
+    /// Hands back every borrowed foreign object — called as the window
+    /// closes, before Windows destroys its children with it.
+    pub(crate) fn release_borrowed_foreign(&self) {
+        for object in self.objects.values() {
+            if let NativeObject::Foreign {
+                hwnd,
+                ownership: super::foreign::Ownership::Borrowed,
+                ..
+            } = object
+            {
+                super::foreign::release(*hwnd, super::foreign::Ownership::Borrowed);
+            }
+        }
+    }
+
     pub(crate) fn get(&self, id: NodeId) -> Option<&NativeObject> {
         self.objects.get(&id)
     }

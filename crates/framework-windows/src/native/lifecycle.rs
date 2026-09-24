@@ -95,7 +95,8 @@ fn store(runtime: &Runtime) -> Option<std::sync::Arc<dyn StateStore>> {
 
 /// Saves the primary window's placement; called as it closes.
 pub(crate) fn save_placement(runtime: &Runtime) {
-    if runtime.window_id != WindowId::PRIMARY {
+    // An embedded root's placement is the host's to keep.
+    if runtime.window_id != WindowId::PRIMARY || runtime.embedded {
         return;
     }
     let Some(store) = store(runtime) else {
