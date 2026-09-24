@@ -92,6 +92,8 @@ pub struct Application {
     /// one (see [`Self::with_executor`]); otherwise each window's scheduler
     /// uses the shared default.
     executor: Option<std::sync::Arc<dyn crate::Executor>>,
+    /// The environment every window's root starts from.
+    environment: crate::environment::Environment,
 }
 
 impl fmt::Debug for Application {
@@ -177,7 +179,9 @@ impl Application {
             panic_policy: PanicPolicy::default(),
             motion: crate::MotionPreference::default(),
             executor,
+            environment: crate::environment::Environment::new(),
         };
+        application.update_size_class(WindowId::PRIMARY);
         // A component may request another window from its first render. The
         // root tree is rendered while this Application is being
         // constructed, so drain those requests only after the primary
@@ -200,15 +204,45 @@ impl Application {
             return false;
         }
 
+        // A menu item bound to a command invokes it.
+        if let Event::MenuAction { item, .. } = &event {
+            let command = self
+                .windows
+                .get(&id)
+                .and_then(|entry| entry.window.menu())
+                .and_then(|menu| menu.find(*item))
+                .and_then(crate::menu::MenuItem::bound_command);
+            if let Some(command) = command {
+                return self.invoke_command(id, command, None);
+            }
+        }
         let Some(entry) = self.windows.get_mut(&id) else {
             return false;
         };
-
+        let resized = matches!(event, Event::WindowResized { .. });
         apply_window_event(&mut entry.state, &event);
+        if resized {
+            // Size classes follow the window before the component hears of
+            // the resize, so it renders against the new class.
+            let size = entry.state.size();
+            entry.components.set_environment(
+                &crate::environment::keys::SIZE_CLASS,
+                crate::environment::SizeClasses::of(size.width, size.height),
+            );
+        }
         let handled = entry.components.dispatch(event);
         let commands = entry.components.take_window_commands();
         self.apply_window_commands(commands);
         handled
+    }
+
+    fn update_size_class(&mut self, id: WindowId) {
+        let Some(entry) = self.windows.get_mut(&id) else { return };
+        let size = entry.state.size();
+        entry.components.set_environment(
+            &crate::environment::keys::SIZE_CLASS,
+            crate::environment::SizeClasses::of(size.width, size.height),
+        );
     }
 
     /// Applies deferred window-open/close requests queued by a component
@@ -453,9 +487,11 @@ impl Application {
                 ),
             },
         );
-        if let Some(entry) = self.windows.get(&id) {
+        if let Some(entry) = self.windows.get_mut(&id) {
             entry.components.set_motion_preference(self.motion);
+            entry.components.inherit_environment(&self.environment);
         }
+        self.update_size_class(id);
         // The new root has already rendered and may itself have queued
         // follow-up requests. Apply them now so initial rendering is a
         // complete lifecycle transaction, including nested requests.
@@ -546,6 +582,133 @@ impl Application {
     #[must_use]
     pub fn services(&self) -> &Services {
         &self.services
+    }
+
+    /// The nodes of window `id` whose laid-out size a component reads.
+    #[must_use]
+    pub fn watched_nodes(&self, id: WindowId) -> Vec<crate::identity::NodeId> {
+        self.windows.get(&id).map(|entry| entry.components.watched_nodes()).unwrap_or_default()
+    }
+
+    /// Reports laid-out sizes of watched nodes in window `id` (see
+    /// [`ComponentTree::report_sizes`]). Returns whether anything
+    /// re-rendered.
+    pub fn report_sizes(
+        &mut self,
+        id: WindowId,
+        sizes: impl IntoIterator<Item = (crate::identity::NodeId, crate::layout::Size)>,
+    ) -> bool {
+        let Some(entry) = self.windows.get_mut(&id) else { return false };
+        let changed = entry.components.report_sizes(sizes);
+        let commands = entry.components.take_window_commands();
+        self.apply_window_commands(commands);
+        changed
+    }
+
+    /// Invokes command `command` in window `id`, routed from `focused`.
+    pub fn invoke_command(
+        &mut self,
+        id: WindowId,
+        command: crate::command::CommandId,
+        focused: Option<crate::identity::NodeId>,
+    ) -> bool {
+        let Some(entry) = self.windows.get_mut(&id) else { return false };
+        let invoked = entry.components.invoke_command(command, focused);
+        let commands = entry.components.take_window_commands();
+        self.apply_window_commands(commands);
+        invoked
+    }
+
+    /// Offers a key press to window `id`'s command shortcuts before it is
+    /// delivered as an ordinary key event. Returns whether a command took
+    /// it — in which case the backend must not deliver it further.
+    pub fn handle_shortcut(
+        &mut self,
+        id: WindowId,
+        key: crate::event::KeyCode,
+        modifiers: crate::event::KeyModifiers,
+        focused: Option<crate::identity::NodeId>,
+    ) -> bool {
+        let Some(entry) = self.windows.get_mut(&id) else { return false };
+        let handled = entry.components.handle_shortcut(key, modifiers, focused);
+        let commands = entry.components.take_window_commands();
+        self.apply_window_commands(commands);
+        handled
+    }
+
+    /// Command `command` as window `id`'s focus chain from `focused` sees
+    /// it — what a menu item bound to it shows.
+    #[must_use]
+    pub fn command_state(
+        &self,
+        id: WindowId,
+        command: crate::command::CommandId,
+        focused: Option<crate::identity::NodeId>,
+    ) -> Option<crate::command::Command> {
+        let entry = self.windows.get(&id)?;
+        let chain = entry.components.focus_chain(focused);
+        entry.components.commands().state(command, &chain).cloned()
+    }
+
+    /// Sets `key` in every window's root environment (and in the
+    /// environment windows opened later start with). Only components that
+    /// read the key re-render. This is how a backend reports a host
+    /// setting: the colour scheme, the text scale, reduced motion.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "an environment value is owned by the environment; callers hand it over"
+    )]
+    pub fn set_environment<T: crate::environment::EnvValue>(
+        &mut self,
+        key: &crate::environment::EnvKey<T>,
+        value: T,
+    ) {
+        let _ = self.environment.set(key, value.clone(), 0);
+        for entry in self.windows.values_mut() {
+            entry.components.set_environment(key, value.clone());
+        }
+        self.apply_queued_window_commands();
+    }
+
+    /// Sets `key` in one window's root environment only — for a trait that
+    /// belongs to a window rather than the application (its size classes,
+    /// whether it is snapped). Returns whether the window exists.
+    pub fn set_window_environment<T: crate::environment::EnvValue>(
+        &mut self,
+        id: WindowId,
+        key: &crate::environment::EnvKey<T>,
+        value: T,
+    ) -> bool {
+        let Some(entry) = self.windows.get_mut(&id) else { return false };
+        entry.components.set_environment(key, value);
+        self.apply_queued_window_commands();
+        true
+    }
+
+    /// Sets the locale, and the layout direction its script is written in.
+    pub fn set_locale(&mut self, locale: crate::environment::Locale) {
+        let direction = locale.direction();
+        self.set_environment(&crate::environment::keys::LOCALE, locale);
+        self.set_environment(&crate::environment::keys::LAYOUT_DIRECTION, direction);
+    }
+
+    /// The value of `key` in window `id`'s root environment.
+    #[must_use]
+    pub fn environment_for<T: crate::environment::EnvValue>(
+        &self,
+        id: WindowId,
+        key: &crate::environment::EnvKey<T>,
+    ) -> T {
+        self.windows
+            .get(&id)
+            .map_or_else(|| key.default_value(), |entry| entry.components.environment(key))
+    }
+
+    /// Window `id`'s layout direction — what a backend lays its root out
+    /// in.
+    #[must_use]
+    pub fn layout_direction(&self, id: WindowId) -> crate::layout::LayoutDirection {
+        self.environment_for(id, &crate::environment::keys::LAYOUT_DIRECTION)
     }
 
     /// Replaces the theme for every window and re-renders them all. See

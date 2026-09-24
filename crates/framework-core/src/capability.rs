@@ -57,6 +57,48 @@ pub enum Capability {
     DeepLinks,
     /// Reporting suspend, resume, and termination.
     Lifecycle,
+    /// Pointer cursor shapes per node.
+    Cursors,
+    /// Pointer hover (enter/leave without a press).
+    Hover,
+    /// Keyboard shortcuts bound to commands, working from anywhere in a
+    /// window.
+    CommandShortcuts,
+    /// Right-to-left layout, mirrored by the host or by the backend.
+    RightToLeft,
+    /// The host's settings (colour scheme, text scale, contrast, locale)
+    /// fed into the environment and followed when they change.
+    HostTraits,
+    /// Permission states and requests beyond a yes/no answer.
+    Permissions,
+    /// A surface beyond the main window (`C49-1`), realized by Milestone 57.
+    Surface(SurfaceKind),
+}
+
+/// Surfaces an application can have beyond its windows (`C49-1`). Every
+/// backend answers each one honestly from its first day; realizing them is
+/// Milestone 57.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum SurfaceKind {
+    /// A home-screen or desktop widget.
+    Widget,
+    /// A live activity or ongoing notification.
+    LiveActivity,
+    /// A tile (a quick-settings tile, a live tile).
+    Tile,
+    /// A share or action extension.
+    Extension,
+    /// An instant, install-free application.
+    InstantApp,
+    /// A companion-device surface (a watch face, a car display).
+    CompanionDevice,
+    /// A tray icon or menu-bar extra.
+    TrayExtra,
+    /// A jump list or dock menu.
+    JumpList,
+    /// Progress shown on the taskbar or dock icon.
+    TaskbarProgress,
 }
 
 /// The set of [`Capability`]s one platform adapter actually realizes.

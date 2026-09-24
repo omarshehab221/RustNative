@@ -128,6 +128,8 @@ impl HeadlessTree {
         theme: &Theme,
         size: Size,
         measurer: HeadlessMeasurer,
+        direction: framework_core::LayoutDirection,
+        safe_area: framework_core::EdgeInsets,
     ) {
         let Ok(snapshot) = TreeSnapshot::from_node_with_theme(view, theme) else {
             // A tree with a duplicate id never reaches a backend; the
@@ -176,8 +178,24 @@ impl HeadlessTree {
                     .map(|style| (node.id, ExtentCache::new(style.item_count, style.extent)))
             })
             .collect();
-        let layout = LayoutEngine::new().layout_result_with(&snapshot, size, &measurer, &extents);
+        // Content stays clear of the safe area (`keys::SAFE_AREA`): the
+        // root is laid out in what remains, and placed inside the insets.
+        let inner = Size::new(
+            size.width.saturating_sub(u32::try_from(safe_area.horizontal().max(0)).unwrap_or(0)),
+            size.height.saturating_sub(u32::try_from(safe_area.vertical().max(0)).unwrap_or(0)),
+        );
+        let mut layout =
+            LayoutEngine::new().layout_result_with(&snapshot, inner, &measurer, &extents);
+        if let Some(root) = snapshot.ordered_nodes().first().map(|node| node.id) {
+            if let Some(rect) = layout.rects.get_mut(&root) {
+                rect.x += safe_area.left(direction);
+                rect.y += safe_area.top;
+            }
+        }
         let accessibility = AccessibilityTree::from_snapshot(&snapshot);
+        // This backend has no host mirroring of its own, so it places the
+        // physical (mirrored) rectangles — see `LayoutResult::physical_rects`.
+        let physical = layout.physical_rects(&snapshot, direction);
 
         if self
             .focused
@@ -189,7 +207,7 @@ impl HeadlessTree {
         let mut nodes = HashMap::new();
         let mut order = Vec::new();
         for node in snapshot.ordered_nodes() {
-            let rect = layout.rects.get(&node.id).copied().unwrap_or_default();
+            let rect = physical.get(&node.id).copied().unwrap_or_default();
             let (parent_origin, parent_visible) =
                 node.parent.and_then(|parent| nodes.get(&parent)).map_or(
                     (Point::new(0, 0), Rect::new(0, 0, i32::MAX, i32::MAX)),

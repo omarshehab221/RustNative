@@ -8,13 +8,16 @@ mod animation_integration;
 mod app;
 #[cfg(test)]
 mod capture;
+mod commands;
 mod container;
 pub(crate) mod context;
+mod cursor;
 pub(crate) mod graphics;
 #[cfg(test)]
 mod graphics_integration;
 #[cfg(test)]
 mod harness;
+mod host_traits;
 pub(crate) mod input;
 #[cfg(test)]
 mod input_integration;
@@ -27,17 +30,19 @@ mod menu;
 mod message_loop;
 #[cfg(test)]
 mod navigation_integration;
+mod ownership;
 mod registry;
 pub(crate) mod rendering;
 mod runtime;
 pub(crate) mod single_instance;
+mod teardown;
 #[cfg(test)]
 mod test_support;
 pub(crate) mod uia;
 #[cfg(test)]
 mod uia_integration;
 mod user_data;
-mod util;
+pub(crate) mod util;
 mod virtual_list;
 #[cfg(test)]
 mod virtual_list_integration;

@@ -22,6 +22,7 @@ pub struct MenuItem {
     checked: Option<bool>,
     separator: bool,
     children: Vec<MenuItem>,
+    command: Option<crate::command::CommandId>,
 }
 
 impl MenuItem {
@@ -35,6 +36,7 @@ impl MenuItem {
             checked: None,
             separator: false,
             children: Vec::new(),
+            command: None,
         }
     }
 
@@ -52,6 +54,7 @@ impl MenuItem {
             checked: None,
             separator: false,
             children: children.into_iter().collect(),
+            command: None,
         }
     }
 
@@ -65,6 +68,7 @@ impl MenuItem {
             checked: None,
             separator: true,
             children: Vec::new(),
+            command: None,
         }
     }
 
@@ -82,6 +86,34 @@ impl MenuItem {
     pub const fn checked(mut self, checked: bool) -> Self {
         self.checked = Some(checked);
         self
+    }
+
+    /// An item bound to command `command`: selecting it invokes the
+    /// command, and it is enabled, checked, and labelled with its shortcut
+    /// from the command's current declaration (see [`crate::command`]).
+    pub fn command(
+        key: impl AsRef<str>,
+        label: impl Into<String>,
+        command: crate::command::CommandId,
+    ) -> Self {
+        let mut item = Self::action(key, label);
+        item.command = Some(command);
+        item
+    }
+
+    /// The command this item is bound to.
+    #[must_use]
+    pub const fn bound_command(&self) -> Option<crate::command::CommandId> {
+        self.command
+    }
+
+    /// Finds the item with identity `id` in this item or its submenus.
+    #[must_use]
+    pub fn find(&self, id: NodeId) -> Option<&MenuItem> {
+        if self.id == id && !self.separator {
+            return Some(self);
+        }
+        self.children.iter().find_map(|child| child.find(id))
     }
 
     /// Returns the item's identity.
@@ -170,6 +202,12 @@ impl MenuBar {
     #[must_use]
     pub fn items(&self) -> &[MenuItem] {
         &self.items
+    }
+
+    /// Finds the item with identity `id` anywhere in the menu bar.
+    #[must_use]
+    pub fn find(&self, id: NodeId) -> Option<&MenuItem> {
+        self.items.iter().find_map(|item| item.find(id))
     }
 }
 

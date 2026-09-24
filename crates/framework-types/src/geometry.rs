@@ -116,41 +116,92 @@ pub enum Overflow {
 pub struct EdgeInsets {
     /// The top inset.
     pub top: i32,
-    /// The right inset.
-    pub right: i32,
+    /// The inset at the end of a line of text: the right in a
+    /// left-to-right layout, the left in a right-to-left one.
+    pub end: i32,
     /// The bottom inset.
     pub bottom: i32,
-    /// The left inset.
-    pub left: i32,
+    /// The inset at the start of a line of text: the left in a
+    /// left-to-right layout, the right in a right-to-left one.
+    pub start: i32,
 }
 
 impl EdgeInsets {
     /// Creates equal insets on all four edges.
     #[must_use]
     pub const fn all(value: i32) -> Self {
-        Self { top: value, right: value, bottom: value, left: value }
+        Self { top: value, end: value, bottom: value, start: value }
     }
 
     /// Creates insets that are equal on the top/bottom edges and equal on
-    /// the left/right edges.
+    /// the start/end edges.
     #[must_use]
     pub const fn symmetric(vertical: i32, horizontal: i32) -> Self {
-        Self { top: vertical, right: horizontal, bottom: vertical, left: horizontal }
+        Self { top: vertical, end: horizontal, bottom: vertical, start: horizontal }
     }
 
-    /// The sum of the left and right insets. Saturating: an adversarial or
+    /// The sum of the start and end insets. Saturating: an adversarial or
     /// pathologically large edge-inset pair clamps instead of overflowing
     /// (every layout computation in `framework_core` makes this same
     /// choice).
     #[must_use]
     pub const fn horizontal(self) -> i32 {
-        self.left.saturating_add(self.right)
+        self.start.saturating_add(self.end)
     }
 
     /// The sum of the top and bottom insets. See [`Self::horizontal`].
     #[must_use]
     pub const fn vertical(self) -> i32 {
         self.top.saturating_add(self.bottom)
+    }
+}
+
+impl EdgeInsets {
+    /// Insets in logical order — top, end, bottom, start — the order CSS's
+    /// logical shorthands use. Start and end follow the layout direction,
+    /// which is what lets a right-to-left locale mirror a screen without
+    /// the application restating its spacing.
+    #[must_use]
+    pub const fn logical(top: i32, end: i32, bottom: i32, start: i32) -> Self {
+        Self { top, end, bottom, start }
+    }
+
+    /// The physical left inset under `direction`.
+    #[must_use]
+    pub const fn left(self, direction: LayoutDirection) -> i32 {
+        match direction {
+            LayoutDirection::Ltr => self.start,
+            LayoutDirection::Rtl => self.end,
+        }
+    }
+
+    /// The physical right inset under `direction`.
+    #[must_use]
+    pub const fn right(self, direction: LayoutDirection) -> i32 {
+        match direction {
+            LayoutDirection::Ltr => self.end,
+            LayoutDirection::Rtl => self.start,
+        }
+    }
+}
+
+/// Which way lines of text — and therefore rows, start/end insets, and
+/// start/end alignment — run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum LayoutDirection {
+    /// Left to right: Latin, Cyrillic, Greek, CJK, Devanagari, …
+    #[default]
+    Ltr,
+    /// Right to left: Arabic, Hebrew, Persian, Urdu, …
+    Rtl,
+}
+
+impl LayoutDirection {
+    /// Whether this is right-to-left.
+    #[must_use]
+    pub const fn is_rtl(self) -> bool {
+        matches!(self, Self::Rtl)
     }
 }
 

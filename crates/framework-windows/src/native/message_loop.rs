@@ -293,6 +293,18 @@ fn key_down(runtime: &mut Runtime, message: &MSG) -> MessageFlow {
     }
     let held = modifiers();
     let target = focused_node(runtime);
+    // A command's shortcut wins over the focused control's own handling of
+    // the key, as an accelerator does.
+    match super::commands::shortcut(runtime, key, held, target) {
+        Ok(true) => return MessageFlow::Consumed,
+        Ok(false) => {}
+        Err(error) => {
+            runtime.error = Some(error);
+            // SAFETY: `PostQuitMessage` takes an exit code and no pointers.
+            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::PostQuitMessage(1) };
+            return MessageFlow::Consumed;
+        }
+    }
     if runtime.dispatch_or_quit(Event::KeyDown { target, key, modifiers: held }) {
         clipboard::shortcut(runtime, key, held);
     }
@@ -483,6 +495,10 @@ pub(crate) fn poison_runtime_and_quit(runtime_ptr: *mut Runtime, message: String
 
     match action {
         PanicAction::Terminate => {
+            // The host is put back before the loop unwinds: whatever the
+            // panicking component held (a capture, a clipped cursor, an
+            // open composition) is released now, not when the process ends.
+            super::teardown::restore(&super::teardown::policy());
             let context =
                 NativeContext::none().with_window(window).with_handle(runtime.window as usize);
             runtime.error = Some(Error::ComponentPanicked { message, context });
@@ -747,12 +763,9 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             with_runtime(hwnd, super::animation::frame);
             0
         }
-        WM_SETTINGCHANGE => {
-            // A system setting changed; the one this backend follows is
-            // the reduced-motion preference.
-            with_runtime(hwnd, super::animation::sync_motion_preference);
-            default()
-        }
+        windows_sys::Win32::UI::WindowsAndMessaging::WM_SETCURSOR
+        | windows_sys::Win32::UI::WindowsAndMessaging::WM_INITMENUPOPUP
+        | WM_SETTINGCHANGE => shell_message(hwnd, message, wparam, lparam),
         super::uia::WM_FRAMEWORK_UIA => {
             // Drained inside the borrow, raised after it ends — see
             // `native::uia`'s module docs for why raising must not happen
@@ -846,6 +859,61 @@ fn menu_command(runtime: &mut Runtime, command_id: u16) {
 
 /// Routes a native control's notification (a button click, an edit
 /// control's text change) back to the component that owns the control.
+/// The window's conversation with the desktop shell: the cursor over it,
+/// a menu about to open, and a system setting changing.
+fn shell_message(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: exactly what Win32 delivered this callback with; the default
+    // procedure is valid for any message.
+    let default = || unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
+    match message {
+        windows_sys::Win32::UI::WindowsAndMessaging::WM_SETCURSOR => {
+            // The hit-test code is the low word of `lParam`.
+            let hit_test = u32::try_from(lparam & 0xFFFF).unwrap_or(0);
+            let set = with_runtime(hwnd, |runtime| {
+                super::cursor::set_cursor(runtime, wparam as HWND, hit_test)
+            })
+            .unwrap_or(false);
+            if set { 1 } else { default() }
+        }
+        windows_sys::Win32::UI::WindowsAndMessaging::WM_INITMENUPOPUP => {
+            with_runtime(hwnd, |runtime| {
+                let focused = focused_node(runtime);
+                super::commands::init_menu_popup(
+                    runtime,
+                    wparam as windows_sys::Win32::UI::WindowsAndMessaging::HMENU,
+                    focused,
+                );
+            });
+            default()
+        }
+        _ => {
+            // `WM_SETTINGCHANGE`: re-read every host trait this backend
+            // follows. Unchanged values invalidate nothing.
+            with_runtime(hwnd, |runtime| {
+                super::animation::sync_motion_preference(runtime);
+                let traits = super::host_traits::read();
+                let mode = super::host_traits::window_mode(runtime.window);
+                let window = runtime.window_id;
+                runtime.with_application(|application| {
+                    super::host_traits::apply(application, &traits);
+                    let _ = application.set_window_environment(
+                        window,
+                        &framework_core::keys::WINDOW_MODE,
+                        mode,
+                    );
+                });
+                let rendered = runtime.render();
+                super::win32::best_effort(
+                    rendered.is_ok(),
+                    "render(settings changed)",
+                    "the window shows the previous settings until its next render",
+                );
+            });
+            default()
+        }
+    }
+}
+
 /// Messages about the application's life rather than about one window:
 /// deep links handed over by a second launch, the session ending, and the
 /// machine sleeping or waking (see `native::lifecycle`).

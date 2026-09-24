@@ -103,6 +103,14 @@ pub(crate) fn capture_client(hwnd: HWND) -> Option<Capture> {
 }
 
 impl Capture {
+    /// Whether every pixel is the same colour — what an unpainted window
+    /// captures as.
+    pub(crate) fn is_uniform(&self) -> bool {
+        let mut pixels = self.bgra.chunks_exact(4);
+        let first = pixels.next();
+        pixels.all(|pixel| Some(pixel) == first)
+    }
+
     /// Encodes as a 32-bit bottom-up BMP.
     pub(crate) fn to_bmp(&self) -> Vec<u8> {
         let pixels = self.bgra.len();

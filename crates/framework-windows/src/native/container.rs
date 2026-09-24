@@ -70,6 +70,20 @@ fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM)
             // shape.
             unsafe { SendMessageW(root, message, wparam, lparam) }
         }
+        windows_sys::Win32::UI::WindowsAndMessaging::WM_SETCURSOR => {
+            // The hit-test code is the low word of `lParam`.
+            let hit_test = u32::try_from(lparam & 0xFFFF).unwrap_or(0);
+            let set = with_runtime(root_window(hwnd), |runtime| {
+                super::cursor::set_cursor(runtime, wparam as HWND, hit_test)
+            })
+            .unwrap_or(false);
+            if set {
+                1
+            } else {
+                // SAFETY: exactly what Win32 delivered this callback with.
+                unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+            }
+        }
         WM_GETOBJECT => super::uia::get_object(
             hwnd,
             windows::Win32::Foundation::WPARAM(wparam),

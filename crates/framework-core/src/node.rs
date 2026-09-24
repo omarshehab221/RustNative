@@ -9,11 +9,12 @@
 use std::collections::HashMap;
 
 use crate::animation::{AnimatedProperty, Transition};
+use crate::command::CommandId;
 use crate::event::AccessibilityInfo;
 use crate::graphics::DrawList;
 use crate::identity::NodeId;
-use crate::input::InputInterest;
 use crate::input::Scalar;
+use crate::input::{Cursor, InputInterest};
 use crate::layout::{ColumnStyle, EdgeInsets, LayoutStyle, Overflow, RowStyle, SizeMode};
 use crate::style::VisualStyle;
 use crate::virtualization::{Axis, VirtualListStyle};
@@ -786,6 +787,92 @@ impl Node {
         }
     }
 
+    /// Sets the pointer cursor shown over this node (see [`Cursor`]).
+    #[must_use]
+    pub fn with_cursor(mut self, cursor: Cursor) -> Self {
+        match &mut self {
+            Self::Label(node) => node.cursor = Some(cursor),
+            Self::Button(node) => node.cursor = Some(cursor),
+            Self::TextInput(node) => node.cursor = Some(cursor),
+            Self::TabBar(node) => node.cursor = Some(cursor),
+            Self::Canvas(node) => node.cursor = Some(cursor),
+            Self::Surface(node) => node.cursor = Some(cursor),
+            Self::Column(node) => node.cursor = Some(cursor),
+            Self::Row(node) => node.cursor = Some(cursor),
+        }
+        self
+    }
+
+    /// The pointer cursor declared for this node, if any.
+    #[must_use]
+    pub fn cursor(&self) -> Option<Cursor> {
+        match self {
+            Self::Label(node) => node.cursor,
+            Self::Button(node) => node.cursor,
+            Self::TextInput(node) => node.cursor,
+            Self::TabBar(node) => node.cursor,
+            Self::Canvas(node) => node.cursor,
+            Self::Surface(node) => node.cursor,
+            Self::Column(node) => node.cursor,
+            Self::Row(node) => node.cursor,
+        }
+    }
+
+    /// Binds this node to command `id` (see [`crate::command`]): activating
+    /// it invokes the command, and it is disabled whenever the command is.
+    #[must_use]
+    pub fn with_command(mut self, id: CommandId) -> Self {
+        *self.command_mut() = Some(id);
+        self
+    }
+
+    /// The command this node is bound to.
+    #[must_use]
+    pub fn command(&self) -> Option<CommandId> {
+        match self {
+            Self::Label(node) => node.command,
+            Self::Button(node) => node.command,
+            Self::TextInput(node) => node.command,
+            Self::TabBar(node) => node.command,
+            Self::Canvas(node) => node.command,
+            Self::Surface(node) => node.command,
+            Self::Column(node) => node.command,
+            Self::Row(node) => node.command,
+        }
+    }
+
+    fn command_mut(&mut self) -> &mut Option<CommandId> {
+        match self {
+            Self::Label(node) => &mut node.command,
+            Self::Button(node) => &mut node.command,
+            Self::TextInput(node) => &mut node.command,
+            Self::TabBar(node) => &mut node.command,
+            Self::Canvas(node) => &mut node.command,
+            Self::Surface(node) => &mut node.command,
+            Self::Column(node) => &mut node.command,
+            Self::Row(node) => &mut node.command,
+        }
+    }
+
+    /// Disables every node bound to a command the registry reports
+    /// disabled — the pass that makes "disabled everywhere at once" true.
+    pub(crate) fn apply_command_states(&mut self, enabled: &dyn Fn(CommandId) -> bool) {
+        if let Some(id) = self.command() {
+            if !enabled(id) {
+                *self = std::mem::replace(self, Self::label("", "")).disabled(true);
+            }
+        }
+        match self {
+            Self::Column(node) => {
+                node.children.iter_mut().for_each(|child| child.apply_command_states(enabled));
+            }
+            Self::Row(node) => {
+                node.children.iter_mut().for_each(|child| child.apply_command_states(enabled));
+            }
+            _ => {}
+        }
+    }
+
     /// Returns this node's virtual-list declaration, if it is one.
     #[must_use]
     pub fn virtualization(&self) -> Option<VirtualListStyle> {
@@ -966,6 +1053,8 @@ macro_rules! leaf_node {
             transitions: Vec<NodeTransition>,
             item_index: Option<usize>,
             hidden: bool,
+            command: Option<CommandId>,
+            cursor: Option<Cursor>,
         }
 
         impl $name {
@@ -1003,6 +1092,8 @@ macro_rules! leaf_node {
                     transitions: Vec::new(),
                     item_index: None,
                     hidden: false,
+                    command: None,
+                    cursor: None,
                 }
             }
 
@@ -1121,6 +1212,8 @@ macro_rules! container_node {
             item_index: Option<usize>,
             virtualization: Option<VirtualListStyle>,
             hidden: bool,
+            command: Option<CommandId>,
+            cursor: Option<Cursor>,
         }
 
         impl $name {
@@ -1139,6 +1232,8 @@ macro_rules! container_node {
                     item_index: None,
                     virtualization: None,
                     hidden: false,
+                    command: None,
+                    cursor: None,
                 }
             }
 

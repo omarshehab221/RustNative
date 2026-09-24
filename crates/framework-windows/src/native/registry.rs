@@ -13,6 +13,10 @@ use crate::Error;
 pub(crate) struct NativeObjectRegistry {
     objects: HashMap<NodeId, NativeObject>,
     by_hwnd: HashMap<HWND, NodeId>,
+    /// Each object's top-level window, recorded at insertion — by the time
+    /// an object is removed its window may already be gone, so it cannot
+    /// be asked then.
+    top_levels: HashMap<NodeId, isize>,
 }
 
 #[derive(Debug)]
@@ -63,6 +67,19 @@ impl NativeObject {
     }
 }
 
+/// The top-level window `hwnd` belongs to, as an integer.
+fn top_level(hwnd: HWND) -> isize {
+    // SAFETY: `hwnd` is a live window this registry owns; `GetAncestor`
+    // with `GA_ROOT` only walks its parent chain.
+    let root = unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::GetAncestor(
+            hwnd,
+            windows_sys::Win32::UI::WindowsAndMessaging::GA_ROOT,
+        )
+    };
+    if root.is_null() { hwnd as isize } else { root as isize }
+}
+
 impl NativeObjectRegistry {
     pub(crate) fn get(&self, id: NodeId) -> Option<&NativeObject> {
         self.objects.get(&id)
@@ -77,12 +94,18 @@ impl NativeObjectRegistry {
         if let Some(content) = object.content_hwnd() {
             self.by_hwnd.insert(content, id);
         }
+        let root = top_level(object.hwnd());
+        self.top_levels.insert(id, root);
+        crate::handle::record(id, root, object.hwnd() as isize);
         self.objects.insert(id, object);
         Ok(())
     }
 
     pub(crate) fn remove(&mut self, id: NodeId) -> Option<NativeObject> {
         let object = self.objects.remove(&id)?;
+        if let Some(root) = self.top_levels.remove(&id) {
+            crate::handle::forget(id, root);
+        }
         self.by_hwnd.remove(&object.hwnd());
         if let Some(content) = object.content_hwnd() {
             self.by_hwnd.remove(&content);
@@ -98,6 +121,9 @@ impl NativeObjectRegistry {
 impl Drop for NativeObjectRegistry {
     fn drop(&mut self) {
         self.by_hwnd.clear();
+        for (id, root) in self.top_levels.drain() {
+            crate::handle::forget(id, root);
+        }
         for (_, object) in self.objects.drain() {
             object.destroy();
         }

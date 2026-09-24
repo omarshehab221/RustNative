@@ -437,6 +437,7 @@ impl HeadlessApp {
 
     /// Presses and releases `key` with `modifiers` on the focused node.
     ///
+    /// A declared command whose shortcut matches takes the key first.
     /// Tab and Shift+Tab move focus through [`HeadlessTree::tab_order`];
     /// Enter and Space activate a focused button — the host behaviours a
     /// native control provides, and which a component therefore never
@@ -457,6 +458,12 @@ impl HeadlessApp {
                 (Some(index), true) => order[(index + order.len() - 1) % order.len()],
             };
             self.move_focus(Some(next));
+            return;
+        }
+        // A command's shortcut takes the key before the focused control
+        // does, as it does on every desktop host.
+        if self.app.handle_shortcut(self.window, key, modifiers, focused) {
+            self.settle();
             return;
         }
         self.dispatch(Event::KeyDown { target: focused, key, modifiers });
@@ -624,6 +631,34 @@ impl HeadlessApp {
             self.collect_requests();
             self.realize_all();
         }
+        // Container sizes a component decides by (`C22`): a class change
+        // re-renders the reader, which can change layout again.
+        for _ in 0..4 {
+            let mut changed = false;
+            for id in self.app.window_ids() {
+                let Some(tree) = self.trees.get(&id) else { continue };
+                let sizes: Vec<_> = self
+                    .app
+                    .watched_nodes(id)
+                    .into_iter()
+                    .filter_map(|node| {
+                        let rect = tree.get(node)?.rect;
+                        Some((
+                            node,
+                            Size::new(
+                                u32::try_from(rect.width.max(0)).unwrap_or(0),
+                                u32::try_from(rect.height.max(0)).unwrap_or(0),
+                            ),
+                        ))
+                    })
+                    .collect();
+                changed |= self.app.report_sizes(id, sizes);
+            }
+            if !changed {
+                break;
+            }
+            self.realize_all();
+        }
         self.schedule_flush();
     }
 
@@ -661,7 +696,16 @@ impl HeadlessApp {
             };
             let size = state.size();
             let theme = self.app.theme().clone();
-            self.trees.entry(id).or_default().realize(&view, &theme, size, self.measurer);
+            let direction = self.app.layout_direction(id);
+            let safe_area = self.app.environment_for(id, &framework_core::keys::SAFE_AREA);
+            self.trees.entry(id).or_default().realize(
+                &view,
+                &theme,
+                size,
+                self.measurer,
+                direction,
+                safe_area,
+            );
         }
         if !self.trees.contains_key(&self.window) {
             self.window = WindowId::PRIMARY;

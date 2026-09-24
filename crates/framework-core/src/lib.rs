@@ -110,6 +110,12 @@
 //! | [`window`]/[`menu`] | Window-domain state and native menu definitions |
 //! | [`mod@panic`] | What an application does when a component panics |
 //! | [`clock`] | The host clock every timestamp is read from |
+//! | [`environment`] | Typed values flowing down the tree, and preferences flowing up |
+//! | [`command`] | Actions with identity, bound by menus, buttons, and shortcuts |
+//! | [`permission`] | Permission states as hosts report them, and the request flow |
+//! | [`grant`] | Scoped grants: which services a part of the application may reach |
+//! | [`handle`]/[`affinity`] | The escape-hatch contract, and thread affinity |
+//! | [`teardown`] | What a backend restores on exit and on panic |
 //! | [`application`] | Multi-window orchestration |
 //! | [`capability`]/[`platform`] | The seam a platform backend implements and declares support through |
 //!
@@ -138,13 +144,18 @@
 //! regress).
 #![deny(missing_docs)]
 pub mod accessibility;
+pub mod affinity;
 pub mod animation;
 pub mod application;
 pub mod capability;
 pub mod clock;
+pub mod command;
 pub mod component;
+pub mod environment;
 pub mod event;
+pub mod grant;
 pub mod graphics;
+pub mod handle;
 pub mod identity;
 pub mod input;
 pub mod layout;
@@ -153,12 +164,14 @@ pub mod menu;
 pub mod navigation;
 pub mod node;
 pub mod panic;
+pub mod permission;
 pub mod persistence;
 pub mod platform;
 pub mod reconcile;
 pub mod scheduler;
 pub mod services;
 pub mod style;
+pub mod teardown;
 pub mod virtualization;
 pub mod window;
 
@@ -166,35 +179,43 @@ pub use accessibility::{
     AccessibilityTree, AccessibleAction, AccessibleActionKind, AccessibleNode, AccessibleValue,
     CheckedState, LiveRegion, Relation, VirtualElement,
 };
+pub use affinity::{ThreadAffinity, UiThread};
 pub use animation::{
     AnimatedProperty, AnimatedValue, Animation, AnimationId, AnimationOwner, Easing, Fill,
     Finished, Frame, FrameClock, ManualFrameClock, MotionPreference, ReducedMotion, Repeat,
     TickOutput, Timeline, Transition,
 };
 pub use application::Application;
-pub use capability::{Capability, PlatformCapabilities};
+pub use capability::{Capability, PlatformCapabilities, SurfaceKind};
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use command::{Command, CommandId, CommandRegistry, Shortcut};
 pub use component::{
     AnimationRequest, AnimationRequests, Callback, Component, ComponentContext, ComponentHost,
-    ComponentTree, EffectCleanup, EffectContext, InputRequest, InputRequests, RenderError,
-    WindowRequests,
+    ComponentTree, EffectCleanup, EffectContext, InputRequest, InputRequests, RenderCause,
+    RenderError, RenderRecord, WindowRequests,
+};
+pub use environment::{
+    Breakpoint, ColorScheme, Contrast, EnvKey, EnvValue, Environment, Locale, Posture, Preference,
+    PreferenceKey, SizeClass, SizeClasses, WindowMode, keys,
 };
 pub use event::{AccessibilityInfo, AccessibilityRole, Event, KeyCode, KeyModifiers};
+pub use grant::{Grant, GrantSet, Granted, ScopedServices};
 pub use graphics::{
     DrawCommand, DrawList, ImageData, ImageError, Paint, Path, PathSegment, RectF, SurfaceId,
     Transform2D, Vec2,
 };
+pub use handle::{Live, NativeHandle, StaleHandle, Unchecked};
 pub use identity::{ComponentId, NodeId, WindowId};
 pub use input::{
-    ClipboardAction, Composition, DragData, DropEffect, GamepadAxis, GamepadButton, GamepadInput,
-    GamepadPoller, GamepadSource, GamepadState, Gesture, GestureConfig, GesturePhase,
-    GestureRecognizer, InputInterest, PointerButton, PointerButtons, PointerEvent, PointerKind,
-    PointerPhase, Scalar, WheelDelta,
+    ClipboardAction, Composition, Cursor, DragData, DropEffect, GamepadAxis, GamepadButton,
+    GamepadInput, GamepadPoller, GamepadSource, GamepadState, Gesture, GestureConfig,
+    GestureConflict, GesturePhase, GesturePolicy, GestureRecognizer, InputInterest, PointerButton,
+    PointerButtons, PointerEvent, PointerKind, PointerPhase, Scalar, WheelDelta, Winner, arbitrate,
 };
 pub use layout::{
     Alignment, ColumnStyle, Constraints, DefaultIntrinsicMeasurer, EdgeInsets, IntrinsicMeasurer,
-    LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, MeasuredItem, Overflow, Point,
-    Rect, RowStyle, Size, SizeMode,
+    LayoutDirection, LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, MeasuredItem,
+    Overflow, Point, Rect, RowStyle, Size, SizeMode,
 };
 pub use lifecycle::Lifecycle;
 pub use menu::{MenuBar, MenuItem};
@@ -207,6 +228,7 @@ pub use node::{
     TextInput, TreeError,
 };
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
+pub use permission::{FixedPermissions, Permission, PermissionService, PermissionState};
 pub use persistence::{MemoryStateStore, Persisted, StateStore};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};
@@ -223,6 +245,7 @@ pub use style::{
     Color, ComponentStyle, ControlState, ResolvedStyle, StyleOverride, Theme, Typography,
     VisualStyle,
 };
+pub use teardown::{Restoration, TeardownPolicy};
 pub use virtualization::{
     Axis, ExtentCache, ItemExtent, ScrollAnchor, VirtualListStyle, VirtualRange,
 };

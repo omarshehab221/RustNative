@@ -245,6 +245,14 @@ pub enum Event {
         /// The chosen tab.
         index: usize,
     },
+    /// A command this component declared was invoked — from a menu, a
+    /// button bound to it, its shortcut, or a host surface (see
+    /// [`crate::command`]). Delivered to the declaring component the focus
+    /// chain reaches.
+    Command {
+        /// The command.
+        id: crate::command::CommandId,
+    },
     /// The application was asked to open `url` — launched with it, or
     /// handed it by a second launch while already running.
     ///
@@ -354,6 +362,7 @@ impl Event {
             | Self::MenuAction { .. }
             | Self::ClipboardChanged { .. }
             | Self::DeepLink { .. }
+            | Self::Command { .. }
             | Self::Lifecycle(_) => None,
         }
     }
@@ -402,6 +411,7 @@ impl Event {
             | Self::MenuAction { .. }
             | Self::ClipboardChanged { .. }
             | Self::DeepLink { .. }
+            | Self::Command { .. }
             | Self::Lifecycle(_) => {}
         }
         self
@@ -453,7 +463,7 @@ pub enum KeyCode {
 }
 
 /// Which modifier keys were held down when a [`KeyCode`] was produced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[allow(
     clippy::struct_excessive_bools,
     reason = "four independent physical keys, each held or not; not a state machine in disguise"

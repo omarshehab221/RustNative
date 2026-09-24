@@ -335,6 +335,7 @@ pub struct Services {
     system: Option<Arc<dyn SystemService>>,
     state: Option<Arc<dyn crate::persistence::StateStore>>,
     clock: Option<Arc<dyn crate::clock::Clock>>,
+    permissions: Option<Arc<dyn crate::permission::PermissionService>>,
 }
 
 impl fmt::Debug for Services {
@@ -347,11 +348,36 @@ impl fmt::Debug for Services {
             .field("system", &self.system.is_some())
             .field("state", &self.state.is_some())
             .field("clock", &self.clock.is_some())
+            .field("permissions", &self.permissions.is_some())
             .finish()
     }
 }
 
 impl Services {
+    /// Returns `self` with the permission service set.
+    #[must_use]
+    pub fn with_permissions(
+        mut self,
+        service: Arc<dyn crate::permission::PermissionService>,
+    ) -> Self {
+        self.permissions = Some(service);
+        self
+    }
+
+    /// The permission service, if the host has one.
+    #[must_use]
+    pub fn permissions(&self) -> Option<&Arc<dyn crate::permission::PermissionService>> {
+        self.permissions.as_ref()
+    }
+
+    /// These services as seen through `grants`: only what the grants cover
+    /// is obtainable (see [`crate::grant`]). How a third-party package is
+    /// handed services.
+    #[must_use]
+    pub fn scoped(&self, grants: crate::grant::GrantSet) -> crate::grant::ScopedServices {
+        crate::grant::ScopedServices::new(self.clone(), grants)
+    }
+
     /// Returns `self` with the clock set (see [`crate::clock`]).
     #[must_use]
     pub fn with_clock(mut self, clock: Arc<dyn crate::clock::Clock>) -> Self {

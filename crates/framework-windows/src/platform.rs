@@ -85,6 +85,17 @@ impl Platform for WindowsPlatform {
             Capability::StatePersistence,
             Capability::DeepLinks,
             Capability::Lifecycle,
+            // Milestone 39: cursors per node, hover, command shortcuts,
+            // host-mirrored right-to-left, host traits in the environment
+            // (which includes following the system appearance), and the
+            // consent-store permission states.
+            Capability::Cursors,
+            Capability::Hover,
+            Capability::CommandShortcuts,
+            Capability::RightToLeft,
+            Capability::HostTraits,
+            Capability::SystemAppearance,
+            Capability::Permissions,
         ])
     }
 
@@ -143,10 +154,28 @@ mod tests {
         assert!(capabilities.supports(Capability::StatePersistence));
         assert!(capabilities.supports(Capability::DeepLinks));
         assert!(capabilities.supports(Capability::Lifecycle));
-        // System sharing and system-appearance change notifications are
-        // still only portable contracts (see PLAN.md); this backend does
-        // not yet realize them.
+        // Milestone 39.
+        for realized in [
+            Capability::Cursors,
+            Capability::Hover,
+            Capability::CommandShortcuts,
+            Capability::RightToLeft,
+            Capability::HostTraits,
+            Capability::SystemAppearance,
+            Capability::Permissions,
+        ] {
+            assert!(capabilities.supports(realized), "{realized:?}");
+        }
+        // System sharing is still only a portable contract, and no surface
+        // beyond the main window is realized until Milestone 57.
         assert!(!capabilities.supports(Capability::SystemShare));
-        assert!(!capabilities.supports(Capability::SystemAppearance));
+        for surface in [
+            framework_core::SurfaceKind::Widget,
+            framework_core::SurfaceKind::TrayExtra,
+            framework_core::SurfaceKind::JumpList,
+            framework_core::SurfaceKind::TaskbarProgress,
+        ] {
+            assert!(!capabilities.supports(Capability::Surface(surface)), "{surface:?}");
+        }
     }
 }

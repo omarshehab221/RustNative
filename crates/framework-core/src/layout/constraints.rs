@@ -137,6 +137,11 @@ pub struct LayoutStyle {
     pub align_self: Option<Alignment>,
     /// Min/max size bounds applied after `width`/`height` are resolved.
     pub constraints: Constraints,
+    /// This node's layout direction, overriding the one it inherits: how
+    /// a subtree of one script is embedded in a screen of another. `None`
+    /// inherits from the parent, and the window root from the
+    /// environment's [`crate::keys::LAYOUT_DIRECTION`].
+    pub direction: Option<super::LayoutDirection>,
 }
 
 impl Default for LayoutStyle {
@@ -147,6 +152,7 @@ impl Default for LayoutStyle {
             margin: EdgeInsets::default(),
             align_self: None,
             constraints: Constraints::default(),
+            direction: None,
         }
     }
 }
@@ -159,9 +165,10 @@ impl LayoutStyle {
         Self {
             width: SizeMode::Fill,
             height: SizeMode::Auto,
-            margin: EdgeInsets { top: 0, right: 0, bottom: 0, left: 0 },
+            margin: EdgeInsets { top: 0, end: 0, bottom: 0, start: 0 },
             align_self: None,
             constraints: Constraints::new(),
+            direction: None,
         }
     }
 
@@ -197,6 +204,13 @@ impl LayoutStyle {
     #[must_use]
     pub const fn constraints(mut self, constraints: Constraints) -> Self {
         self.constraints = constraints;
+        self
+    }
+
+    /// Sets this node's layout direction, overriding the inherited one.
+    #[must_use]
+    pub const fn direction(mut self, direction: super::LayoutDirection) -> Self {
+        self.direction = Some(direction);
         self
     }
 }
@@ -242,7 +256,7 @@ macro_rules! container_style {
             /// alignment, and overflow behavior.
             pub const fn new() -> Self {
                 Self {
-                    padding: EdgeInsets { top: 24, right: 24, bottom: 24, left: 24 },
+                    padding: EdgeInsets { top: 24, end: 24, bottom: 24, start: 24 },
                     gap: 12,
                     align_items: Alignment::Stretch,
                     overflow: Overflow::Clip,

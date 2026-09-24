@@ -74,6 +74,8 @@
 
 mod error;
 mod ffi;
+mod handle;
+mod mappers;
 #[cfg(windows)]
 mod native;
 mod platform;
@@ -82,14 +84,37 @@ mod services;
 mod surface;
 
 pub use error::{Error, NativeContext, Win32Category};
+pub use handle::{native_handle, validate_native_handle};
+pub use mappers::{
+    MappedProperty, MapperContext, MapperInfo, MapperMode, MapperTarget, active_mappers,
+    clear_mappers, register_mapper,
+};
 pub use platform::WindowsPlatform;
 #[cfg(windows)]
 pub use services::clipboard::WindowsClipboard;
 #[cfg(windows)]
 pub use services::dialogs::WindowsFileDialogs;
 #[cfg(windows)]
+pub use services::permissions::WindowsPermissions;
+#[cfg(windows)]
 pub use services::state_store::FileStateStore;
 #[cfg(windows)]
 pub use services::system::WindowsSystem;
 #[cfg(windows)]
 pub use surface::{SurfaceHandle, native_surface};
+
+/// The top-level `HWND` of window `id`, as an integer, if it is open on
+/// this backend — for code at the platform boundary (the escape hatch,
+/// dialogs owned by a window). `None` on every other operating system.
+#[must_use]
+pub fn native_window_handle(id: framework_core::WindowId) -> Option<isize> {
+    #[cfg(windows)]
+    {
+        native::window_handles::get(id)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = id;
+        None
+    }
+}

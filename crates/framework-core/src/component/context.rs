@@ -480,6 +480,66 @@ impl<M: Send + 'static> ComponentContext<'_, M> {
         self.task_scope.scheduler().now()
     }
 
+    /// Reads `key` from the environment: the nearest ancestor's provided
+    /// value, else the window's, else the key's default. The read is
+    /// recorded, so this component re-renders when — and only when — the
+    /// value it saw changes (see [`crate::environment`]).
+    pub fn env<T: crate::environment::EnvValue>(
+        &mut self,
+        key: &crate::environment::EnvKey<T>,
+    ) -> T {
+        self.tree.read_env(self.parent, key)
+    }
+
+    /// Provides `value` for `key` to every descendant of this component,
+    /// overriding what the window or an ancestor provides. Provide before
+    /// composing the children that read it; a reader composed earlier in
+    /// the same render is brought up to date by a second pass.
+    pub fn provide_env<T: crate::environment::EnvValue>(
+        &mut self,
+        key: &crate::environment::EnvKey<T>,
+        value: T,
+    ) {
+        self.tree.provide_env(self.parent, key, value);
+    }
+
+    /// Publishes `value` for an upward preference, read by ancestors with
+    /// [`Self::preference`] on their next render.
+    pub fn prefer<T: crate::environment::Preference>(
+        &mut self,
+        key: &crate::environment::PreferenceKey<T>,
+        value: T,
+    ) {
+        self.tree.publish(self.parent, key, value);
+    }
+
+    /// The reduction of every value this component's descendants published
+    /// for `key` in their last render, or `None` if none did. This
+    /// component re-renders when that set of values changes.
+    pub fn preference<T: crate::environment::Preference>(
+        &mut self,
+        key: &crate::environment::PreferenceKey<T>,
+    ) -> Option<T> {
+        self.tree.read_preference(self.parent, key)
+    }
+
+    /// Declares `command` for this render: this component can perform it,
+    /// and receives [`crate::Event::Command`] when it is invoked (see
+    /// [`crate::command`]). A command not declared again in a later render
+    /// stops existing.
+    pub fn command(&mut self, command: crate::command::Command) {
+        self.tree.declare_command(self.parent, command);
+    }
+
+    /// The size classes of the node this component rendered with key `key`,
+    /// from the last layout — `None` before the first one. This component
+    /// re-renders when either class changes, which is how a container
+    /// chooses its own arrangement from the space it was actually given
+    /// rather than from the window's (`C22`).
+    pub fn container_classes(&mut self, key: &str) -> Option<crate::environment::SizeClasses> {
+        self.tree.read_container_classes(self.parent, crate::identity::NodeId::from_key(key))
+    }
+
     /// Returns the structured task scope owned by this component.
     ///
     /// The scope remains owned by the component even when this render-time

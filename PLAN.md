@@ -2162,6 +2162,13 @@ backend is written and therefore belongs here rather than later:
 **Done when** a new-backend conformance checklist exists, the Windows backend
 passes it, and every item on it names the test that proves it.
 
+**Status (2026-09-24): implemented** on Windows and the headless backend;
+the checklist is `docs/conformance/new-backend-checklist.md`, the
+invalidation contract `docs/invalidation.md`, and the audits beside the
+checklist. Owed by the deferred backends: their own checklist columns —
+real safe areas and hinges, competing host gesture recognizers, and the
+permission states Windows never produces. See `BUILD_STATUS.md`.
+
 **Depends on** nothing. It is deliberately first.
 
 ## Milestone 40 — Interoperability and incremental adoption

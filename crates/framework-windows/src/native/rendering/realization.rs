@@ -96,9 +96,24 @@ pub(crate) struct Renderer {
     /// UI Automation — see `rendering::accessibility` and `native::uia`.
     pub(crate) accessibility: AccessibilityBridge,
     layout_engine: LayoutEngine,
+    /// Right-to-left, as applied to the native objects (see
+    /// `rendering::direction`).
+    pub(crate) direction: super::direction::DirectionState,
 }
 
 impl Renderer {
+    /// A node's laid-out size, if it has been laid out.
+    pub(crate) fn layout_size(&self, id: NodeId) -> Option<Size> {
+        self.layout
+            .get(&id)
+            .map(|rect| Size::new(dimension_to_u32(rect.width), dimension_to_u32(rect.height)))
+    }
+
+    /// The snapshot currently realized.
+    pub(crate) fn snapshot(&self) -> &TreeSnapshot {
+        &self.snapshot
+    }
+
     pub(crate) fn new() -> Self {
         Self {
             registry: NativeObjectRegistry::default(),
@@ -116,6 +131,7 @@ impl Renderer {
             surface_changes: Vec::new(),
             accessibility: AccessibilityBridge::default(),
             layout_engine: LayoutEngine,
+            direction: super::direction::DirectionState::default(),
         }
     }
 
@@ -202,6 +218,10 @@ impl Renderer {
             self.resolve_anchors();
             self.update_visible_ranges();
         }
+
+        // Direction before geometry: a parent's mirroring decides how the
+        // positions given to its children are read.
+        self.direction.apply(window, &self.snapshot, &self.registry);
 
         // Layout is a distinct phase: only after the native tree is fully
         // reconciled do we apply geometry to every object. This makes layout
@@ -448,6 +468,9 @@ impl Renderer {
         controls::create(&mut self.registry, node, parent)?;
         if let Some(object) = self.registry.get(node.id) {
             AccessibilityBridge::attach(object.hwnd(), node.kind);
+            // Creation applied the text; registered text mappers still run
+            // (a replacement overrides what creation wrote).
+            crate::mappers::apply(object.hwnd(), node, crate::MappedProperty::Text, (), || {});
         }
         self.apply_semantics_and_style(node);
         Ok(())
@@ -488,7 +511,15 @@ impl Renderer {
         }
 
         self.apply_semantics_and_style(node);
-        if controls::update_text(&self.registry, node)? {
+        let Some(hwnd) = self.registry.get(node.id).map(NativeObject::hwnd) else {
+            return Ok(());
+        };
+        let registry = &self.registry;
+        let suppressed =
+            crate::mappers::apply(hwnd, node, crate::MappedProperty::Text, Ok(false), || {
+                controls::update_text(registry, node)
+            })?;
+        if suppressed {
             self.suppress_text_change.insert(node.id);
         }
         Ok(())
@@ -498,11 +529,20 @@ impl Renderer {
     /// order they must run: semantics first (which can change window
     /// styles), then appearance (which repaints).
     fn apply_semantics_and_style(&mut self, node: &TreeNode) {
-        if let Some(object) = self.registry.get(node.id) {
-            self.accessibility.apply(object.hwnd(), node);
-            set_visible(object.hwnd(), !node.hidden);
+        if let Some(hwnd) = self.registry.get(node.id).map(NativeObject::hwnd) {
+            let accessibility = &mut self.accessibility;
+            crate::mappers::apply(hwnd, node, crate::MappedProperty::Accessibility, (), || {
+                accessibility.apply(hwnd, node);
+            });
+            crate::mappers::apply(hwnd, node, crate::MappedProperty::Visibility, (), || {
+                set_visible(hwnd, !node.hidden);
+            });
+            crate::mappers::apply(hwnd, node, crate::MappedProperty::Style, (), || {
+                self.apply_control_style(node);
+            });
+        } else {
+            self.apply_control_style(node);
         }
-        self.apply_control_style(node);
         self.apply_opacity(node.id);
     }
 

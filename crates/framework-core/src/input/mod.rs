@@ -24,12 +24,16 @@
 //! node under the pointer to the nearest interested ancestor. Ordinary
 //! clicks, focus, keys, and text keep flowing exactly as before.
 
+mod arbitration;
+mod cursor;
 mod drag;
 mod gamepad;
 mod gesture;
 mod ime;
 mod pointer;
 
+pub use arbitration::{GestureConflict, GesturePolicy, Winner, arbitrate};
+pub use cursor::Cursor;
 pub use drag::{DragData, DropEffect};
 pub use gamepad::{
     GamepadAxis, GamepadButton, GamepadInput, GamepadPoller, GamepadSource, GamepadState,
@@ -63,13 +67,21 @@ pub struct InputInterest {
     gestures: bool,
     drop_target: bool,
     gamepad: bool,
+    policy: GesturePolicy,
 }
 
 impl InputInterest {
     /// No advanced input.
     #[must_use]
     pub const fn new() -> Self {
-        Self { pointer: false, wheel: false, gestures: false, drop_target: false, gamepad: false }
+        Self {
+            pointer: false,
+            wheel: false,
+            gestures: false,
+            drop_target: false,
+            gamepad: false,
+            policy: GesturePolicy::Exclusive,
+        }
     }
 
     /// Pointer down/move/up/cancel and enter/leave.
@@ -105,6 +117,20 @@ impl InputInterest {
     pub const fn gamepad(mut self) -> Self {
         self.gamepad = true;
         self
+    }
+
+    /// Sets how this node's gestures relate to the host's own handling of
+    /// the same input (see [`GesturePolicy`] and [`arbitrate`]).
+    #[must_use]
+    pub const fn gesture_policy(mut self, policy: GesturePolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// This node's gesture policy.
+    #[must_use]
+    pub const fn policy(self) -> GesturePolicy {
+        self.policy
     }
 
     /// Whether pointer events are wanted.

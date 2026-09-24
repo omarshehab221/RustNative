@@ -4,4 +4,6 @@
 //! operating system can share them, and re-exported here at their
 //! historical paths.
 
-pub use framework_types::geometry::{Alignment, EdgeInsets, Overflow, Point, Rect, Size, SizeMode};
+pub use framework_types::geometry::{
+    Alignment, EdgeInsets, LayoutDirection, Overflow, Point, Rect, Size, SizeMode,
+};

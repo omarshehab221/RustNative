@@ -522,7 +522,20 @@ fn deliver(runtime: &mut Runtime, target: NodeId, phase: PointerPhase, sample: &
     if wants.wants_gestures() {
         let gestures =
             runtime.input.pointer.recognizers.entry(target).or_default().handle(phase, sample);
+        // Gesture arbitration (`framework_core::arbitrate`): inside a
+        // scrolling container, a pan belongs to the container unless the
+        // node's policy claims it.
+        let pan_winner = if inside_scroll_container(runtime, target) {
+            framework_core::arbitrate(framework_core::GestureConflict::ScrollVsPan, wants.policy())
+        } else {
+            framework_core::Winner::Framework
+        };
         for gesture in gestures {
+            if matches!(gesture, framework_core::Gesture::Pan { .. })
+                && !pan_winner.framework_reports()
+            {
+                continue;
+            }
             if !runtime.dispatch_or_quit(Event::Gesture { target, gesture }) {
                 return;
             }
@@ -584,6 +597,24 @@ pub(crate) fn long_press_timer(runtime: &mut Runtime) {
         }
     }
     arm_long_press_timer(runtime);
+}
+
+/// Whether `target` sits inside a container that scrolls.
+fn inside_scroll_container(runtime: &Runtime, target: NodeId) -> bool {
+    let snapshot = runtime.renderer.snapshot();
+    let mut current = snapshot.get(target).and_then(|node| node.parent);
+    while let Some(id) = current {
+        let Some(node) = snapshot.get(id) else { return false };
+        let overflow = node
+            .column_style
+            .map(|style| style.overflow)
+            .or(node.row_style.map(|style| style.overflow));
+        if overflow == Some(framework_core::Overflow::Scroll) {
+            return true;
+        }
+        current = node.parent;
+    }
+    false
 }
 
 /// A wheel message: delivered to the innermost wheel-interested node under

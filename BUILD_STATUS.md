@@ -14,6 +14,72 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 39 — Portable-surface obligations — complete (Windows scope)
+
+**Built.** Every item of the milestone, with its proving test listed in
+`docs/conformance/new-backend-checklist.md`:
+
+- **typed environment** (`framework_core::environment`): `EnvKey`, window
+  and per-subtree values (`provide_env`), upward preferences, and the
+  framework keys (locale, direction, text scale, size class, colour scheme,
+  reduced motion, contrast, posture, safe area, window mode). Windows feeds
+  them from the host (`native::host_traits`) at start and on every
+  `WM_SETTINGCHANGE`;
+- **the invalidation contract** (`docs/invalidation.md`): rendering is now
+  incremental — dirty components and readers of changed values render, and
+  everything else is reused and spliced into its parent's output — with a
+  render log recording each render's `RenderCause`. This is the change with
+  the widest reach in the milestone; every existing core, headless, and
+  Windows test passes under it unchanged;
+- **right-to-left in the layout model**: `EdgeInsets` fields are now
+  `start`/`end`, `LayoutStyle::direction` overrides per subtree,
+  `LayoutResult::physical_rects` mirrors for hosts without their own
+  mirroring (headless), and Windows mirrors natively with
+  `WS_EX_LAYOUTRTL` on the logical rectangles (`rendering::direction`),
+  switchable at run time on the same native objects;
+- **commands** (`framework_core::command`): declared per render, bound by
+  `Node::with_command`, `MenuItem::command`, and shortcuts, routed through
+  the focus chain; disabled everywhere at once. Windows takes shortcuts
+  before a key reaches the control and updates bound menu items (state and
+  `\tCtrl+S` labels) on `WM_INITMENUPOPUP`;
+- **adaptive layout**: window size classes on resize, and
+  `ComponentContext::container_classes` for a container's own class,
+  reported by both backends after layout; **safe area** honoured by the
+  headless backend (zero on Windows);
+- **permissions** (`PermissionState`, `PermissionService`,
+  `WindowsPermissions` over the consent store), **gesture arbitration**
+  (`arbitrate`, applied to scroll-vs-pan on Windows), **thread affinity**
+  (compile-time `!Send` proof; `UiThread`; `ThreadAffinity`), the
+  **escape-hatch contract** (`NativeHandle<Unchecked|Live>`,
+  `framework_windows::native_handle`), the **teardown policy** (Windows
+  releases capture, unclips the cursor, cancels IME composition on a
+  terminating panic and on exit), **per-property mappers**
+  (`framework_windows::register_mapper`), **cursors**
+  (`Node::with_cursor`, `WM_SETCURSOR`), the **surface vocabulary**
+  (`Capability::Surface`), **capability grants' shape** (`GrantSet`,
+  `Services::scoped`, `Granted`), the Windows **ownership module**, and the
+  audit, platform-group, typestate, and permission-mapping documents.
+
+Windows now advertises `Cursors`, `Hover`, `CommandShortcuts`,
+`RightToLeft`, `HostTraits`, `SystemAppearance`, and `Permissions`.
+
+**Verified.** Core: `tests/invalidation.rs` (7), `tests/commands.rs` (2),
+`tests/affinity.rs`, and unit tests for environment, commands, permissions,
+arbitration, grants, handles, affinity. Headless:
+`tests/portable_surface.rs` (4). Windows (real windows on this machine):
+right-to-left mirroring and switching back, commands through F5 and menu
+state, declared cursor, teardown after a deliberate panic with capture and a
+clipped cursor, native handle validation and staleness, a replacing text
+mapper, host traits reaching the environment, permission states read from
+the consent store.
+
+**Not verified / owed.** The `WM_SETTINGCHANGE` path was exercised by its
+parts (reading traits, applying them, rendering) rather than by changing the
+machine's settings during a test. Hover and cursor were driven by sending
+the messages Windows sends, not by moving the physical pointer. Real safe
+areas, hinges, host gesture recognizers, and `NotAsked`/`Limited`/`Denied`
+permission states belong to the mobile and web backends (33, 35, 36, Web D/E).
+
 ### Milestone 45 — Test infrastructure — complete (Windows scope)
 
 **Built.** `crates/framework-headless`, a real backend (`HeadlessPlatform`

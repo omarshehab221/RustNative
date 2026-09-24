@@ -14,6 +14,7 @@
 mod context;
 mod effects;
 mod error;
+mod invalidation;
 mod tree;
 
 pub use context::{
@@ -22,6 +23,7 @@ pub use context::{
 };
 pub use effects::{EffectCleanup, EffectContext};
 pub use error::RenderError;
+pub use invalidation::{RenderCause, RenderRecord};
 pub use tree::ComponentTree;
 
 pub(crate) use context::WindowCommand;

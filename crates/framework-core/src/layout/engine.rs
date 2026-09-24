@@ -94,6 +94,89 @@ pub struct LayoutResult {
     pub measured_items: Vec<MeasuredItem>,
 }
 
+impl LayoutResult {
+    /// Each node's effective layout direction: its own override, else its
+    /// parent's, with the window root taking `base`.
+    #[must_use]
+    pub fn directions(
+        snapshot: &TreeSnapshot,
+        base: super::LayoutDirection,
+    ) -> HashMap<NodeId, super::LayoutDirection> {
+        let mut directions = HashMap::new();
+        for node in snapshot.ordered_nodes() {
+            let inherited =
+                node.parent.and_then(|parent| directions.get(&parent).copied()).unwrap_or(base);
+            directions.insert(node.id, node.layout.direction.unwrap_or(inherited));
+        }
+        directions
+    }
+
+    /// The rectangles as a host *without* its own mirroring must place
+    /// them: every child of a right-to-left container reflected about the
+    /// middle of that container, so start is on the right.
+    ///
+    /// [`Self::rects`] are logical — start is always the left edge of the
+    /// parent — which is what a host that mirrors for itself (Windows'
+    /// `WS_EX_LAYOUTRTL`, a browser's `dir="rtl"`) wants: handing it
+    /// mirrored rectangles would mirror twice. A host that does not (the
+    /// headless backend, a terminal) applies this instead. One layout
+    /// model, and the mirroring is applied exactly once, by whichever layer
+    /// owns it (`PLAN.md` Milestone 39).
+    ///
+    /// ```
+    /// use framework_core::{
+    ///     LayoutDirection, LayoutEngine, LayoutResult, LayoutStyle, Node, NodeId, RowStyle, Size,
+    ///     SizeMode, TreeSnapshot,
+    /// };
+    ///
+    /// let fixed = LayoutStyle::new().width(SizeMode::Fixed(40));
+    /// let row = Node::row_with_layout(
+    ///     "row",
+    ///     [Node::label_with_layout("first", "1", fixed), Node::label_with_layout("second", "2", fixed)],
+    ///     LayoutStyle::new(),
+    ///     RowStyle::new().gap(0),
+    /// );
+    /// let snapshot = TreeSnapshot::from_node(&row)?;
+    /// let result = LayoutEngine::new().layout_result_with(
+    ///     &snapshot,
+    ///     Size::new(200, 50),
+    ///     &framework_core::DefaultIntrinsicMeasurer,
+    ///     &Default::default(),
+    /// );
+    /// let physical = result.physical_rects(&snapshot, LayoutDirection::Rtl);
+    /// // In right-to-left, the first child sits at the right edge.
+    /// let first = physical[&NodeId::from_key("first")];
+    /// assert_eq!(first.x + first.width, 200 - RowStyle::new().padding.start);
+    /// # Ok::<(), framework_core::TreeError>(())
+    /// ```
+    #[must_use]
+    pub fn physical_rects(
+        &self,
+        snapshot: &TreeSnapshot,
+        base: super::LayoutDirection,
+    ) -> HashMap<NodeId, Rect> {
+        let directions = Self::directions(snapshot, base);
+        let mut physical = self.rects.clone();
+        for node in snapshot.ordered_nodes() {
+            let Some(parent) = node.parent else { continue };
+            if !directions.get(&parent).is_some_and(|direction| direction.is_rtl()) {
+                continue;
+            }
+            let (Some(parent_rect), Some(rect)) =
+                (self.rects.get(&parent), physical.get_mut(&node.id))
+            else {
+                continue;
+            };
+            // Parent-local coordinates: reflect within the parent's width.
+            let content_width = self.content_sizes.get(&parent).map_or(parent_rect.width, |size| {
+                i32::try_from(size.width).unwrap_or(i32::MAX).max(parent_rect.width)
+            });
+            rect.x = content_width.saturating_sub(rect.x).saturating_sub(rect.width);
+        }
+        physical
+    }
+}
+
 /// One realized virtual-list item's measured extent along its list's axis.
 ///
 /// Layout places items at the offsets the list's [`ExtentCache`] currently
@@ -407,7 +490,7 @@ impl LayoutEngine {
             // makes a scrollable container work at all.
             let width = child.layout.constraints.clamp_width(width.max(0).min(available_width));
             let height = child.layout.constraints.clamp_height(height.max(0));
-            let x = aligned_start(content.x, margin.left, available_width, width, alignment);
+            let x = aligned_start(content.x, margin.start, available_width, width, alignment);
             let child_rect = Rect::new(x, y, width, height);
             self.layout_node(snapshot, child, child_rect, result, measurer, extents);
 
@@ -425,7 +508,7 @@ impl LayoutEngine {
             .iter()
             .map(|child| {
                 result.rects.get(&child.id).map_or(0, |r| {
-                    r.x.saturating_add(r.width).saturating_add(child.layout.margin.right)
+                    r.x.saturating_add(r.width).saturating_add(child.layout.margin.end)
                 })
             })
             .max()
@@ -472,7 +555,7 @@ impl LayoutEngine {
         let mut fill_index = 0;
         for (index, child) in children.iter().enumerate() {
             let margin = child.layout.margin;
-            x = x.saturating_add(margin.left);
+            x = x.saturating_add(margin.start);
             let width = match child.layout.width {
                 SizeMode::Fixed(value) => value.max(0),
                 SizeMode::Auto => self.preferred_width(snapshot, child, measurer),
@@ -504,7 +587,7 @@ impl LayoutEngine {
             let child_rect = Rect::new(x, y, width, height);
             self.layout_node(snapshot, child, child_rect, result, measurer, extents);
 
-            x = x.saturating_add(width).saturating_add(margin.right);
+            x = x.saturating_add(width).saturating_add(margin.end);
             if index + 1 < children.len() {
                 x = x.saturating_add(gap.max(0));
             }
@@ -513,7 +596,7 @@ impl LayoutEngine {
         // As with Column, measure the unscrolled content first. The scroll
         // offset is a viewport transform and must not feed back into the
         // intrinsic content size.
-        let natural_width = x.saturating_add(padding.right).max(rect.width);
+        let natural_width = x.saturating_add(padding.end).max(rect.width);
         let natural_height = children
             .iter()
             .map(|child| {
@@ -633,7 +716,7 @@ impl LayoutEngine {
                 Axis::Vertical => {
                     let width = child.layout.constraints.clamp_width(cross.max(0));
                     let height = child.layout.constraints.clamp_height(main.max(0));
-                    let x = aligned_start(rect.x, margin.left, available_cross, width, alignment);
+                    let x = aligned_start(rect.x, margin.start, available_cross, width, alignment);
                     cross_end = cross_end.max(x.saturating_add(width));
                     Rect::new(x, rect.y.saturating_add(main_start), width, height)
                 }
@@ -881,7 +964,7 @@ fn ordered_children(snapshot: &TreeSnapshot, parent: NodeId) -> Vec<&TreeNode> {
 
 fn inner_rect(rect: Rect, padding: EdgeInsets) -> Rect {
     Rect::new(
-        rect.x.saturating_add(padding.left),
+        rect.x.saturating_add(padding.start),
         rect.y.saturating_add(padding.top),
         rect.width.saturating_sub(padding.horizontal()).max(0),
         rect.height.saturating_sub(padding.vertical()).max(0),

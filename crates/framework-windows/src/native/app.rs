@@ -71,6 +71,11 @@ pub(crate) fn run_application(
     // initialized until every window has revoked its drop target.
     let _ole = OleApartment::enter();
 
+    // Host traits are in the environment before the first window renders,
+    // so the first frame is already in the person's scheme, scale, and
+    // direction.
+    super::host_traits::apply(application, &super::host_traits::read());
+
     // SAFETY: `application` is borrowed for the whole of this function,
     // and `registry` — along with every `Runtime` it creates, each of which
     // captures a copy of the same borrow — is dropped at the end of it,
@@ -95,6 +100,7 @@ pub(crate) fn run_application(
     let _memory = super::memory_watch::MemoryWatcher::start();
 
     let looped = run_message_loop();
+    super::teardown::restore(&super::teardown::policy());
 
     let mut failure = looped.err();
     for runtime in registry.runtimes.drain().map(|(_, runtime)| runtime) {

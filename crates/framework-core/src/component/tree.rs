@@ -14,12 +14,17 @@ use super::context::{
 };
 use super::effects::{DeclaredEffect, EffectContext, EffectDependencies, EffectEntry};
 use super::error::RenderError;
+use super::invalidation::{RenderCause, RenderRecord};
+use crate::environment::{EnvKey, EnvValue, Environment, Preference, PreferenceKey, Stored};
 use crate::event::Event;
 use crate::identity::{ComponentId, NodeId};
 use crate::node::Node;
 use crate::scheduler::{CompletedTask, Scheduler, TaskScope};
 use crate::services::Services;
 use crate::style::Theme;
+
+/// The descendants that published one preference, with the versions seen.
+type Publishers = Vec<(ComponentId, u64)>;
 
 /// Object-safe facade over `Component`, letting `ComponentTree` store
 /// heterogeneous component types behind one `Box<dyn ManagedComponent>` per
@@ -149,6 +154,38 @@ pub struct ComponentTree {
     paths: HashMap<ComponentId, String>,
     /// Buffered persisted state for this window.
     state: Rc<RefCell<crate::persistence::StateCache>>,
+    /// Each non-root component's parent — what environment lookup walks.
+    parents: HashMap<ComponentId, ComponentId>,
+    /// Components that must render in the next pass, and why.
+    dirty: HashMap<ComponentId, RenderCause>,
+    /// Ancestors of dirty components in the pass in progress: reused, but
+    /// with their dirty descendants' new output spliced in.
+    on_path: HashSet<ComponentId>,
+    /// Whether the pass in progress renders every component.
+    force_pass: bool,
+    /// The window's root environment.
+    environment: Environment,
+    /// The last version handed out to an environment value.
+    env_version: u64,
+    /// What each component provides to its descendants.
+    provided: HashMap<ComponentId, Environment>,
+    /// What a component provided in its previous render, while it renders
+    /// again — so an unchanged value keeps its version.
+    provided_previous: HashMap<ComponentId, Environment>,
+    /// The environment values each component read, and their versions.
+    env_seen: HashMap<ComponentId, HashMap<&'static str, u64>>,
+    /// Upward preferences each component published in its last render.
+    published: HashMap<ComponentId, HashMap<&'static str, Stored>>,
+    /// The preference publishers each component read, and their versions.
+    preferences_seen: HashMap<ComponentId, HashMap<&'static str, Publishers>>,
+    /// Who rendered in the most recent pass, and why.
+    render_log: Vec<RenderRecord>,
+    /// The commands declared in the last render of each component.
+    commands: crate::command::CommandRegistry,
+    /// Laid-out sizes the backend reported for watched nodes.
+    node_sizes: HashMap<NodeId, crate::layout::Size>,
+    /// The container size classes each component read, per node.
+    size_reads: HashMap<ComponentId, Vec<(NodeId, crate::environment::SizeClasses)>>,
 }
 
 impl ComponentTree {
@@ -209,6 +246,21 @@ impl ComponentTree {
             // same program, and distinct for windows of different kinds.
             paths: HashMap::from([(ComponentId::ROOT, std::any::type_name::<C>().to_owned())]),
             state: Rc::new(RefCell::new(state)),
+            parents: HashMap::new(),
+            dirty: HashMap::new(),
+            on_path: HashSet::new(),
+            force_pass: false,
+            environment: Environment::new(),
+            env_version: 0,
+            provided: HashMap::new(),
+            provided_previous: HashMap::new(),
+            env_seen: HashMap::new(),
+            published: HashMap::new(),
+            preferences_seen: HashMap::new(),
+            render_log: Vec::new(),
+            commands: crate::command::CommandRegistry::default(),
+            node_sizes: HashMap::new(),
+            size_reads: HashMap::new(),
         };
         let root_scope =
             TaskScope::new(tree.scheduler.clone(), Rc::clone(&tree.local), ComponentId::ROOT);
@@ -261,20 +313,445 @@ impl ComponentTree {
     /// could act on a `Result` here"
     )]
     pub fn render(&mut self) -> Result<(), RenderError> {
+        self.render_pass(true)
+    }
+
+    /// Renders what the invalidation contract says must render — dirty
+    /// components, and readers of changed environment values — reusing
+    /// every other component's previous output. With `force`, renders
+    /// everything.
+    #[allow(
+        clippy::expect_used,
+        reason = "the standards audit's P1.20 finding requires an identity allocator to fail loudly on \
+    /// exhaustion rather than silently wrap and reuse a live id"
+    )]
+    fn render_pass(&mut self, force: bool) -> Result<(), RenderError> {
         self.pending_render_errors.clear();
-        self.generation =
-            self.generation.checked_add(1).expect("framework render generation space exhausted");
-        let generation = self.generation;
-        let root = self.render_component(ComponentId::ROOT, generation);
-        self.root_view = Some(root);
-        self.rebuild_node_owners();
-        self.commit_effects(generation);
+        self.render_log.clear();
+        let mut force = force || self.root_view.is_none();
+        // A provided value can change while its provider renders, after a
+        // reader has already been reused in the same pass; a second pass
+        // settles it. Three is a backstop, not an expectation.
+        for _ in 0..3 {
+            self.mark_stale_readers();
+            if !force && self.dirty.is_empty() {
+                break;
+            }
+            self.generation = self
+                .generation
+                .checked_add(1)
+                .expect("framework render generation space exhausted");
+            let generation = self.generation;
+            self.force_pass = force;
+            self.on_path = self.ancestors_of_dirty();
+            let root = self.render_or_reuse(ComponentId::ROOT, generation);
+            self.force_pass = false;
+            self.on_path.clear();
+            self.dirty.clear();
+            let mut root = root;
+            let commands = &self.commands;
+            root.apply_command_states(&|id| {
+                commands.state(id, &[]).is_none_or(crate::command::Command::is_enabled)
+            });
+            self.root_view = Some(root);
+            self.rebuild_node_owners();
+            self.commit_effects();
+            force = false;
+        }
 
         self.last_render_error = self.pending_render_errors.first().cloned();
         match &self.last_render_error {
             Some(error) => Err(error.clone()),
             None => Ok(()),
         }
+    }
+
+    /// Who rendered in the most recent render pass, and why — every other
+    /// component was skipped and its previous output reused.
+    #[must_use]
+    pub fn last_render_log(&self) -> &[RenderRecord] {
+        &self.render_log
+    }
+
+    fn mark_dirty(&mut self, id: ComponentId, cause: RenderCause) {
+        self.dirty.entry(id).or_insert(cause);
+    }
+
+    fn ancestors_of_dirty(&self) -> HashSet<ComponentId> {
+        let mut path = HashSet::new();
+        for id in self.dirty.keys() {
+            let mut current = *id;
+            while let Some(parent) = self.parents.get(&current) {
+                if !path.insert(*parent) {
+                    break;
+                }
+                current = *parent;
+            }
+        }
+        path
+    }
+
+    /// Marks every component that read an environment value or preference
+    /// that has since changed.
+    fn mark_stale_readers(&mut self) {
+        let mut stale = Vec::new();
+        for (id, seen) in &self.env_seen {
+            if let Some((name, _)) =
+                seen.iter().find(|(name, version)| self.env_version_at(*id, name) != **version)
+            {
+                stale.push((*id, RenderCause::Environment(name)));
+            }
+        }
+        for (id, seen) in &self.preferences_seen {
+            if let Some((name, _)) =
+                seen.iter().find(|(name, publishers)| &self.publishers(*id, name) != *publishers)
+            {
+                stale.push((*id, RenderCause::Preference(name)));
+            }
+        }
+        for (id, cause) in stale {
+            if self.components.contains_key(&id) {
+                self.mark_dirty(id, cause);
+            }
+        }
+    }
+
+    #[allow(
+        clippy::expect_used,
+        reason = "an invariant this runtime itself just established, not a condition an application can \
+    /// trigger"
+    )]
+    fn render_or_reuse(&mut self, id: ComponentId, generation: u64) -> Node {
+        let has_view = self.components.get(&id).is_some_and(|entry| entry.view.is_some());
+        let cause = if self.force_pass {
+            Some(RenderCause::Forced)
+        } else if !has_view {
+            Some(RenderCause::Initial)
+        } else {
+            self.dirty.remove(&id)
+        };
+        if let Some(cause) = cause {
+            let path = self.paths.get(&id).cloned().unwrap_or_default();
+            self.render_log.push(RenderRecord { component: id, path, cause });
+            return self.render_component(id, generation);
+        }
+        if self.on_path.contains(&id) {
+            // Clean itself, but a descendant is not: keep this component's
+            // output and splice in each changed child's new output.
+            let (mut view, children) = {
+                let entry = self
+                    .components
+                    .get_mut(&id)
+                    .expect("component tree entry must exist while rendering");
+                entry.used_generation = generation;
+                (
+                    entry.view.clone().expect("checked above"),
+                    entry.children.values().copied().collect::<Vec<_>>(),
+                )
+            };
+            for child in children {
+                if self.dirty.contains_key(&child) || self.on_path.contains(&child) {
+                    let previous_root = self
+                        .components
+                        .get(&child)
+                        .and_then(|entry| entry.view.as_ref())
+                        .map(Node::id);
+                    let fresh = self.render_or_reuse(child, generation);
+                    if let Some(previous_root) = previous_root {
+                        replace_subtree(&mut view, previous_root, fresh);
+                    }
+                } else {
+                    self.mark_used(child, generation);
+                }
+            }
+            if let Some(entry) = self.components.get_mut(&id) {
+                entry.view = Some(view.clone());
+            }
+            return view;
+        }
+        self.mark_used(id, generation);
+        self.components.get(&id).and_then(|entry| entry.view.clone()).expect("checked above")
+    }
+
+    fn mark_used(&mut self, id: ComponentId, generation: u64) {
+        let children = match self.components.get_mut(&id) {
+            Some(entry) => {
+                entry.used_generation = generation;
+                entry.children.values().copied().collect::<Vec<_>>()
+            }
+            None => return,
+        };
+        for child in children {
+            self.mark_used(child, generation);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Environment
+    // -----------------------------------------------------------------
+
+    /// Sets `key` in this window's root environment. If the value changed,
+    /// the components that read it re-render — and only they.
+    pub fn set_environment<T: EnvValue>(&mut self, key: &EnvKey<T>, value: T) {
+        self.env_version += 1;
+        if self.environment.set(key, value, self.env_version) {
+            let _ = self.render_pass(false);
+        }
+    }
+
+    /// Copies every value of `environment` into this window's root
+    /// environment — how a window opened later starts from what the
+    /// application's other windows already have.
+    pub(crate) fn inherit_environment(&mut self, environment: &Environment) {
+        let mut changed = false;
+        for (name, stored) in &environment.values {
+            self.env_version += 1;
+            let mut stored = stored.clone();
+            stored.version = self.env_version;
+            self.environment.values.insert(name, stored);
+            changed = true;
+        }
+        if changed {
+            let _ = self.render_pass(false);
+        }
+    }
+
+    /// The nodes whose laid-out size some component reads — what a backend
+    /// reports through [`Self::report_sizes`] after each layout.
+    #[must_use]
+    pub fn watched_nodes(&self) -> Vec<NodeId> {
+        let mut nodes: Vec<NodeId> =
+            self.size_reads.values().flatten().map(|(node, _)| *node).collect();
+        nodes.sort_unstable();
+        nodes.dedup();
+        nodes
+    }
+
+    /// Records laid-out sizes for watched nodes (`C22`: container-relative
+    /// decisions from the constraints layout already has). A component that
+    /// read a node's size classes re-renders only if a class changed — a
+    /// one-pixel resize re-renders nobody. Returns whether anything
+    /// re-rendered, in which case the backend lays out again.
+    pub fn report_sizes(
+        &mut self,
+        sizes: impl IntoIterator<Item = (NodeId, crate::layout::Size)>,
+    ) -> bool {
+        for (node, size) in sizes {
+            self.node_sizes.insert(node, size);
+        }
+        let mut stale = Vec::new();
+        for (component, reads) in &self.size_reads {
+            let changed = reads.iter().any(|(node, seen)| {
+                self.node_sizes.get(node).is_some_and(|size| {
+                    crate::environment::SizeClasses::of(size.width, size.height) != *seen
+                })
+            });
+            if changed {
+                stale.push(*component);
+            }
+        }
+        if stale.is_empty() {
+            return false;
+        }
+        for component in stale {
+            self.mark_dirty(component, RenderCause::Environment("rustnative.container-size"));
+        }
+        let _ = self.render_pass(false);
+        true
+    }
+
+    pub(crate) fn read_container_classes(
+        &mut self,
+        owner: ComponentId,
+        local: NodeId,
+    ) -> Option<crate::environment::SizeClasses> {
+        let node = if owner == ComponentId::ROOT { local } else { NodeId::scoped(owner, local) };
+        let size = self.node_sizes.get(&node).copied();
+        let classes = size.map_or_else(crate::environment::SizeClasses::default, |size| {
+            crate::environment::SizeClasses::of(size.width, size.height)
+        });
+        self.size_reads.entry(owner).or_default().push((node, classes));
+        size.map(|_| classes)
+    }
+
+    /// The commands declared in this window's last render.
+    #[must_use]
+    pub fn commands(&self) -> &crate::command::CommandRegistry {
+        &self.commands
+    }
+
+    pub(crate) fn declare_command(&mut self, owner: ComponentId, command: crate::command::Command) {
+        self.commands.declare(owner, command);
+    }
+
+    /// The focus chain for `focused`: the component owning that node, then
+    /// its ancestors — the order commands are routed in.
+    #[must_use]
+    pub fn focus_chain(&self, focused: Option<NodeId>) -> Vec<ComponentId> {
+        let mut chain = Vec::new();
+        let mut current =
+            focused.and_then(|node| self.node_owners.get(&node)).map(|(owner, _)| *owner);
+        while let Some(owner) = current {
+            chain.push(owner);
+            current = self.parents.get(&owner).copied();
+        }
+        chain
+    }
+
+    /// Invokes command `id` as the focus chain from `focused` routes it,
+    /// delivering [`Event::Command`] to the declaring component. Returns
+    /// whether a declaration was found and enabled.
+    pub fn invoke_command(
+        &mut self,
+        id: crate::command::CommandId,
+        focused: Option<NodeId>,
+    ) -> bool {
+        let chain = self.focus_chain(focused);
+        let Some((owner, command)) = self.commands.resolve(id, &chain) else {
+            return false;
+        };
+        if !command.is_enabled() {
+            return false;
+        }
+        self.update_component(owner, &Event::Command { id });
+        if !self.message_sink.borrow().is_empty() {
+            self.drain_messages();
+        }
+        let _ = self.render_pass(false);
+        true
+    }
+
+    /// Invokes the command whose shortcut is `key` with `modifiers`, if an
+    /// enabled one is declared. Returns whether one was.
+    pub fn handle_shortcut(
+        &mut self,
+        key: crate::event::KeyCode,
+        modifiers: crate::event::KeyModifiers,
+        focused: Option<NodeId>,
+    ) -> bool {
+        let chain = self.focus_chain(focused);
+        let Some((_, command)) = self.commands.for_shortcut(key, modifiers, &chain) else {
+            return false;
+        };
+        let id = command.id();
+        self.invoke_command(id, focused)
+    }
+
+    /// The value of `key` in this window's root environment.
+    #[must_use]
+    pub fn environment<T: EnvValue>(&self, key: &EnvKey<T>) -> T {
+        self.environment.get(key)
+    }
+
+    /// The whole root environment.
+    #[must_use]
+    pub fn root_environment(&self) -> &Environment {
+        &self.environment
+    }
+
+    fn stored_at(&self, id: ComponentId, name: &str) -> Option<&Stored> {
+        let mut current = self.parents.get(&id).copied();
+        while let Some(ancestor) = current {
+            if let Some(stored) = self.provided.get(&ancestor).and_then(|env| env.values.get(name))
+            {
+                return Some(stored);
+            }
+            current = self.parents.get(&ancestor).copied();
+        }
+        self.environment.values.get(name)
+    }
+
+    fn env_version_at(&self, id: ComponentId, name: &str) -> u64 {
+        self.stored_at(id, name).map_or(0, |stored| stored.version)
+    }
+
+    pub(crate) fn read_env<T: EnvValue>(&mut self, id: ComponentId, key: &EnvKey<T>) -> T {
+        let (value, version) = match self.stored_at(id, key.name()) {
+            Some(stored) => (stored.get::<T>(), stored.version),
+            None => (None, 0),
+        };
+        self.env_seen.entry(id).or_default().insert(key.name(), version);
+        value.unwrap_or_else(|| key.default_value())
+    }
+
+    pub(crate) fn provide_env<T: EnvValue>(&mut self, id: ComponentId, key: &EnvKey<T>, value: T) {
+        let previous = self
+            .provided_previous
+            .get(&id)
+            .and_then(|env| env.values.get(key.name()))
+            .filter(|stored| stored.same_as(&value))
+            .map(|stored| stored.version);
+        let version = previous.unwrap_or_else(|| {
+            self.env_version += 1;
+            self.env_version
+        });
+        self.provided.entry(id).or_default().values.insert(key.name(), Stored::new(version, value));
+    }
+
+    pub(crate) fn publish<T: Preference>(
+        &mut self,
+        id: ComponentId,
+        key: &PreferenceKey<T>,
+        value: T,
+    ) {
+        let unchanged = self
+            .published
+            .get(&id)
+            .and_then(|values| values.get(key.name()))
+            .is_some_and(|stored| stored.same_as(&value));
+        if unchanged {
+            return;
+        }
+        self.env_version += 1;
+        let version = self.env_version;
+        self.published.entry(id).or_default().insert(key.name(), Stored::new(version, value));
+    }
+
+    /// Every descendant of `id` that published `name`, with the version,
+    /// in a stable order.
+    fn publishers(&self, id: ComponentId, name: &str) -> Vec<(ComponentId, u64)> {
+        let mut out = Vec::new();
+        // While `id` itself renders, its entry is out of the map; its
+        // children as of the start of that render are in `pending_children`.
+        let mut stack: Vec<ComponentId> = self
+            .components
+            .get(&id)
+            .map(|entry| entry.children.values().copied().collect())
+            .or_else(|| {
+                self.pending_children.get(&id).map(|children| children.values().copied().collect())
+            })
+            .unwrap_or_default();
+        stack.sort_unstable_by(|a, b| b.cmp(a));
+        while let Some(current) = stack.pop() {
+            if let Some(stored) = self.published.get(&current).and_then(|values| values.get(name)) {
+                out.push((current, stored.version));
+            }
+            if let Some(entry) = self.components.get(&current) {
+                let mut children: Vec<_> = entry.children.values().copied().collect();
+                children.sort_unstable_by(|a, b| b.cmp(a));
+                stack.extend(children);
+            }
+        }
+        out
+    }
+
+    pub(crate) fn read_preference<T: Preference>(
+        &mut self,
+        id: ComponentId,
+        key: &PreferenceKey<T>,
+    ) -> Option<T> {
+        let publishers = self.publishers(id, key.name());
+        let value = publishers
+            .iter()
+            .filter_map(|(publisher, _)| {
+                self.published
+                    .get(publisher)
+                    .and_then(|values| values.get(key.name()))
+                    .and_then(Stored::get::<T>)
+            })
+            .reduce(T::reduce);
+        self.preferences_seen.entry(id).or_default().insert(key.name(), publishers);
+        value
     }
 
     /// The first [`RenderError`] detected during the most recent
@@ -309,6 +786,21 @@ impl ComponentTree {
     /// message it caused to be sent) changed component state. Returns
     /// whether the event was delivered to a component.
     pub fn dispatch(&mut self, event: Event) -> bool {
+        // A node bound to a command invokes it when activated.
+        if let Event::Click { target } = &event {
+            let bound = self.root_view.as_ref().and_then(|root| {
+                let mut found = None;
+                root.visit(&mut |node, _, _| {
+                    if node.id() == *target {
+                        found = node.command();
+                    }
+                });
+                found
+            });
+            if let Some(command) = bound {
+                return self.invoke_command(command, Some(*target));
+            }
+        }
         let (owner, event) = match event.target() {
             Some(target) => match self.node_owners.get(&target).copied().or_else(|| {
                 self.local_node_owners
@@ -336,7 +828,7 @@ impl ComponentTree {
         }
 
         if handled || had_messages {
-            let _ = self.render();
+            let _ = self.render_pass(false);
         }
 
         handled || had_messages
@@ -359,6 +851,7 @@ impl ComponentTree {
             };
             if entry.component.message_any(message) {
                 entry.component.updated();
+                self.dirty.entry(target).or_insert(RenderCause::Message);
                 changed = true;
             } else {
                 // See `drain_messages` below for why this is not a normal,
@@ -378,7 +871,7 @@ impl ComponentTree {
             self.components.insert(target, entry);
         }
         if changed {
-            let _ = self.render();
+            let _ = self.render_pass(false);
         }
         changed
     }
@@ -452,7 +945,10 @@ impl ComponentTree {
     /// The re-render's first [`RenderError`], as [`Self::render`] reports it.
     pub fn set_theme(&mut self, theme: Theme) -> Result<(), RenderError> {
         self.theme = theme;
-        self.render()
+        for id in self.components.keys().copied().collect::<Vec<_>>() {
+            self.mark_dirty(id, RenderCause::Theme);
+        }
+        self.render_pass(false)
     }
 
     /// Returns the tree's active theme.
@@ -493,6 +989,7 @@ impl ComponentTree {
             };
             if entry.component.message_any(message) {
                 entry.component.updated();
+                self.dirty.entry(target).or_insert(RenderCause::Message);
             } else {
                 // `message_any` returns `false` only when the boxed
                 // `Message` failed to downcast to the target component's
@@ -604,6 +1101,7 @@ impl ComponentTree {
                 escape_key(&key)
             );
             self.paths.insert(id, path);
+            self.parents.insert(id, parent);
             let mut component = constructor(props);
             component.mounted();
             self.components.insert(
@@ -636,12 +1134,13 @@ impl ComponentTree {
                     entry.component.props_changed();
                 }
                 self.components.insert(id, entry);
+                self.mark_dirty(id, RenderCause::Props);
             }
 
             self.pending_children.entry(parent).or_default().insert(key.clone(), id);
         }
 
-        self.render_component(id, generation)
+        self.render_or_reuse(id, generation)
     }
 
     #[allow(
@@ -658,7 +1157,15 @@ impl ComponentTree {
         let task_scope = entry.task_scope.clone();
         self.pending_children.insert(id, entry.children.clone());
         self.pending_effects.insert(id, Vec::new());
+        self.env_seen.remove(&id);
+        self.preferences_seen.remove(&id);
+        self.commands.clear_owner(id);
+        self.size_reads.remove(&id);
+        if let Some(previous) = self.provided.remove(&id) {
+            self.provided_previous.insert(id, previous);
+        }
         let mut node = entry.component.render(self, id, generation, task_scope);
+        self.provided_previous.remove(&id);
         let child_node_ids = self
             .pending_children
             .get(&id)
@@ -689,12 +1196,10 @@ impl ComponentTree {
         node
     }
 
-    fn commit_effects(&mut self, generation: u64) {
-        let mut components = self
-            .components
-            .iter()
-            .filter_map(|(id, entry)| (entry.used_generation == generation).then_some(*id))
-            .collect::<Vec<_>>();
+    fn commit_effects(&mut self) {
+        // Only components that rendered declared effects this pass; a
+        // skipped component keeps the effects it already has.
+        let mut components = self.pending_effects.keys().copied().collect::<Vec<_>>();
         components.sort();
         for id in components {
             self.commit_component_effects(id);
@@ -825,6 +1330,7 @@ impl ComponentTree {
             return;
         };
         self.paths.remove(&id);
+        self.forget(id);
 
         // Structured ownership ends with the component lifetime: its tasks
         // are cancelled here, and its animations are queued for the backend
@@ -841,6 +1347,20 @@ impl ComponentTree {
         entry.component.unmounted();
     }
 
+    /// Drops the invalidation and environment bookkeeping of a removed
+    /// component.
+    fn forget(&mut self, id: ComponentId) {
+        self.parents.remove(&id);
+        self.dirty.remove(&id);
+        self.provided.remove(&id);
+        self.provided_previous.remove(&id);
+        self.env_seen.remove(&id);
+        self.published.remove(&id);
+        self.preferences_seen.remove(&id);
+        self.commands.clear_owner(id);
+        self.size_reads.remove(&id);
+    }
+
     fn update_component(&mut self, id: ComponentId, event: &Event) -> bool {
         let Some(mut entry) = self.components.remove(&id) else {
             return false;
@@ -849,6 +1369,7 @@ impl ComponentTree {
         entry.component.update(event.clone());
         entry.component.updated();
         self.components.insert(id, entry);
+        self.mark_dirty(id, RenderCause::Event);
         true
     }
 
@@ -969,4 +1490,37 @@ fn escape_key(key: &str) -> String {
         }
     }
     escaped
+}
+
+/// Replaces the subtree rooted at `target` inside `root` with `fresh`,
+/// returning whether it was found. How a reused component's output takes a
+/// re-rendered child's new output without the parent rendering again.
+fn replace_subtree(root: &mut Node, target: NodeId, fresh: Node) -> bool {
+    if root.id() == target {
+        *root = fresh;
+        return true;
+    }
+    let children = match root {
+        Node::Column(column) => column.children_mut(),
+        Node::Row(row) => row.children_mut(),
+        _ => return false,
+    };
+    let mut fresh = Some(fresh);
+    for child in children.iter_mut() {
+        if child.id() == target {
+            if let Some(fresh) = fresh.take() {
+                *child = fresh;
+            }
+            return true;
+        }
+    }
+    for child in children.iter_mut() {
+        if let Some(value) = fresh.take() {
+            if replace_subtree(child, target, value.clone()) {
+                return true;
+            }
+            fresh = Some(value);
+        }
+    }
+    false
 }

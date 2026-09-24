@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use framework_core::{
-    Application, Component, ComponentContext, Event, MenuBar, MenuItem, Node, PanicPolicy, Size,
-    Window, WindowId,
+    Application, Component, ComponentContext, Event, LayoutStyle, MenuBar, MenuItem, Node,
+    PanicPolicy, Size, SizeMode, Window, WindowId,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetFocus, IsWindowEnabled, SetFocus, VK_TAB,
@@ -753,13 +753,386 @@ fn native_window_matches_its_visual_golden() {
     let mut application = Application::new(Recorder::new(log.clone()), window("visual"));
     // SAFETY: `application` outlives `harness`.
     let mut harness = unsafe { NativeHarness::attach(&mut application) };
-    harness.pump();
-    let capture = super::capture::capture_client(harness.hwnd(WindowId::PRIMARY))
-        .expect("PrintWindow captures the client area");
+    // A window that has not painted yet renders as one flat colour; give
+    // it a few pumps (other tests' windows may have just been destroyed and
+    // the desktop is still recomposing) before taking the capture.
+    let mut capture = None;
+    for _ in 0..20 {
+        harness.pump();
+        std::thread::sleep(Duration::from_millis(25));
+        let taken = super::capture::capture_client(harness.hwnd(WindowId::PRIMARY));
+        if taken.as_ref().is_some_and(|image| !image.is_uniform()) {
+            capture = taken;
+            break;
+        }
+    }
+    let capture = capture.expect("PrintWindow captures a painted client area");
     super::capture::assert_matches_golden(
         &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens/windows/counter.bmp"),
         &capture,
     );
+}
+
+/// Two fixed-width labels in a row, for direction tests.
+struct TwoInARow;
+
+impl Component for TwoInARow {
+    type Props = ();
+    type Message = ();
+    fn new((): ()) -> Self {
+        Self
+    }
+    fn props(&self) -> &() {
+        &()
+    }
+    fn set_props(&mut self, (): ()) {}
+    fn view(&self) -> Node {
+        let fixed = LayoutStyle::new().width(SizeMode::Fixed(80));
+        Node::row(
+            "row",
+            [
+                Node::label_with_layout("first", "First", fixed),
+                Node::label_with_layout("second", "Second", fixed),
+            ],
+        )
+    }
+    fn update(&mut self, _event: Event) {}
+}
+
+fn screen_left(hwnd: windows_sys::Win32::Foundation::HWND) -> i32 {
+    let mut rect = windows_sys::Win32::Foundation::RECT::default();
+    // SAFETY: `hwnd` is a live control owned by the harness.
+    let read =
+        unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &raw mut rect) };
+    assert_ne!(read, 0);
+    rect.left
+}
+
+/// A right-to-left locale mirrors the window through Windows' own
+/// mirroring, and switching back at run time restores it — on the same
+/// native objects.
+///
+/// Catches: mirroring applied twice (core rectangles flipped *and*
+/// `WS_EX_LAYOUTRTL`, which puts the row back in left-to-right order), or
+/// not at all.
+#[test]
+fn native_right_to_left_locale_mirrors_the_window() {
+    let mut application = Application::new(TwoInARow, window("rtl"));
+    application.set_locale(framework_core::Locale::new("ar-EG"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let first = harness.expect_control(WindowId::PRIMARY, "first");
+    let second = harness.expect_control(WindowId::PRIMARY, "second");
+    assert!(super::rendering::direction::is_rtl(harness.hwnd(WindowId::PRIMARY)));
+    assert!(
+        screen_left(first) > screen_left(second),
+        "in right-to-left the first item is on the right"
+    );
+
+    harness.with_runtime_mut(WindowId::PRIMARY, |runtime| {
+        runtime.with_application(|application| {
+            application.set_locale(framework_core::Locale::new("en-GB"));
+        });
+        runtime.render().expect("re-render after the locale change");
+    });
+    harness.pump();
+    assert_eq!(harness.expect_control(WindowId::PRIMARY, "first"), first, "same native object");
+    assert!(!super::rendering::direction::is_rtl(harness.hwnd(WindowId::PRIMARY)));
+    assert!(screen_left(first) < screen_left(second), "left-to-right again");
+}
+
+const REFRESH: framework_core::CommandId = framework_core::CommandId::new("test.refresh");
+
+/// Declares one command, bound to F5 and to a menu item, enabled only after
+/// a first click.
+struct Refresher {
+    armed: bool,
+    refreshes: u32,
+}
+
+impl Component for Refresher {
+    type Props = ();
+    type Message = ();
+    fn new((): ()) -> Self {
+        Self { armed: false, refreshes: 0 }
+    }
+    fn props(&self) -> &() {
+        &()
+    }
+    fn set_props(&mut self, (): ()) {}
+    fn view(&self) -> Node {
+        Node::column("root", [])
+    }
+    fn update(&mut self, event: Event) {
+        match event {
+            Event::Command { id } if id == REFRESH => self.refreshes += 1,
+            Event::Click { .. } => self.armed = true,
+            _ => {}
+        }
+    }
+    fn render(&mut self, context: &mut ComponentContext<'_, ()>) -> Node {
+        context.command(
+            framework_core::Command::new(REFRESH, "Refresh")
+                .shortcut(framework_core::Shortcut::new(
+                    framework_core::KeyCode::Function(5),
+                    framework_core::KeyModifiers::default(),
+                ))
+                .enabled(self.armed),
+        );
+        Node::column(
+            "root",
+            [
+                Node::button("arm", "Arm"),
+                Node::label("count", format!("refreshes: {}", self.refreshes)),
+            ],
+        )
+    }
+}
+
+fn menu_item_grayed(hwnd: windows_sys::Win32::Foundation::HWND, command_id: u16) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetMenu, GetMenuState, GetSubMenu, MF_BYCOMMAND, MF_GRAYED, WM_INITMENUPOPUP,
+    };
+    // SAFETY: `hwnd` is the harness's live window, which owns its menu.
+    unsafe {
+        let popup = GetSubMenu(GetMenu(hwnd), 0);
+        windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW(
+            hwnd,
+            WM_INITMENUPOPUP,
+            popup as usize,
+            0,
+        );
+        GetMenuState(popup, u32::from(command_id), MF_BYCOMMAND) & MF_GRAYED != 0
+    }
+}
+
+/// A command's shortcut and its menu item follow its live declaration on
+/// Windows: disabled, the item is greyed and F5 is an ordinary key; enabled,
+/// F5 invokes it.
+///
+/// Catches: shortcut handling that ignores the enabled state, and menu
+/// items whose state is fixed at the moment the menu was built.
+#[test]
+fn native_commands_drive_shortcuts_and_menu_state() {
+    let menu = MenuBar::new([MenuItem::submenu(
+        "view",
+        "View",
+        [MenuItem::command("view-refresh", "Refresh", REFRESH)],
+    )]);
+    let mut application = Application::new(Refresher::new(()), window("commands").with_menu(menu));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let hwnd = harness.hwnd(WindowId::PRIMARY);
+    let command_id = harness
+        .with_runtime(WindowId::PRIMARY, |runtime| {
+            runtime
+                .menu_commands
+                .iter()
+                .find(|(_, item)| **item == framework_core::NodeId::from_key("view-refresh"))
+                .map(|(id, _)| *id)
+        })
+        .expect("the item has a native command id");
+
+    assert!(menu_item_grayed(hwnd, command_id), "disabled until armed");
+    harness.press_key(
+        WindowId::PRIMARY,
+        u32::from(windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_F5),
+    );
+    let count = harness.expect_control(WindowId::PRIMARY, "count");
+    assert_eq!(super::util::window_text(count), "refreshes: 0");
+
+    harness.click(WindowId::PRIMARY, "arm");
+    assert!(!menu_item_grayed(hwnd, command_id), "enabled once armed");
+    harness.press_key(
+        WindowId::PRIMARY,
+        u32::from(windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_F5),
+    );
+    assert_eq!(super::util::window_text(count), "refreshes: 1");
+}
+
+/// A button that declares the hand cursor.
+struct Pointy;
+
+impl Component for Pointy {
+    type Props = ();
+    type Message = ();
+    fn new((): ()) -> Self {
+        Self
+    }
+    fn props(&self) -> &() {
+        &()
+    }
+    fn set_props(&mut self, (): ()) {}
+    fn view(&self) -> Node {
+        Node::column(
+            "root",
+            [
+                Node::button("link", "Link").with_cursor(framework_core::Cursor::Pointer),
+                Node::button("plain", "Plain"),
+            ],
+        )
+    }
+    fn update(&mut self, _event: Event) {}
+}
+
+/// `Node::with_cursor` shows the system's own cursor over the node, and a
+/// node without one gets the default processing.
+///
+/// Catches: a declared cursor that never reaches `WM_SETCURSOR` (it goes
+/// to the control first, then up through `DefWindowProc` to our windows).
+#[test]
+fn native_declared_cursor_is_shown() {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetCursor, HTCLIENT, IDC_HAND, LoadCursorW, WM_SETCURSOR,
+    };
+    let mut application = Application::new(Pointy, window("cursor"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let link = harness.expect_control(WindowId::PRIMARY, "link");
+    let hwnd = harness.hwnd(WindowId::PRIMARY);
+    // What `DefWindowProc` does for the button: ask its parents first.
+    let handled =
+        harness.send(hwnd, WM_SETCURSOR, link as usize, isize::try_from(HTCLIENT).unwrap_or(1));
+    assert_eq!(handled, 1, "the declared cursor was set");
+    // SAFETY: loading a predefined system cursor.
+    let hand_cursor = unsafe { LoadCursorW(std::ptr::null_mut(), IDC_HAND) };
+    // SAFETY: `GetCursor` takes no arguments.
+    assert_eq!(unsafe { GetCursor() }, hand_cursor);
+    let plain = harness.expect_control(WindowId::PRIMARY, "plain");
+    assert_eq!(
+        harness.send(hwnd, WM_SETCURSOR, plain as usize, isize::try_from(HTCLIENT).unwrap_or(1)),
+        0
+    );
+}
+
+/// A component panic under the terminating policy restores the host first:
+/// the pointer capture is released and the cursor unclipped (the teardown
+/// policy of Milestone 39, verified by panicking on purpose).
+#[test]
+fn native_panic_restores_capture_and_cursor_clip() {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetCapture, SetCapture};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        ClipCursor, GetClipCursor, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+    };
+
+    /// Whatever happens, the person's cursor is never left clipped.
+    struct Unclip;
+    impl Drop for Unclip {
+        fn drop(&mut self) {
+            // SAFETY: a null rectangle unclips.
+            unsafe { ClipCursor(std::ptr::null()) };
+        }
+    }
+    let _unclip = Unclip;
+
+    let mut application = Application::new(Exploder::new(()), window("teardown"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let hwnd = harness.hwnd(WindowId::PRIMARY);
+    let small = RECT { left: 10, top: 10, right: 60, bottom: 60 };
+    // SAFETY: `hwnd` is live; `small` is a valid rectangle.
+    unsafe {
+        SetCapture(hwnd);
+        ClipCursor(&raw const small);
+    }
+
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    harness.click(WindowId::PRIMARY, "boom");
+    std::panic::set_hook(previous_hook);
+
+    // SAFETY: plain queries.
+    let (capture, clip, width, height) = unsafe {
+        let mut clip = RECT::default();
+        GetClipCursor(&raw mut clip);
+        (
+            GetCapture(),
+            clip,
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    };
+    assert!(capture.is_null(), "the capture was released");
+    assert!(
+        clip.right - clip.left >= width.min(1000) && clip.bottom - clip.top >= height.min(700),
+        "unclipped: {}x{}",
+        clip.right - clip.left,
+        clip.bottom - clip.top
+    );
+}
+
+/// The escape hatch: a node's `HWND` is obtainable, validates while the
+/// object lives, and goes stale when the object is destroyed.
+#[test]
+fn native_handle_validates_and_goes_stale() {
+    let log = log();
+    let mut application = Application::new(Reconciler::new(log.clone()), window("handle"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let ui = framework_core::UiThread::claim();
+    let (id, hwnd) = harness.with_runtime(WindowId::PRIMARY, |runtime| {
+        let node = runtime
+            .renderer
+            .snapshot()
+            .nodes()
+            .find(|node| node.kind == framework_core::NodeKind::Label)
+            .map(|node| node.id)
+            .expect("a label");
+        (
+            node,
+            runtime
+                .renderer
+                .registry
+                .get(node)
+                .map(super::registry::NativeObject::hwnd)
+                .expect("realized"),
+        )
+    });
+    let handle = crate::native_handle(&ui, WindowId::PRIMARY, id).expect("a handle");
+    let live = crate::validate_native_handle(&ui, WindowId::PRIMARY, handle).expect("alive");
+    assert_eq!(live.raw(), hwnd as isize);
+    drop(harness);
+    drop(application);
+    assert!(crate::validate_native_handle(&ui, WindowId::PRIMARY, handle).is_err(), "destroyed");
+}
+
+/// A replacing text mapper registered for one node's key presents that
+/// control its own way; its neighbours keep the built-in mapper, and the
+/// registration is listed for the inspector.
+#[test]
+fn native_text_mapper_replaces_one_control() {
+    use windows_sys::Win32::UI::WindowsAndMessaging::SetWindowTextW;
+    crate::clear_mappers();
+    crate::register_mapper(
+        crate::MapperTarget::Key("go".into()),
+        crate::MappedProperty::Text,
+        crate::MapperMode::Replace,
+        |context| {
+            let text =
+                super::util::wide(format!("[{}]", context.node.text.as_deref().unwrap_or("")));
+            // SAFETY: the mapper is handed a live control's `HWND`.
+            unsafe {
+                SetWindowTextW(context.hwnd as windows_sys::Win32::Foundation::HWND, text.as_ptr())
+            };
+        },
+    );
+    let log = log();
+    let mut application = Application::new(Recorder::new(log.clone()), window("mapper"));
+    // SAFETY: `application` outlives `harness`.
+    let mut harness = unsafe { NativeHarness::attach(&mut application) };
+    harness.pump();
+    let go = harness.expect_control(WindowId::PRIMARY, "go");
+    assert_eq!(super::util::window_text(go), "[Go]");
+    let caption = harness.expect_control(WindowId::PRIMARY, "caption");
+    assert_eq!(super::util::window_text(caption), "clicks: 0", "other controls are unaffected");
+    assert_eq!(crate::active_mappers().len(), 1);
+    crate::clear_mappers();
 }
 
 /// A panic inside a component is caught at the `WNDPROC` boundary, recorded

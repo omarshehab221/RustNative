@@ -100,6 +100,10 @@ pub struct TreeNode {
     /// node's own flag: a node inside a hidden container is hidden too,
     /// which [`TreeSnapshot::is_effectively_hidden`] answers.
     pub hidden: bool,
+    /// The pointer cursor declared for this node (see
+    /// [`crate::Node::with_cursor`]); a backend shows the nearest declared
+    /// cursor walking up from the node under the pointer.
+    pub cursor: Option<crate::input::Cursor>,
 }
 
 impl TreeNode {
@@ -137,6 +141,7 @@ impl TreeNode {
             draw_list: node.draw_list().cloned(),
             tabs: node.tabs().cloned(),
             hidden: node.is_hidden(),
+            cursor: node.cursor(),
         }
     }
 }

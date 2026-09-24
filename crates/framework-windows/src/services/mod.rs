@@ -6,6 +6,8 @@ pub mod clipboard;
 pub mod dialogs;
 pub mod notifications;
 #[cfg(windows)]
+pub mod permissions;
+#[cfg(windows)]
 pub mod state_store;
 pub mod system;
 

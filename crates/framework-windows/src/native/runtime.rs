@@ -71,12 +71,31 @@ impl Runtime {
     }
 
     pub(crate) fn render(&mut self) -> Result<(), Error> {
-        let Some((tree, theme)) = self.with_application(|application| {
-            application.view_for(self.window_id).map(|tree| (tree, application.theme().clone()))
+        let Some((tree, theme, direction)) = self.with_application(|application| {
+            application.view_for(self.window_id).map(|tree| {
+                (tree, application.theme().clone(), application.layout_direction(self.window_id))
+            })
         }) else {
             return Ok(());
         };
+        let direction_changed = self.renderer.direction.set_base(direction);
         self.renderer.render(&tree, self.window, &theme)?;
+        if direction_changed {
+            // Nothing in the tree moved, but every position now reads from
+            // the other edge.
+            self.renderer.relayout(self.window);
+        }
+        if self.report_container_sizes() {
+            // A component chose a different arrangement for the space its
+            // container was given; realize that once. A second change would
+            // mean a layout that oscillates between classes, and waits for
+            // the next render rather than looping here.
+            let refreshed =
+                self.with_application(|application| application.view_for(self.window_id));
+            if let Some(tree) = refreshed {
+                self.renderer.render(&tree, self.window, &theme)?;
+            }
+        }
         input::after_render(self);
         animation::after_render(self);
         // A render can change how many items a list has, or how large they
@@ -86,8 +105,32 @@ impl Runtime {
         Ok(())
     }
 
+    /// Reports the laid-out sizes of nodes a component decides by. Returns
+    /// whether the application re-rendered as a result.
+    fn report_container_sizes(&mut self) -> bool {
+        let window = self.window_id;
+        let watched = self.with_application(|application| application.watched_nodes(window));
+        if watched.is_empty() {
+            return false;
+        }
+        let sizes: Vec<_> = watched
+            .into_iter()
+            .filter_map(|node| self.renderer.layout_size(node).map(|size| (node, size)))
+            .collect();
+        self.with_application(|application| application.report_sizes(window, sizes))
+    }
+
     pub(crate) fn relayout(&mut self) {
         self.renderer.relayout(self.window);
+        if self.report_container_sizes() {
+            // The new size moved a container across a class boundary.
+            let rendered = self.render();
+            super::win32::best_effort(
+                rendered.is_ok(),
+                "render(container size)",
+                "the previous arrangement stays until the next render",
+            );
+        }
         // Layout is where a node's position and size change, so it is
         // where their transitions begin.
         animation::after_render(self);
@@ -148,6 +191,12 @@ impl Runtime {
         let handled = self
             .with_application(|application| application.dispatch_to_window(self.window_id, event));
 
+        self.finish_application_change(handled)
+    }
+
+    /// Everything that follows a change the application made in answer to
+    /// input — an event, a command, a shortcut.
+    pub(crate) fn finish_application_change(&mut self, handled: bool) -> Result<(), Error> {
         // ComponentTree::dispatch updates component state and rebuilds the
         // framework tree. Reconcile that new tree back into native controls
         // immediately so the visible UI stays in sync with Rust state.

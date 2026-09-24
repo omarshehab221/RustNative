@@ -91,6 +91,8 @@ impl HeadlessPlatform {
                     application.theme(),
                     state.size(),
                     self.measurer,
+                    application.layout_direction(id),
+                    application.environment_for(id, &framework_core::keys::SAFE_AREA),
                 );
             }
         }

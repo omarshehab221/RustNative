@@ -24,5 +24,5 @@ pub mod geometry;
 pub mod scalar;
 
 pub use color::Color;
-pub use geometry::{Alignment, EdgeInsets, Overflow, Point, Rect, Size, SizeMode};
+pub use geometry::{Alignment, EdgeInsets, LayoutDirection, Overflow, Point, Rect, Size, SizeMode};
 pub use scalar::Scalar;
