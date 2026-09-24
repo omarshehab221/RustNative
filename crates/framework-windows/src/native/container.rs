@@ -6,7 +6,7 @@ use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{FillRect, HDC};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetClientRect, SendMessageW, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
-    WM_CTLCOLORSTATIC, WM_ERASEBKGND, WM_GETOBJECT, WM_NOTIFY,
+    WM_CTLCOLORSTATIC, WM_ERASEBKGND, WM_GETOBJECT, WM_NCDESTROY, WM_NOTIFY, WM_SIZE,
 };
 
 use super::context::{root_window, with_runtime};
@@ -143,9 +143,19 @@ fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM)
             // ownership).
             let filled = unsafe { FillRect(hdc, &raw const client, brush) } != 0;
             best_effort(filled, "FillRect", "the container is left unpainted for one frame");
+            super::rendering::shape::paint_border(hwnd, hdc, &client);
             // Non-zero tells Win32 the background is erased and it must not
             // erase it again with the class brush.
             1
+        }
+        WM_SIZE => {
+            // A rounded container's region follows its size.
+            super::rendering::shape::apply_region(hwnd);
+            default()
+        }
+        WM_NCDESTROY => {
+            super::rendering::shape::forget(hwnd);
+            default()
         }
         _ => default(),
     }

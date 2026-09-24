@@ -64,6 +64,14 @@ impl Platform for WindowsPlatform {
         )
     }
 
+    fn style_capabilities(&self) -> framework_core::StyleCapabilities {
+        framework_style::WINDOWS
+    }
+
+    fn unit_mapping(&self) -> Option<framework_core::UnitMapping> {
+        Some(framework_style::WINDOWS_UNITS)
+    }
+
     fn capabilities(&self) -> PlatformCapabilities {
         PlatformCapabilities::new([
             Capability::Clipboard,

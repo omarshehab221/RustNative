@@ -1,0 +1,5 @@
+error: `colr` is not a property in the vocabulary — did you mean `color`?
+ --> tests/style_ui/unknown_declaration.rs:4:61
+  |
+4 |     let _ = Node::label("l", "x").with_declarations(styles!("colr: red"));
+  |                                                             ^^^^^^^^^^^

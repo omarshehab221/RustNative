@@ -230,7 +230,7 @@ Milestone 21 established that a node's visual style is *resolved* in the core �
 
 ```text
    style properties                    utility classes
-   .with_style(..) / style={..}        .with_class("..") / class=".."
+   .with_style(..) / style={..}        .with_class(classes!("..")) / class=".."
           │                                   │  resolved at build time
           └────────────► declarations ◄───────┘
                               │  tokens stay references
@@ -1983,7 +1983,8 @@ already needs:
   declaration parser, which is what keeps the vocabulary from being a closed
   list;
 - **class strings are literals**, resolved where they are written — in
-  `.with_class("…")` on a builder chain, in `class="…"` on a markup element
+  `.with_class(classes!("…"))` on a builder chain (the macro is what checks
+  the string at compile time), in `class="…"` on a markup element
   (the same `with_` rule the markup grammar already applies to modifiers), and in
   the component library's own props. A computed class name is a compile error
   naming the rule, rather than a string that silently styles nothing;
@@ -2072,6 +2073,15 @@ build with a spanned diagnostic, `app.css` drives the theme with a live token
 switch on Windows, `rustnative expand` shows the lowering, every backend's
 capability table and unit mapping are recorded, and no documented style example
 exists in only one spelling.
+
+**Status (2026-09-24): implemented** — `crates/framework-style` (declaration
+vocabulary, Tailwind CSS v4.1.13 utilities over the vendored default theme,
+`app.css`, capability tables and unit mappings), `classes!`/`styles!` and
+markup `class=`/`style=`, resolution in the core against theme tokens and the
+environment, `compile_styles()`/`app_theme!()`, `rustnative expand --classes`,
+and the Windows table read back from native objects. Deviation: the builder
+spelling is `.with_class(classes!("…"))`. Owed by the deferred backends:
+their own tables and unit mappings. See `BUILD_STATUS.md`.
 
 **Depends on** Milestone 53 for the attribute surface it shares, and on
 Milestone 39 for the size classes its responsive variants key to. Neither

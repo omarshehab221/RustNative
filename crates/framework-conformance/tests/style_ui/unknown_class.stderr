@@ -1,0 +1,5 @@
+error: `bg-bleu-500` is not a class in the vocabulary — did you mean `bg-blue-500`?
+ --> tests/style_ui/unknown_class.rs:4:55
+  |
+4 |     let _ = Node::label("l", "x").with_class(classes!("p-4 bg-bleu-500"));
+  |                                                       ^^^^^^^^^^^^^^^^^

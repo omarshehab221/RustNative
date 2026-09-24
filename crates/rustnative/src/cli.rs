@@ -42,10 +42,19 @@ enum Command {
         syntax: crate::project::Syntax,
     },
     /// Print the builder form a file's markup lowers to — a `.rsx` file, or
-    /// the `rsx!` calls in a `.rs` file.
+    /// the `rsx!` calls in a `.rs` file — or, with `--classes`/`--styles`,
+    /// the declarations and typed values a class string or declaration
+    /// block lowers to, against the project's `app.css`.
     Expand {
         /// The file.
-        file: PathBuf,
+        #[arg(required_unless_present_any = ["classes", "styles"])]
+        file: Option<PathBuf>,
+        /// A class string to expand.
+        #[arg(long, conflicts_with = "file")]
+        classes: Option<String>,
+        /// A declaration block to expand.
+        #[arg(long, conflicts_with_all = ["file", "classes"])]
+        styles: Option<String>,
     },
     /// Format `.rsx` files (Rust and markup together) and the `rsx!` calls
     /// in `.rs` files — every such file in the project if none is named.
@@ -150,8 +159,20 @@ impl Cli {
                 command.extend(arguments);
                 crate::diagnostics::run_cargo(&project.root, &command)
             }
-            Command::Expand { file } => {
-                print!("{}", crate::markup::expand_file(&file)?);
+            Command::Expand { file, classes, styles } => {
+                let text = match (file, classes, styles) {
+                    (Some(file), _, _) => crate::markup::expand_file(&file)?,
+                    (None, Some(classes), _) => crate::markup::expand_style(&here, &classes, true)?,
+                    (None, None, Some(styles)) => {
+                        crate::markup::expand_style(&here, &styles, false)?
+                    }
+                    (None, None, None) => {
+                        return Err(Error::Usage(
+                            "name a file, `--classes`, or `--styles`".to_owned(),
+                        ));
+                    }
+                };
+                print!("{text}");
                 Ok(())
             }
             Command::Fmt { files, check } => {

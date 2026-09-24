@@ -32,6 +32,20 @@ pub trait Platform {
         PlatformCapabilities::default()
     }
 
+    /// How this backend answers each style property — realized,
+    /// approximated (and how), or unavailable (and why) — `PLAN.md` 2.14's
+    /// per-property form of 2.5. A backend that has not answered reports
+    /// everything unavailable.
+    fn style_capabilities(&self) -> crate::style::StyleCapabilities {
+        crate::style::StyleCapabilities::NONE
+    }
+
+    /// How this backend maps the style vocabulary's units onto its own, if
+    /// it has recorded one.
+    fn unit_mapping(&self) -> Option<crate::style::UnitMapping> {
+        None
+    }
+
     /// Explicit escape hatch for backend-specific functionality.
     /// Applications may downcast this value at their platform boundary
     /// without allowing platform types to leak into `framework-core`.

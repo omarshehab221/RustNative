@@ -6,7 +6,10 @@
 //! A builder example is a `rust` block that constructs nodes (`Node::…`);
 //! a markup example is one that writes an element (`rsx!`, or a line that
 //! starts with `<Name`). A section may show a tree in only one syntax when
-//! it says why, with `<!-- single-syntax: reason -->`.
+//! it says why, with `<!-- single-syntax: reason -->`. Likewise a section
+//! styling a node shows the typed spelling (`VisualStyle`) and the class or
+//! declaration spelling (`classes!`, `class="…"`), or says
+//! `<!-- single-spelling: reason -->` (Milestone 58).
 
 use std::path::{Path, PathBuf};
 
@@ -24,6 +27,9 @@ struct Section {
     builder: usize,
     markup: usize,
     exempt: bool,
+    typed_style: usize,
+    utility_style: usize,
+    style_exempt: bool,
 }
 
 fn sections(text: &str) -> Vec<Section> {
@@ -46,6 +52,8 @@ fn sections(text: &str) -> Vec<Section> {
                     if markup {
                         current.markup += 1;
                     }
+                    current.typed_style += usize::from(typed_style(&block));
+                    current.utility_style += usize::from(utility_style(&block));
                 }
                 in_block = None;
                 block.clear();
@@ -67,6 +75,11 @@ fn sections(text: &str) -> Vec<Section> {
                 current.exempt = true;
             }
         }
+        if line.contains("<!-- single-spelling:") {
+            if let Some(current) = sections.last_mut() {
+                current.style_exempt = true;
+            }
+        }
     }
     sections
 }
@@ -83,6 +96,23 @@ fn documents() -> Vec<PathBuf> {
         );
     }
     documents
+}
+
+/// Whether runnable code styles a node in the typed spelling.
+fn typed_style(code: &str) -> bool {
+    code.lines().any(|line| {
+        !line.starts_with('#')
+            && (line.contains("VisualStyle::new()") || line.contains(".with_state_style("))
+    })
+}
+
+/// Whether runnable code styles a node in the utility or declaration
+/// spelling.
+fn utility_style(code: &str) -> bool {
+    code.contains("classes!")
+        || code.contains("styles!")
+        || code.contains(" class=\"")
+        || code.contains(" style=\"")
 }
 
 /// Every doc comment block (a run of `///` or `//!` lines) in `crate`'s
@@ -146,6 +176,11 @@ fn single_syntax_doc_examples(crate_dir: &Path) -> Vec<String> {
                 if builds && !code.contains("rsx!") && !block.contains("single-syntax:") {
                     problems.push(format!("{}:{start}", path.display()));
                 }
+                // Milestone 58: a style example shows both spellings.
+                if typed_style(&code) != utility_style(&code) && !block.contains("single-spelling:")
+                {
+                    problems.push(format!("{}:{start} (style spellings)", path.display()));
+                }
                 block.clear();
             }
         }
@@ -164,7 +199,8 @@ fn every_runnable_doc_example_that_builds_a_tree_has_both_syntaxes() {
     assert!(
         problems.is_empty(),
         "doc examples that build a tree in the builder syntax only (add an `rsx!` twin, or say \
-         `single-syntax: reason` when the example is about the builder API itself):\n  {}",
+         `single-syntax: reason` when the example is about the builder API itself; a style example shows \
+         the typed spelling and the class/declaration spelling, or says `single-spelling: reason`):\n  {}",
         problems.join("\n  ")
     );
 }
@@ -175,6 +211,15 @@ fn every_documented_tree_is_shown_in_both_syntaxes() {
     for document in documents() {
         let Ok(text) = std::fs::read_to_string(&document) else { continue };
         for section in sections(&text) {
+            if !section.style_exempt && (section.typed_style > 0) != (section.utility_style > 0) {
+                problems.push(format!(
+                    "{} — {}: {} typed-style, {} class/declaration-style (style spellings)",
+                    document.display(),
+                    section.heading,
+                    section.typed_style,
+                    section.utility_style
+                ));
+            }
             if section.exempt {
                 continue;
             }

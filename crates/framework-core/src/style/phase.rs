@@ -34,7 +34,7 @@
 //! `resolved.state()` answers "hover or normal?" at runtime, which a type
 //! could only answer at the definition site.
 
-use crate::style::{ControlState, VisualStyle};
+use crate::style::{ControlState, StateStyles, VisualStyle};
 
 /// The visual properties an application explicitly set on a node, with
 /// everything it did not set left unspecified.
@@ -45,19 +45,36 @@ use crate::style::{ControlState, VisualStyle};
 /// something to paint from directly: most of its properties are typically
 /// unset, and painting from it would ignore the theme entirely.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct StyleOverride(VisualStyle);
+pub struct StyleOverride {
+    normal: VisualStyle,
+    states: StateStyles,
+}
 
 impl StyleOverride {
     /// Wraps an application-authored style.
     #[must_use]
     pub const fn new(style: VisualStyle) -> Self {
-        Self(style)
+        Self { normal: style, states: StateStyles::new() }
+    }
+
+    /// `self` with the node's own state styles, layered over its normal
+    /// style in their states.
+    #[must_use]
+    pub fn with_states(mut self, states: StateStyles) -> Self {
+        self.states = states;
+        self
     }
 
     /// The underlying properties, for resolution against a theme.
     #[must_use]
     pub const fn properties(&self) -> &VisualStyle {
-        &self.0
+        &self.normal
+    }
+
+    /// The node's own state styles.
+    #[must_use]
+    pub const fn states(&self) -> &StateStyles {
+        &self.states
     }
 }
 

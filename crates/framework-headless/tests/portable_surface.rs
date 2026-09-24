@@ -144,3 +144,17 @@ fn a_shortcut_reaches_its_command_from_a_focused_field() {
     app.press(KeyCode::Character('s'), KeyModifiers { ctrl: true, ..KeyModifiers::default() });
     assert!(app.find(&Query::text("saves 1")).is_ok(), "{}", app.golden());
 }
+
+/// The headless backend is a model: it answers every style property
+/// "realized", and its unit mapping is one logical pixel per unit
+/// (`PLAN.md` Milestone 58).
+#[test]
+fn the_headless_style_table_realizes_everything() {
+    use framework_core::Platform;
+    let platform = framework_headless::HeadlessPlatform::new();
+    let table = platform.style_capabilities();
+    for (property, support) in table.rows() {
+        assert_eq!(support, framework_core::StyleSupport::Realized, "`{property}`");
+    }
+    assert_eq!(platform.unit_mapping().map(|mapping| mapping.host_unit), Some("logical pixels"));
+}

@@ -16,5 +16,7 @@ workspace = true
 
 [dependencies]
 framework-markup.workspace = true
+framework-style = { workspace = true, features = ["tokens"] }
+quote = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "1"

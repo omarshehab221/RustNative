@@ -23,13 +23,13 @@ The current working backend is Windows/Win32. The framework core is designed to 
 
 Two notes on what "planned" means here. macOS and iOS are fully planned platforms that this project has no hardware to build or verify on yet, so their milestones are specified and designed for but not started — order follows hardware, not priority. And a backend advertises a capability only once it genuinely realizes it, so "planned" never reaches an application as a claim of support.
 
-The latest completed milestone is **Milestone 32 — Packaging and
-deployment** (embedded resources, a reproducible portable zip, and a signed
-MSIX), after Milestone 31's `rustnative` CLI, Milestone 30's persistence and
-navigation, Milestone 29's graphics escape hatch, Milestone 28's virtualized lists, Milestone 27's animations and transitions,
-Milestone 26's accessibility bridge,
-Milestone 25's advanced input system, and the standards-audit remediation
-pass (`Audit.md`). See `BUILD_STATUS.md` for what each pass
+Milestones 39–58 are being built on the Windows backend (every milestone and
+tier except the other backends, which come later). Done so far: **Milestone 58
+— the style spellings** (utility classes and declarations over typed styles,
+`app.css`, per-backend capability tables), **Milestone 53 — the markup
+syntax**, **Milestone 39 — portable-surface obligations**, and **Milestone 45 —
+test infrastructure** (the headless reference backend), after Milestone 32's
+packaging and the milestones before it. See `BUILD_STATUS.md` for what each pass
 verified, what it found while doing so, and what is still open.
 
 ## Architecture
@@ -380,7 +380,7 @@ RustNative/
 │   │       ├── expansion/            (expansion goldens)
 │   │       └── ui/                   (compile-failure suite, both carriers)
 │   │
-│   ├── framework-style/              (Milestone 58: the style vocabulary, once)
+│   ├── framework-style/              (the style vocabulary, once — Milestone 58)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
@@ -506,20 +506,24 @@ tests are what keep that true as the node API grows.
 
 ### The style crate: `framework-style`
 
-Planned for Milestone 58, and arranged like the markup crates for the same
-reason — one implementation, several callers:
+Arranged like the markup crates for the same reason — one implementation,
+several callers:
 
 - **`framework-style`** owns the declaration vocabulary (values, units,
-  `calc()`, colour functions, token references), the utility-class table
-  compatible with Tailwind CSS v4, the `app.css` directives that survive without
-  a cascade (`@theme`, `@utility`, `@apply`, `@custom-variant`), the lowering to
-  `VisualStyle` and `LayoutStyle`, and the diagnostics.
-- **`framework_build::compile_styles()`** reads the project's style file from
-  the build script, beside `compile_rsx()`, and `rustnative` uses the same
-  tables for completion, hover, and expansion.
-- The `rsx!` macro and the builder's `with_class` resolve class strings through
-  the same crate, so the two syntaxes and the two style spellings cannot
-  disagree about what a class means.
+  `calc()`, colour functions and the one gamut rule, token references), the
+  utility-class table compatible with Tailwind CSS v4.1.13 over its vendored
+  default theme, the `app.css` directives that survive without a cascade
+  (`@theme`, `@utility`, `@apply`, `@custom-variant`), the diagnostics, and
+  every shipped backend's capability table and unit mapping.
+- **`classes!` and `styles!`** (in `framework-macros`, re-exported by
+  `framework-core`) compile a class string or declaration block into a
+  `DeclarationSet` in a `static`; markup's `class="…"` and `style="…"` lower to
+  them. **`framework_build::compile_styles()`** compiles `app.css` into the
+  theme `app_theme!()` includes, and `rustnative expand --classes` prints a
+  lowering.
+- **`framework-core`** re-exports the model (`style::decl`) and resolves it:
+  after every render, and whenever the theme or environment changes, each
+  node's declarations are folded into its typed properties.
 
 It emits typed style properties and nothing else, so — like markup — it cannot
 give a node a style the typed spelling could not already produce. There is no
@@ -744,64 +748,85 @@ the same values in its own terms.
 
 That resolved style has two spellings, the way the tree itself has two syntaxes.
 
-**Typed properties**, today:
+**Typed properties** (Milestone 21):
 
 ```rust
 // builder
 Node::column("card", children)
-    .with_style(VisualStyle::new().background(theme.primary()).border_radius(8).padding(EdgeInsets::all(16)))
+    .with_style(VisualStyle::new().background(Color::rgb(0x2b, 0x7f, 0xff)).border_radius(8))
+    .with_state_style(ControlState::Hovered, VisualStyle::new().background(Color::rgb(0x15, 0x5d, 0xfc)))
 ```
 
 ```rust
 // card.rsx
-<Column key="card" style={VisualStyle::new().background(theme.primary()).border_radius(8).padding(EdgeInsets::all(16))}>
+<Column key="card" style={VisualStyle::new().background(Color::rgb(0x2b, 0x7f, 0xff)).border_radius(8)}>
     {children}
 </Column>
 ```
 
-**Utility classes**, planned for Milestone 58 — the same style, written in the
-vocabulary of Tailwind CSS v4:
+**Utility classes** (Milestone 58) — the same style, in the vocabulary of
+Tailwind CSS v4.1.13:
 
 ```rust
 // builder
-Node::column("card", children).with_class("bg-primary rounded-lg p-4")
+Node::column("card", children).with_class(classes!("bg-blue-500 hover:bg-blue-600 rounded-lg"))
 ```
 
 ```rust
 // card.rsx
-<Column key="card" class="bg-primary rounded-lg p-4">
+<Column key="card" class="bg-blue-500 hover:bg-blue-600 rounded-lg">
     {children}
 </Column>
 ```
 
-Classes are compiled where they are written. `bg-primary` becomes a background
-declaration pointing at the `--color-primary` token, `p-4` becomes padding, and
-the result is the same `VisualStyle` the typed spelling builds — so no class
-string, selector, or cascade exists at run time, and `rustnative expand` will
-print exactly which properties a class string set. A class that does not resolve
-is a compile error naming the property it was looking for, rather than a class
-that silently styles nothing — and because the resolution happens at compile
-time, a class string is a literal: a computed one is an error that says so
-rather than a style that quietly disappears.
+or as declarations — `styles!("background-color: var(--color-blue-500)")`, or
+`style="…"` with a string in markup.
 
-Tokens come from one file per project:
+Classes are compiled where they are written. `bg-blue-500` becomes a background
+declaration pointing at the `--color-blue-500` token, `p-4` becomes
+`calc(var(--spacing) * 4)` of padding, `hover:` becomes the node's hover state
+style, and the result is the same typed properties the first spelling sets — so
+no class string, selector, or cascade exists at run time, and
+`rustnative expand --classes "…"` prints exactly which properties a class
+string sets and what they resolve to. A class that does not resolve is a
+compile error naming the nearest one; a computed class string is a compile
+error that says why; and a class setting a property the target's backend cannot
+realize (a shadow, on Windows) is a compile error for that target, at the
+class. The builder spelling takes the macro — `.with_class(classes!("…"))` — for
+exactly that reason: a plain string could not be checked until run time.
+
+Tokens come from one file per project, compiled by the build script
+(`framework_build::compile_styles()`) and applied with
+`application.set_theme(framework_core::app_theme!())`:
 
 ```css
 /* app.css */
-@import "tailwindcss";
-
 @theme {
   --color-primary: oklch(0.62 0.19 259);
-  --color-surface: oklch(0.98 0.01 260);
-  --radius-lg:     8px;
+  --radius-lg: 8px;
 }
+
+@utility card {
+  @apply bg-primary rounded-lg p-4;
+}
+
+@custom-variant touch (@media (pointer: coarse));
 ```
 
+The default theme — Tailwind v4's, vendored and pinned — is underneath; a
+namespace can be cleared (`--color-*: initial`). `@import "tailwindcss"`,
+`@plugin`, `@config`, selectors, and `@media` blocks are refused with a
+diagnostic saying why: the theme ships with the framework, there is no
+JavaScript toolchain, and nothing is matched against the tree.
+
 Token values stay *references* through resolution, so switching theme, colour
-scheme, or palette re-resolves the existing native objects instead of rebuilding
-the tree. State and condition variants — `hover:`, `focus:`, `disabled:`,
-`dark:`, and the `sm:`/`md:` size classes — map onto mechanisms the framework
-already has rather than adding new ones.
+scheme, palette, or text size re-resolves the existing native objects instead
+of rebuilding the tree — on Windows, a live `WM_SETTINGCHANGE` to dark mode
+restyles every `dark:` class on the controls already on screen. State and
+condition variants — `hover:`, `focus:`, `active:`, `disabled:`, `dark:`,
+`sm:`/`md:`/`lg:`, `rtl:`, `motion-reduce:`, `pointer-coarse:` — map onto
+mechanisms the framework already has (state styles and the environment) rather
+than adding new ones.
 
 What the framework takes from that vocabulary is the declaration half: property
 names, values, units, colour functions, and token references. What it
@@ -811,19 +836,14 @@ be resolved deterministically, and a second styling engine competing with the
 framework's own resolution is the thing every native-realization framework has
 regretted.
 
-Styles are capability-checked per host, like everything else here. A terminal
-cell has no corner radius and no shadow; a Win32 button cannot take a gradient
-without giving up being a Win32 button. Each backend declares, per property,
-whether it realizes, approximates, or cannot express it, and declaring one a
-target cannot realize is a build diagnostic rather than a property that quietly
-disappears.
-
-The typed spelling exists today (Milestone 21). The declaration vocabulary,
-the utility classes, `app.css`, and the per-backend capability tables are
-Milestone 58 and are specified but not built — including the table's first
-honest entry, which is that the Windows backend applies colours and fonts but
-not the corner radius a `VisualStyle` can already carry. `BUILD_STATUS.md`
-records what each backend actually realizes.
+Styles are capability-checked per host, like everything else here. Each backend
+answers, per property, whether it realizes, approximates, or cannot express it
+(`Platform::style_capabilities`), and records how it maps units
+(`Platform::unit_mapping`). Windows realizes colours, fonts, layout, and
+opacity; approximates a container's border (a one-pixel frame) and corner
+radius (a window region) while native controls keep their system shape; and
+cannot draw shadows. The headless backend, being a model, realizes everything.
+`BUILD_STATUS.md` records the tables.
 
 ## Advanced input
 

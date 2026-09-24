@@ -127,7 +127,8 @@ impl TreeNode {
             column_style: node.column_style(),
             row_style: node.row_style(),
             accessibility: node.accessibility().clone(),
-            style_override: StyleOverride::new(node.visual_style().clone()),
+            style_override: StyleOverride::new(node.visual_style().clone())
+                .with_states(node.state_styles().clone()),
             // Left at its resting default until `from_node_with_theme`
             // resolves it; `from_node` deliberately produces a snapshot with
             // no theme applied (see its own doc comment).

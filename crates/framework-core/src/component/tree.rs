@@ -130,6 +130,10 @@ pub struct ComponentTree {
     generation: u64,
     next_component_id: u64,
     root_view: Option<Node>,
+    /// The last render's output before style resolution, kept while any
+    /// node carries declarations, so an environment change can re-resolve
+    /// without re-rendering.
+    unresolved_root: Option<Node>,
     message_sink: Rc<RefCell<VecDeque<QueuedMessage>>>,
     window_commands: Rc<RefCell<VecDeque<WindowCommand>>>,
     input_requests: Rc<RefCell<VecDeque<InputRequest>>>,
@@ -230,6 +234,7 @@ impl ComponentTree {
             generation: 0,
             next_component_id: 1,
             root_view: None,
+            unresolved_root: None,
             message_sink: Rc::new(RefCell::new(VecDeque::new())),
             window_commands: Rc::new(RefCell::new(VecDeque::new())),
             input_requests: Rc::new(RefCell::new(VecDeque::new())),
@@ -355,6 +360,7 @@ impl ComponentTree {
             });
             self.root_view = Some(root);
             self.rebuild_node_owners();
+            self.resolve_styles();
             self.commit_effects();
             force = false;
         }
@@ -496,7 +502,74 @@ impl ComponentTree {
         self.env_version += 1;
         if self.environment.set(key, value, self.env_version) {
             let _ = self.render_pass(false);
+            self.reresolve_styles();
         }
+    }
+
+    /// Folds every node's declarations into its typed properties
+    /// (`crate::style` resolve), against the theme and each node's
+    /// environment — the environment of the component that rendered it.
+    fn resolve_styles(&mut self) {
+        let Some(mut root) = self.root_view.take() else { return };
+        let mut any = false;
+        root.visit(&mut |node, _, _| any |= !node.declarations().is_empty());
+        if !any {
+            self.unresolved_root = None;
+            self.root_view = Some(root);
+            return;
+        }
+        let unresolved = root.clone();
+        let mut cache: HashMap<Option<ComponentId>, crate::style::ResolveEnv> = HashMap::new();
+        crate::style::resolve_tree(&mut root, &self.theme, &mut |id| {
+            let owner = self.node_owners.get(&id).map(|(component, _)| *component);
+            *cache.entry(owner).or_insert_with(|| self.style_env(owner))
+        });
+        // Kept whenever anything is styled: besides conditions, a length
+        // in `rem` follows the text scale.
+        self.unresolved_root = Some(unresolved);
+        self.root_view = Some(root);
+    }
+
+    /// Re-resolves the last render's output after an environment change
+    /// that re-rendered nothing (a scheme switch with no component reading
+    /// the scheme still changes every `dark:` class).
+    fn reresolve_styles(&mut self) {
+        if let Some(unresolved) = self.unresolved_root.clone() {
+            self.root_view = Some(unresolved);
+            self.resolve_styles();
+        }
+    }
+
+    fn env_at<T: EnvValue>(&self, owner: Option<ComponentId>, key: &EnvKey<T>) -> T {
+        let stored = match owner {
+            Some(component) => self.stored_at(component, key.name()),
+            None => self.environment.values.get(key.name()),
+        };
+        stored.and_then(Stored::get::<T>).unwrap_or_else(|| key.default_value())
+    }
+
+    fn style_env(&self, owner: Option<ComponentId>) -> crate::style::ResolveEnv {
+        use crate::environment::keys;
+        use framework_style::{Direction, Pointer, Scheme};
+        let condition = framework_style::ConditionEnv {
+            scheme: match self.env_at(owner, &keys::COLOR_SCHEME) {
+                crate::environment::ColorScheme::Light => Scheme::Light,
+                crate::environment::ColorScheme::Dark => Scheme::Dark,
+            },
+            width: self.env_at(owner, &keys::WINDOW_WIDTH),
+            direction: match self.env_at(owner, &keys::LAYOUT_DIRECTION) {
+                crate::layout::LayoutDirection::Ltr => Direction::Ltr,
+                crate::layout::LayoutDirection::Rtl => Direction::Rtl,
+            },
+            reduced_motion: self.env_at(owner, &keys::REDUCED_MOTION)
+                == crate::animation::MotionPreference::Reduced,
+            pointer: match self.env_at(owner, &keys::POINTER) {
+                crate::environment::PointerPrecision::Fine => Pointer::Fine,
+                crate::environment::PointerPrecision::Coarse => Pointer::Coarse,
+            },
+        };
+        let scale = f64::from(self.env_at(owner, &keys::TEXT_SCALE).get());
+        crate::style::ResolveEnv { condition, rem_px: 16.0 * scale }
     }
 
     /// Copies every value of `environment` into this window's root
@@ -513,6 +586,7 @@ impl ComponentTree {
         }
         if changed {
             let _ = self.render_pass(false);
+            self.reresolve_styles();
         }
     }
 

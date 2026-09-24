@@ -98,7 +98,12 @@ fn universal() -> Vec<AttrSpec> {
         attr("constraints", AttrKind::Layout, "LayoutStyle::constraints"),
         attr("direction", AttrKind::Layout, "LayoutStyle::direction"),
         attr("accessibility", AttrKind::Modifier, "Node::with_accessibility"),
-        attr("style", AttrKind::Modifier, "Node::with_style"),
+        attr("class", AttrKind::Modifier, "Node::with_class(classes!(\"…\"))"),
+        attr(
+            "style",
+            AttrKind::Modifier,
+            "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+        ),
         attr("input", AttrKind::Modifier, "Node::with_input"),
         attr("opacity", AttrKind::Modifier, "Node::with_opacity"),
         attr("transition", AttrKind::Modifier, "Node::with_transition"),

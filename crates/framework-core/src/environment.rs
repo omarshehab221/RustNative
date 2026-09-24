@@ -420,7 +420,9 @@ impl Locale {
 /// The framework's own environment keys, fed from host traits by every
 /// backend so no component queries the host directly.
 pub mod keys {
-    use super::{ColorScheme, Contrast, EnvKey, Locale, Posture, SizeClasses, WindowMode};
+    use super::{
+        ColorScheme, Contrast, EnvKey, Locale, PointerPrecision, Posture, SizeClasses, WindowMode,
+    };
     use crate::animation::MotionPreference;
     use crate::input::Scalar;
     use crate::layout::{EdgeInsets, LayoutDirection};
@@ -452,6 +454,24 @@ pub mod keys {
     /// Whether the window shares the display.
     pub const WINDOW_MODE: EnvKey<WindowMode> =
         EnvKey::new("rustnative.window-mode", WindowMode::default);
+    /// The window's width in logical pixels — what the `sm:`/`md:`/…
+    /// style variants key to (`PLAN.md` Milestone 58). Read it only when
+    /// you need the number: every resize changes it; the size classes
+    /// change only at their thresholds.
+    pub const WINDOW_WIDTH: EnvKey<u32> = EnvKey::new("rustnative.window-width", || 1024);
+    /// The primary pointer's precision (`pointer-coarse:`/`pointer-fine:`).
+    pub const POINTER: EnvKey<PointerPrecision> =
+        EnvKey::new("rustnative.pointer", PointerPrecision::default);
+}
+
+/// The precision of the host's primary pointer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PointerPrecision {
+    /// A mouse, trackpad, or pen.
+    #[default]
+    Fine,
+    /// A finger.
+    Coarse,
 }
 
 /// Whether `insets` is all zero — a host with no safe-area constraints.

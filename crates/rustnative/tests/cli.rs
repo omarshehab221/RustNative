@@ -401,3 +401,53 @@ fn the_lsp_proxy_maps_documents_and_diagnostics() {
     drop(input);
     let _ = child.wait();
 }
+
+#[test]
+fn expand_prints_what_a_class_string_lowers_to() {
+    let output = rustnative()
+        .args(["expand", "--classes", "p-4 hover:bg-blue-500/50"])
+        .output()
+        .expect("rustnative runs");
+    assert!(output.status.success(), "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains("padding-top: calc(var(--spacing) * 4)  /* = 1rem */"), "{text}");
+    assert!(
+        text.contains(
+            "hover:background-color: color-mix(in oklab, var(--color-blue-500) 50%, transparent)"
+        ),
+        "{text}"
+    );
+
+    let output = rustnative()
+        .args(["expand", "--classes", "bg-bleu-500"])
+        .output()
+        .expect("rustnative runs");
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("did you mean `bg-blue-500`"), "{}", stderr(&output));
+}
+
+/// A generated project styles through `app.css`; a mistake in it fails the
+/// build at the file, line, and column (`PLAN.md` Milestone 58).
+#[test]
+fn a_mistake_in_app_css_fails_the_build_where_it_was_written() {
+    let project = new_project("css-diagnostic");
+    let css = project.join("app.css");
+    let source = std::fs::read_to_string(&css).unwrap();
+    assert!(source.contains("@utility headline"), "the template has a project utility");
+    std::fs::write(&css, format!("{source}\n.card {{ color: red; }}\n")).unwrap();
+    let line = source.lines().count() + 2;
+
+    let output = rustnative()
+        .current_dir(&project)
+        .args(["check", "windows"])
+        .env("CARGO_TARGET_DIR", workspace().join("target"))
+        .output()
+        .expect("rustnative runs");
+    assert!(!output.status.success(), "the mistake fails the check");
+    let message = format!("{}{}", stderr(&output), stdout(&output));
+    assert!(
+        message.contains(&format!("app.css:{line}:1")),
+        "reported at app.css:{line}:1:\n{message}"
+    );
+    assert!(message.contains("no selectors"), "{message}");
+}

@@ -1,0 +1,5 @@
+error: `classes!` takes one string literal: a class name is resolved where it is written, so a computed one would style nothing silently — choose between literal strings with `if`
+ --> tests/style_ui/computed_class.rs:5:55
+  |
+5 |     let _ = Node::label("l", "x").with_class(classes!(color));
+  |                                                       ^^^^^

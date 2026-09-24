@@ -105,6 +105,14 @@ impl HeadlessPlatform {
 impl Platform for HeadlessPlatform {
     type Error = UnsupportedPlatform;
 
+    fn style_capabilities(&self) -> framework_core::StyleCapabilities {
+        framework_style::HEADLESS
+    }
+
+    fn unit_mapping(&self) -> Option<framework_core::UnitMapping> {
+        Some(framework_style::HEADLESS_UNITS)
+    }
+
     fn run(&mut self, application: &mut Application) -> Result<(), Self::Error> {
         self.realize(application);
         let mut quiet_since = Instant::now();

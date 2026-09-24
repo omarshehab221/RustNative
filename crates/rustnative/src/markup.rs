@@ -122,6 +122,59 @@ pub fn expand_file(path: &Path) -> Result<String> {
     Ok(out)
 }
 
+/// What `rustnative expand --classes`/`--styles` prints: each declaration
+/// the input lowers to, and the typed value it resolves to against the
+/// default theme with the project's style file over it.
+///
+/// # Errors
+///
+/// The style file or the input does not compile.
+pub fn expand_style(here: &Path, input: &str, classes: bool) -> Result<String> {
+    let project = here.ancestors().find(|dir| dir.join("Cargo.toml").is_file()).unwrap_or(here);
+    let vocabulary = match framework_build::styles::style_file(project) {
+        Some(path) => {
+            let source = read(&path)?;
+            framework_style::Vocabulary::with_style_file(&source).map_err(|errors| {
+                Error::Usage(
+                    errors
+                        .iter()
+                        .map(|error| {
+                            let (line, column) = error.line_column(&source);
+                            format!("{}:{line}:{column}: {}", path.display(), error.message)
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+            })?
+        }
+        None => framework_style::Vocabulary::defaults(),
+    };
+    let lowered = if classes {
+        vocabulary.resolve_classes(input)
+    } else {
+        vocabulary.resolve_declarations(input)
+    };
+    let declarations = lowered.map_err(|errors| {
+        Error::Usage(
+            errors.iter().map(|error| error.message.clone()).collect::<Vec<_>>().join("\n"),
+        )
+    })?;
+    let tokens = vocabulary.token_table();
+    let mut out = String::new();
+    for declaration in declarations {
+        let resolved = tokens.resolve(&declaration.declaration.value);
+        match resolved {
+            Some(value) if value != declaration.declaration.value => {
+                let _ = writeln!(out, "{declaration}  /* = {value} */");
+            }
+            _ => {
+                let _ = writeln!(out, "{declaration}");
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Every `.rsx` file, and every `.rs` file containing `rsx!`, under `src`.
 #[must_use]
 pub fn project_files(src: &Path) -> Vec<PathBuf> {

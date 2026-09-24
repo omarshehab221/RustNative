@@ -35,6 +35,8 @@ mod registry;
 pub(crate) mod rendering;
 mod runtime;
 pub(crate) mod single_instance;
+#[cfg(test)]
+mod style_integration;
 mod teardown;
 #[cfg(test)]
 mod test_support;

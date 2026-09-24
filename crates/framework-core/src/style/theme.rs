@@ -11,6 +11,7 @@ use super::phase::{ResolvedStyle, StyleOverride};
 use crate::layout::EdgeInsets;
 use crate::node::NodeKind;
 
+pub use framework_style::{ShadowLayer, StyleValue, TokenTable};
 pub use framework_types::Color;
 
 /// Font family, size, and weight.
@@ -48,6 +49,7 @@ pub struct VisualStyle {
     border_radius: Option<u16>,
     typography: Option<Typography>,
     padding: Option<EdgeInsets>,
+    shadow: Option<Vec<ShadowLayer>>,
 }
 
 impl VisualStyle {
@@ -62,7 +64,23 @@ impl VisualStyle {
             border_radius: None,
             typography: None,
             padding: None,
+            shadow: None,
         }
+    }
+
+    /// Sets the shadow override: its layers, first painted last; an empty
+    /// list is "no shadow". A backend that cannot draw shadows says so in
+    /// its capability table (`Platform::style_capabilities`).
+    #[must_use]
+    pub fn shadow(mut self, layers: impl Into<Vec<ShadowLayer>>) -> Self {
+        self.shadow = Some(layers.into());
+        self
+    }
+
+    /// Returns the shadow override, if set.
+    #[must_use]
+    pub fn shadow_override(&self) -> Option<&[ShadowLayer]> {
+        self.shadow.as_deref()
     }
 
     /// Sets the foreground (text/content) color override.
@@ -145,7 +163,7 @@ impl VisualStyle {
 
     /// Layers `override_style`'s set properties on top of `self`, keeping
     /// `self`'s value for any property `override_style` leaves unset.
-    fn merge(&self, override_style: &Self) -> Self {
+    pub(crate) fn merge(&self, override_style: &Self) -> Self {
         Self {
             foreground: override_style.foreground.or(self.foreground),
             background: override_style.background.or(self.background),
@@ -153,7 +171,64 @@ impl VisualStyle {
             border_radius: override_style.border_radius.or(self.border_radius),
             typography: override_style.typography.clone().or_else(|| self.typography.clone()),
             padding: override_style.padding.or(self.padding),
+            shadow: override_style.shadow.clone().or_else(|| self.shadow.clone()),
         }
+    }
+}
+
+/// A node's own state styles: what `hover:`, `focus:`, `active:`, and
+/// `disabled:` classes (or [`crate::Node::with_state_style`]) set, layered
+/// over the node's normal style while it is in that state. The typed
+/// spelling of a state variant, and the node-level counterpart of a
+/// theme's [`ComponentStyle`] states.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct StateStyles {
+    hovered: Option<VisualStyle>,
+    focused: Option<VisualStyle>,
+    pressed: Option<VisualStyle>,
+    disabled: Option<VisualStyle>,
+}
+
+impl StateStyles {
+    /// No state styles.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { hovered: None, focused: None, pressed: None, disabled: None }
+    }
+
+    /// The style for `state`, if one is set. [`ControlState::Normal`] has
+    /// none: it is the node's own style.
+    #[must_use]
+    pub const fn get(&self, state: ControlState) -> Option<&VisualStyle> {
+        match state {
+            ControlState::Normal => None,
+            ControlState::Hovered => self.hovered.as_ref(),
+            ControlState::Focused => self.focused.as_ref(),
+            ControlState::Pressed => self.pressed.as_ref(),
+            ControlState::Disabled => self.disabled.as_ref(),
+        }
+    }
+
+    /// The style for `state`, created empty if unset; `None` for
+    /// [`ControlState::Normal`].
+    pub(crate) fn get_or_insert(&mut self, state: ControlState) -> Option<&mut VisualStyle> {
+        let slot = match state {
+            ControlState::Normal => return None,
+            ControlState::Hovered => &mut self.hovered,
+            ControlState::Focused => &mut self.focused,
+            ControlState::Pressed => &mut self.pressed,
+            ControlState::Disabled => &mut self.disabled,
+        };
+        Some(slot.get_or_insert_with(VisualStyle::new))
+    }
+
+    /// Whether no state has a style.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.hovered.is_none()
+            && self.focused.is_none()
+            && self.pressed.is_none()
+            && self.disabled.is_none()
     }
 }
 
@@ -216,6 +291,10 @@ impl ComponentStyle {
 /// The application-wide default styling for every node kind and
 /// interaction state.
 ///
+/// (The example below is about resolving the typed spelling —
+/// single-spelling: a class string lowers to the same typed override before
+/// it reaches here; `framework_core::classes!` shows the two side by side.)
+///
 /// Encapsulated with accessors (no direct external field access exists in
 /// either this crate or `framework-windows`, which only ever calls
 /// [`Theme::resolve`] — see the standards audit's P2.24 finding).
@@ -254,6 +333,7 @@ pub struct Theme {
     button: ComponentStyle,
     text_input: ComponentStyle,
     container: ComponentStyle,
+    tokens: TokenTable,
 }
 
 impl Default for Theme {
@@ -293,6 +373,7 @@ impl Default for Theme {
                 normal: VisualStyle::new().background(background),
                 ..Default::default()
             },
+            tokens: TokenTable::defaults(),
         }
     }
 }
@@ -438,6 +519,36 @@ impl Theme {
         self
     }
 
+    /// Returns the token table that `var(--…)` references in declarations
+    /// resolve against — by default the utility vocabulary's default theme
+    /// (Tailwind CSS v4's), or a project's `app.css` through
+    /// `framework_core::app_theme!()`.
+    #[must_use]
+    pub const fn tokens(&self) -> &TokenTable {
+        &self.tokens
+    }
+
+    /// Returns `self` with the token table replaced. Declarations keep
+    /// referring to tokens by name, so switching the table (through
+    /// `Application::set_theme`) re-resolves every node against it — on the
+    /// native objects that already exist (2.14).
+    #[must_use]
+    pub fn with_tokens(mut self, tokens: TokenTable) -> Self {
+        self.tokens = tokens;
+        self
+    }
+
+    /// Returns `self` with one token set.
+    #[must_use]
+    pub fn with_token(
+        mut self,
+        name: impl Into<std::borrow::Cow<'static, str>>,
+        value: StyleValue,
+    ) -> Self {
+        self.tokens.insert(name, value);
+        self
+    }
+
     /// Resolves the fully-merged style for one node: this theme's default
     /// for `kind`/`state`, with the application's own override layered on
     /// top.
@@ -466,7 +577,12 @@ impl Theme {
             }
         }
         .resolve(state);
-        ResolvedStyle::new(base.merge(override_style.properties()), state)
+        let normal = base.merge(override_style.properties());
+        let resolved = match override_style.states().get(state) {
+            Some(state_style) => normal.merge(state_style),
+            None => normal,
+        };
+        ResolvedStyle::new(resolved, state)
     }
 }
 

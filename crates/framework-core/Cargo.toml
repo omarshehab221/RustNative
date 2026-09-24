@@ -21,6 +21,8 @@ workspace = true
 [dependencies]
 framework-macros = { workspace = true, optional = true }
 framework-types = { workspace = true, features = ["serde"] }
+# The style model's declaration vocabulary and token table (Milestone 58).
+framework-style.workspace = true
 tokio.workspace = true
 parking_lot.workspace = true
 async-trait.workspace = true

@@ -67,6 +67,16 @@ pub fn cases() -> Vec<(&'static str, Node)> {
             Node::button("icon", "\u{1F4BE}").with_accessibility(syntax::accessibility()),
         ),
         ("style", Node::label("styled", "Styled").with_style(syntax::visual())),
+        (
+            "class",
+            Node::label("classy", "Classy")
+                .with_class(framework_core::classes!("p-2 bg-blue-500 hover:bg-blue-600")),
+        ),
+        (
+            "style_declarations",
+            Node::label("declared", "Declared")
+                .with_declarations(framework_core::styles!("padding: 4px; color: #123456")),
+        ),
         ("input", Node::column("pad", []).with_input(syntax::interest())),
         ("opacity", Node::label("faint", "Faint").with_opacity(0.5)),
         ("transition", {

@@ -200,6 +200,28 @@ fn lower_modifier(attr: &Attr, name: &str, value: &TokenStream) -> TokenStream {
                 if matches!(attr.value, AttrValue::Flag) { quote!(true) } else { value.clone() };
             quote_spanned!(span=> let __node = __node.#method(#value);)
         }
+        // A class string is compiled where it is written; a computed one
+        // could only be checked at run time, so it is refused (2.14).
+        "class" => {
+            if let AttrValue::Lit(syn::Lit::Str(classes)) = &attr.value {
+                quote_spanned!(span=> let __node = __node.with_class(::framework_core::classes!(#classes));)
+            } else {
+                quote_spanned!(span=> ::core::compile_error!(
+                    "`class` takes a string literal: a class name is resolved where it is written, so a \
+                     computed class would style nothing silently — choose between literal class strings with \
+                     `if`, or set typed properties with `style={…}`"
+                );)
+            }
+        }
+        "style" => {
+            if let AttrValue::Lit(syn::Lit::Str(declarations)) = &attr.value {
+                quote_spanned!(span=>
+                    let __node = __node.with_declarations(::framework_core::styles!(#declarations));
+                )
+            } else {
+                quote_spanned!(span=> let __node = __node.with_style(#value);)
+            }
+        }
         "transition" => quote_spanned!(span=>
             let __node = {
                 let (__property, __transition) = #value;

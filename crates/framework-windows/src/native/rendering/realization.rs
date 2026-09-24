@@ -634,6 +634,7 @@ impl Renderer {
         let style = self.styles.realize(node.id, node.kind, &style_override, node.disabled);
         let font = style.font;
         let background = style.background;
+        let (border, radius) = (style.border, style.radius);
 
         if !font.is_null() {
             // SAFETY: `hwnd`/`content_hwnd` are live HWNDs owned by this
@@ -660,6 +661,7 @@ impl Renderer {
             // `Runtime` pointer stored there for top-level windows — see
             // `user_data`'s module docs.
             NodeKind::Column | NodeKind::Row => {
+                super::shape::set_shape(hwnd, border, radius);
                 BackgroundColorSlot::set(hwnd, background);
                 if let Some(content_hwnd) = content_hwnd {
                     BackgroundColorSlot::set(content_hwnd, background);
@@ -952,7 +954,7 @@ impl Renderer {
         if let Some(foreground) = overrides.foreground {
             style = style.foreground(foreground);
         }
-        StyleOverride::new(style)
+        StyleOverride::new(style).with_states(node.style_override.states().clone())
     }
 
     /// The native window a node's control should be created inside: its

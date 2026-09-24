@@ -14,6 +14,75 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 58 — The style spellings — complete (Windows scope)
+
+**Built.**
+
+- **`crates/framework-style`**: the declaration model (`StyleProperty` —
+  every property names one typed field — `StyleValue` with token
+  references, `Condition`, `DeclarationSet` in a `static`), the value parser
+  (lengths in px/rem/em, `calc()`, `var()`), colours (`#hex`, `rgb()`,
+  `hsl()`, `oklch()`, `color-mix()`; one gamut rule: linear sRGB, clamp,
+  encode), the Tailwind CSS **v4.1.13** utility vocabulary and variants over
+  the vendored default theme (MIT, pinned in `VENDORED.md` with its hash),
+  the `app.css` parser (`@theme [inline]`, namespace reset, `@utility`,
+  `@apply`, `@custom-variant`; `@import "tailwindcss"`, `@plugin`, `@config`,
+  selectors, and `@media` refused with the reason), the run-time
+  `TokenTable`, and the capability tables and unit mappings of both shipped
+  backends.
+- **Macros**: `classes!` and `styles!` (re-exported by `framework-core`),
+  reading the crate's `app.css` (or `rustnative.toml [style] file`) with
+  rebuild tracking; an unknown class, a computed class, a layout property
+  under a state variant, and — for `target_os = "windows"` — a property the
+  Windows table marks unavailable are compile errors at the string. Markup:
+  `class="…"` and `style="…"` lower to them; `style={expr}` stays typed.
+  **Documented deviation**: the builder spelling is
+  `.with_class(classes!("…"))`, not `.with_class("…")`, because only the
+  macro can make an unknown class a compile error (2.14's first rule).
+- **Core**: `Node::{with_class, with_declarations, with_state_style}`,
+  `StateStyles` (layered in `Theme::resolve`, so a backend's hover/press
+  repaint uses them unchanged), `VisualStyle::shadow`, `Theme` tokens
+  (`with_tokens`, `with_token`), `keys::WINDOW_WIDTH` and `keys::POINTER`,
+  and resolution in `ComponentTree` after every render and on every
+  environment change — per node, in the environment of the component that
+  rendered it (so `provide_env` scopes `dark:`), with `rem` following the
+  text scale. `Platform::style_capabilities` / `unit_mapping`.
+- **Build and CLI**: `framework_build::compile_styles()` →
+  `framework_core::app_theme!()`; both project templates ship `app.css`, a
+  project utility, and `set_theme(app_theme!())`; `rustnative expand
+  --classes/--styles` prints each declaration and what it resolves to.
+- **Windows**: the table (colours, fonts, layout, opacity realized; border
+  colour and radius approximated on containers — a one-pixel frame and a
+  `SetWindowRgn` rounded region — native controls keep their system shape;
+  font generics mapped to Segoe UI/Cambria/Consolas; shadow unavailable), the
+  unit mapping, and a live scheme switch from `WM_SETTINGCHANGE` restyling
+  existing controls. `hello-label` styles its counter panel with classes and
+  an `app.css` utility and gains a System/Dark/Light scheme toggle.
+
+**Verified.** Full gate. `framework-core/tests/style_equivalence.rs` resolves
+every property in the utility, declaration, and typed spellings to equal
+nodes (a property without a case fails the suite), and shows state,
+scheme, width, direction, motion, pointer, text-scale, token-switch, and
+provided-environment conditions. `native::style_integration` reads the
+Windows table back from the native objects (font face/weight/size via
+`WM_GETFONT`, colours via `WM_CTLCOLORSTATIC`, container border and rounded
+region) across a scheme and a token switch on the same HWNDs.
+Compile-failure cases in `framework-conformance/tests/style_ui*`; CLI tests
+for `expand --classes` and an `app.css` mistake reported at
+`app.css:line:col`; the documentation-parity check now also requires both
+style spellings.
+
+**Not verified / owed.** Container queries and relational variants are
+deferred by the plan; a `Literal::subspan` span inside the class string needs
+an unstable API, so errors point at the string and name the class. The
+deferred backends owe their own capability tables and unit mappings
+(Milestones 33–38, Web). The unavailable-property check keys to
+`target_os = "windows"`; a second backend on the same OS will need a
+backend-selecting cfg. The Windows unit mapping is recorded as it is, not as intended:
+layout works in device pixels (one logical pixel is one device pixel), and
+scaling layout by `GetDpiForWindow / 96` is **owed** — `rem` does follow the
+text-scale setting.
+
 ### Milestone 53 — The markup syntax — complete
 
 **Built.**

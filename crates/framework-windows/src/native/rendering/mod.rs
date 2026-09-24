@@ -52,6 +52,7 @@ pub(crate) mod direction;
 pub(crate) mod pool;
 pub(crate) mod realization;
 pub(crate) mod scrolling;
+pub(crate) mod shape;
 pub(crate) mod styling;
 pub(crate) mod tabs;
 pub(crate) mod virtual_list;

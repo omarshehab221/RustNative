@@ -69,6 +69,14 @@ pub fn cases() -> Vec<(&'static str, Node)> {
             rsx! { <Button key="icon" text="\u{1F4BE}" accessibility={syntax::accessibility()} /> },
         ),
         ("style", rsx! { <Label key="styled" text="Styled" style={syntax::visual()} /> }),
+        (
+            "class",
+            rsx! { <Label key="classy" text="Classy" class="p-2 bg-blue-500 hover:bg-blue-600" /> },
+        ),
+        (
+            "style_declarations",
+            rsx! { <Label key="declared" text="Declared" style="padding: 4px; color: #123456" /> },
+        ),
         ("input", rsx! { <Column key="pad" input={syntax::interest()}></Column> }),
         ("opacity", rsx! { <Label key="faint" text="Faint" opacity=0.5 /> }),
         ("transition", rsx! { <Column key="panel" transition={syntax::slide()}></Column> }),

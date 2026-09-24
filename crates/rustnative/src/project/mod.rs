@@ -136,6 +136,7 @@ pub fn create(
         Syntax::Markup => templates::MARKUP_BUILD_RS,
     };
     write(&root, "build.rs", build_rs)?;
+    write(&root, "app.css", templates::APP_CSS)?;
     let rf_toml = toml::to_string_pretty(&config).map_err(|cause| Error::Io {
         what: "write rustnative.toml".to_owned(),
         cause: std::io::Error::other(cause.to_string()),

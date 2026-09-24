@@ -41,6 +41,11 @@ pub(crate) struct ControlStyle {
     pub(crate) background: COLORREF,
     pub(crate) background_brush: HBRUSH,
     pub(crate) font: HFONT,
+    /// The resolved border colour, if one is set — drawn by a container
+    /// (`rendering::shape`), not by a native control.
+    pub(crate) border: Option<COLORREF>,
+    /// The resolved corner radius — a container's window region.
+    pub(crate) radius: u16,
 }
 
 impl ControlStyle {
@@ -71,8 +76,10 @@ impl ControlStyle {
         // that `Drop` below already checks for before freeing.
         let background_brush = unsafe { CreateSolidBrush(background) };
         let font = style.typography_override().map_or(std::ptr::null_mut(), create_font);
+        let border = style.border_override().map(color_ref);
+        let radius = style.border_radius_override().unwrap_or(0);
 
-        Self { foreground, background, background_brush, font }
+        Self { foreground, background, background_brush, font, border, radius }
     }
 }
 
@@ -97,9 +104,22 @@ fn color_ref(color: Color) -> COLORREF {
     u32::from(color.red) | u32::from(color.green) << 8 | u32::from(color.blue) << 16
 }
 
+/// The face GDI is asked for: the generic families (`system-ui`, `serif`,
+/// `monospace`, as style resolution names them) map to the Windows faces
+/// that stand for them — the approximation `framework_style::WINDOWS`
+/// records for `font-family`.
+pub(crate) fn face_name(family: &str) -> &str {
+    match family {
+        "system-ui" | "sans-serif" | "ui-sans-serif" => "Segoe UI",
+        "serif" | "ui-serif" => "Cambria",
+        "monospace" | "ui-monospace" => "Consolas",
+        other => other,
+    }
+}
+
 fn create_font(typography: &Typography) -> HFONT {
     let mut face_name = [0u16; 32];
-    let encoded: Vec<u16> = typography.family.encode_utf16().take(31).collect();
+    let encoded: Vec<u16> = self::face_name(&typography.family).encode_utf16().take(31).collect();
     face_name[..encoded.len()].copy_from_slice(&encoded);
 
     // A negative `lfHeight` asks GDI for a character height in logical
@@ -247,7 +267,7 @@ pub(crate) fn background_brush_for(hwnd: HWND) -> HBRUSH {
 }
 
 /// The process-wide color-to-brush cache backing [`background_brush_for`].
-fn cached_brush(color: COLORREF) -> HBRUSH {
+pub(crate) fn cached_brush(color: COLORREF) -> HBRUSH {
     use std::sync::Mutex;
     use std::sync::OnceLock;
 

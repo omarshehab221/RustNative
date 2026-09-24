@@ -9,7 +9,7 @@
 pub const MAIN_RS: &str = r#"#![cfg_attr(windows, windows_subsystem = "windows")]
 
 use framework_core::{
-    Application, Component, ComponentContext, Event, Node, NodeId, Platform, Size, Window,
+    Application, Component, ComponentContext, Event, Node, NodeId, Platform, Size, Window, classes,
 };
 use framework_windows::WindowsPlatform;
 
@@ -38,7 +38,8 @@ impl Component for App {
         Node::column(
             "root",
             [
-                Node::label("greeting", format!("Hello from {APP_NAME}")),
+                Node::label("greeting", format!("Hello from {APP_NAME}"))
+                    .with_class(classes!("headline")),
                 Node::label("count", format!("Clicked {} times", self.clicks)),
                 Node::button("click", "Click me"),
             ],
@@ -60,6 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         App::new(()),
         Window::new(APP_NAME, Size::new(480, 320)),
     );
+    // The theme `app.css` describes, compiled by the build script.
+    application.set_theme(framework_core::app_theme!());
     WindowsPlatform::new().with_app_id(APP_ID).run(&mut application)?;
     Ok(())
 }
@@ -81,13 +84,29 @@ publish = false
 {{build-dependencies}}
 "#;
 
-/// The generated `build.rs`, which gives the executable its icon, version
-/// information, and application manifest.
-pub const BUILD_RS: &str = r"//! Embeds this application's icon, version information, and Windows
-//! application manifest, all described by `rustnative.toml`.
+/// The generated `build.rs`, which compiles the style file and gives the
+/// executable its icon, version information, and application manifest.
+pub const BUILD_RS: &str = r"//! Compiles `app.css` into this application's theme, and embeds its icon,
+//! version information, and Windows application manifest
+//! (`rustnative.toml`).
 
 fn main() {
+    framework_build::compile_styles();
     framework_build::embed_resources();
+}
+";
+
+/// The generated `app.css`: the project's style file (`PLAN.md` 2.14).
+pub const APP_CSS: &str = r"/* The application's style file: theme tokens over the default theme
+   (Tailwind CSS v4's), and the project's own utilities. Classes are
+   checked when the application compiles; an unknown one is an error. */
+
+@theme {
+  --color-accent: oklch(0.55 0.19 255);
+}
+
+@utility headline {
+  @apply text-lg font-semibold text-accent;
 }
 ";
 
@@ -130,6 +149,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app::App::new(()),
         Window::new(APP_NAME, Size::new(480, 320)),
     );
+    // The theme `app.css` describes, compiled by the build script.
+    application.set_theme(framework_core::app_theme!());
     WindowsPlatform::new().with_app_id(APP_ID).run(&mut application)?;
     Ok(())
 }
@@ -162,7 +183,11 @@ impl Component for App {
 
     fn view(&self) -> Node {
         <Column key="root">
-            <Label key="greeting" text={format!("Hello from {}", super::APP_NAME)} />
+            <Label
+                key="greeting"
+                text={format!("Hello from {}", super::APP_NAME)}
+                class="headline"
+            />
             <Label key="count" text={format!("Clicked {} times", self.clicks)} />
             <Button key="click" text="Click me" />
         </Column>
@@ -177,11 +202,13 @@ impl Component for App {
 "#;
 
 /// The markup template's `build.rs`: resources, and the `.rsx` lowering.
-pub const MARKUP_BUILD_RS: &str = r"//! Lowers this application's `.rsx` files, and embeds its icon, version
-//! information, and Windows application manifest (`rustnative.toml`).
+pub const MARKUP_BUILD_RS: &str = r"//! Lowers this application's `.rsx` files, compiles `app.css` into its
+//! theme, and embeds its icon, version information, and Windows
+//! application manifest (`rustnative.toml`).
 
 fn main() {
     framework_build::compile_rsx();
+    framework_build::compile_styles();
     framework_build::embed_resources();
 }
 ";

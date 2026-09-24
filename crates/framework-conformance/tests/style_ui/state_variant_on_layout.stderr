@@ -1,0 +1,5 @@
+error: `hover:p-4`: a state variant applies to visual properties (colours, radius, font, shadow); `p-4` sets `padding-top`, which would re-run layout on every hover
+ --> tests/style_ui/state_variant_on_layout.rs:4:55
+  |
+4 |     let _ = Node::label("l", "x").with_class(classes!("hover:p-4"));
+  |                                                       ^^^^^^^^^^^

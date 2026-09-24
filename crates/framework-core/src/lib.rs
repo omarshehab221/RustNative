@@ -226,6 +226,74 @@ macro_rules! rsx_mod {
         }
     };
 }
+
+/// Utility classes — the vocabulary of Tailwind CSS v4.1.13 — compiled
+/// into a [`style::DeclarationSet`] (`PLAN.md` 2.14, Milestone 58).
+///
+/// An unknown class is a compile error naming the nearest one; a class
+/// setting a property the target's backend cannot realize (a shadow, on
+/// Windows) is a compile error for that target, at the class. Tokens and
+/// project utilities come from the crate's `app.css` (or the file
+/// `rustnative.toml`'s `[style] file` names) over the default theme.
+///
+/// The two spellings of one style, which resolve to the same node:
+///
+/// ```
+/// use framework_core::{Application, Color, Node, Size, Theme, VisualStyle, Window, classes};
+/// use framework_core::{Component, Event};
+///
+/// struct Card;
+/// impl Component for Card {
+///     type Props = ();
+///     type Message = ();
+///     fn new((): ()) -> Self { Self }
+///     fn props(&self) -> &() { &() }
+///     fn set_props(&mut self, (): ()) {}
+///     fn view(&self) -> Node {
+///         Node::column("card", [
+///             Node::label("utility", "Utility").with_class(classes!("text-white bg-[#1e90ff] rounded-[6px]")),
+///             Node::label("typed", "Typed").with_style(
+///                 VisualStyle::new()
+///                     .foreground(Color::rgb(255, 255, 255))
+///                     .background(Color::rgb(0x1e, 0x90, 0xff))
+///                     .border_radius(6),
+///             ),
+///         ])
+///     }
+///     fn update(&mut self, _: Event) {}
+/// }
+///
+/// let application = Application::new(Card, Window::new("Card", Size::new(200, 100)));
+/// let Node::Column(card) = application.view() else { unreachable!() };
+/// assert_eq!(card.children()[0].visual_style(), card.children()[1].visual_style());
+///
+/// // The same classes in markup:
+/// let markup = framework_core::rsx! { <Label key="utility" text="Utility" class="text-white bg-[#1e90ff] rounded-[6px]" /> };
+/// assert_eq!(markup.declarations(), Node::label("utility", "Utility")
+///     .with_class(classes!("text-white bg-[#1e90ff] rounded-[6px]")).declarations());
+/// ```
+#[cfg(feature = "markup")]
+pub use framework_macros::classes;
+
+/// A declaration block — `padding: 1rem; color: var(--color-red-500)` —
+/// compiled into a [`style::DeclarationSet`], with the same checks as
+/// [`classes!`]. The markup spelling is `style="…"` with a string.
+#[cfg(feature = "markup")]
+pub use framework_macros::styles;
+
+/// The theme `framework_build::compile_styles()` compiled from the
+/// project's `app.css`: the default theme with the file's tokens over it.
+///
+/// ```ignore
+/// let application = Application::new(App::new(()), window);
+/// application.set_theme(framework_core::app_theme!());
+/// ```
+#[macro_export]
+macro_rules! app_theme {
+    () => {
+        include!(concat!(env!("OUT_DIR"), "/app_theme.rs"))
+    };
+}
 pub mod accessibility;
 pub mod affinity;
 pub mod animation;
@@ -278,8 +346,8 @@ pub use component::{
     RenderError, RenderRecord, WindowRequests,
 };
 pub use environment::{
-    Breakpoint, ColorScheme, Contrast, EnvKey, EnvValue, Environment, Locale, Posture, Preference,
-    PreferenceKey, SizeClass, SizeClasses, WindowMode, keys,
+    Breakpoint, ColorScheme, Contrast, EnvKey, EnvValue, Environment, Locale, PointerPrecision,
+    Posture, Preference, PreferenceKey, SizeClass, SizeClasses, WindowMode, keys,
 };
 pub use event::{AccessibilityInfo, AccessibilityRole, Event, KeyCode, KeyModifiers};
 pub use grant::{Grant, GrantSet, Granted, ScopedServices};
@@ -325,8 +393,9 @@ pub use services::{
     StorageService, SystemService,
 };
 pub use style::{
-    Color, ComponentStyle, ControlState, ResolvedStyle, StyleOverride, Theme, Typography,
-    VisualStyle,
+    Color, ComponentStyle, ControlState, DeclarationSet, ResolvedStyle, ShadowLayer, StateStyles,
+    StyleCapabilities, StyleOverride, StyleProperty, StyleSupport, StyleValue, Theme, TokenTable,
+    Typography, UnitMapping, VisualStyle,
 };
 pub use teardown::{Restoration, TeardownPolicy};
 pub use virtualization::{

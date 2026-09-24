@@ -1,0 +1,11 @@
+/* The example's style file: tokens over the default theme (Tailwind CSS
+   v4's) and a project utility, compiled by `framework_build::compile_styles`
+   and checked wherever a class names them. */
+
+@theme {
+  --color-panel: var(--color-white);
+}
+
+@utility panel-text {
+  @apply text-neutral-900 bg-panel dark:text-neutral-100 dark:bg-neutral-900;
+}

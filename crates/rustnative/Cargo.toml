@@ -23,6 +23,9 @@ clap = { version = "4", features = ["derive"] }
 # The markup syntax: `expand`, `fmt`, `lsp`, and `.rsx` diagnostics link the
 # same parser and lowering the `rsx!` macro uses.
 framework-markup.workspace = true
+framework-style.workspace = true
+# The style file's location, read the way the build script reads it.
+framework-build.workspace = true
 prettyplease = "0.2"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"

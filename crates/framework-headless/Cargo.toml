@@ -16,6 +16,8 @@ workspace = true
 
 [dependencies]
 framework-core.workspace = true
+# The style capability table and unit mapping this backend answers with.
+framework-style.workspace = true
 async-trait.workspace = true
 parking_lot.workspace = true
 

@@ -16,8 +16,36 @@ use crate::identity::NodeId;
 use crate::input::Scalar;
 use crate::input::{Cursor, InputInterest};
 use crate::layout::{ColumnStyle, EdgeInsets, LayoutStyle, Overflow, RowStyle, SizeMode};
-use crate::style::VisualStyle;
+use crate::style::{ControlState, DeclarationSet, StateStyles, VisualStyle};
 use crate::virtualization::{Axis, VirtualListStyle};
+
+/// The same field of whichever node kind `$node` is.
+macro_rules! node_field {
+    ($node:expr, $field:ident) => {
+        match $node {
+            Node::Label(node) => &node.$field,
+            Node::Button(node) => &node.$field,
+            Node::TextInput(node) => &node.$field,
+            Node::TabBar(node) => &node.$field,
+            Node::Canvas(node) => &node.$field,
+            Node::Surface(node) => &node.$field,
+            Node::Column(node) => &node.$field,
+            Node::Row(node) => &node.$field,
+        }
+    };
+    (mut $node:expr, $field:ident) => {
+        match $node {
+            Node::Label(node) => &mut node.$field,
+            Node::Button(node) => &mut node.$field,
+            Node::TextInput(node) => &mut node.$field,
+            Node::TabBar(node) => &mut node.$field,
+            Node::Canvas(node) => &mut node.$field,
+            Node::Surface(node) => &mut node.$field,
+            Node::Column(node) => &mut node.$field,
+            Node::Row(node) => &mut node.$field,
+        }
+    };
+}
 
 /// The framework's declarative UI tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -822,7 +850,7 @@ impl Node {
         }
     }
 
-    fn hidden_mut(&mut self) -> &mut bool {
+    pub(crate) fn hidden_mut(&mut self) -> &mut bool {
         match self {
             Self::Label(node) => &mut node.hidden,
             Self::Button(node) => &mut node.hidden,
@@ -1042,6 +1070,129 @@ impl Node {
     }
 }
 
+/// The style spellings (`PLAN.md` 2.14, Milestone 58): utility classes
+/// and declaration blocks, and the typed state styles they lower beside.
+impl Node {
+    /// Styles this node with utility classes — Tailwind CSS v4's vocabulary,
+    /// checked at compile time by [`crate::classes!`] (whose own example
+    /// resolves a class string and its typed spelling side by side; this
+    /// one is single-spelling: resolution happens in a render):
+    ///
+    /// ```
+    /// use framework_core::{Node, classes};
+    ///
+    /// let save = Node::button("save", "Save").with_class(classes!("px-4 bg-blue-500 hover:bg-blue-600"));
+    /// assert_eq!(save.declarations().len(), 1);
+    ///
+    /// // The same node in markup:
+    /// let markup = framework_core::rsx! {
+    ///     <Button key="save" text="Save" class="px-4 bg-blue-500 hover:bg-blue-600" />
+    /// };
+    /// assert_eq!(markup, save);
+    /// ```
+    ///
+    /// The argument is a [`DeclarationSet`] rather than a string: a plain
+    /// `&str` could not be checked until run time, and an unknown class must
+    /// be a compile error (2.14's first rule), so the builder spelling is
+    /// `.with_class(classes!("…"))`. The declarations are folded into the
+    /// node's typed properties after each render, against the theme's
+    /// tokens and the environment, and again whenever either changes. Later
+    /// calls add to earlier ones; a later declaration of a property wins.
+    #[must_use]
+    pub fn with_class(mut self, classes: DeclarationSet) -> Self {
+        node_field!(mut &mut self, declarations).push(classes);
+        self
+    }
+
+    /// Styles this node with a declaration block ([`crate::styles!`]) —
+    /// the same model as [`Self::with_class`], spelled as declarations.
+    #[must_use]
+    pub fn with_declarations(self, declarations: DeclarationSet) -> Self {
+        self.with_class(declarations)
+    }
+
+    /// The class and declaration sets on this node, in the order they were
+    /// added.
+    #[must_use]
+    pub fn declarations(&self) -> &[DeclarationSet] {
+        node_field!(self, declarations)
+    }
+
+    /// Sets the style layered over this node's own while it is in `state` —
+    /// the typed spelling of a state variant (`hover:bg-blue-600`).
+    /// [`ControlState::Normal`] is the node's own style, so it merges into
+    /// [`Self::with_style`]'s.
+    #[must_use]
+    pub fn with_state_style(mut self, state: ControlState, style: VisualStyle) -> Self {
+        if let Some(slot) = node_field!(mut &mut self, state_styles).get_or_insert(state) {
+            *slot = style;
+            return self;
+        }
+        let merged = self.visual_style().merge(&style);
+        self.with_style(merged)
+    }
+
+    /// This node's own state styles.
+    #[must_use]
+    pub fn state_styles(&self) -> &StateStyles {
+        node_field!(self, state_styles)
+    }
+
+    pub(crate) fn state_styles_mut(&mut self) -> &mut StateStyles {
+        node_field!(mut self, state_styles)
+    }
+
+    pub(crate) fn visual_style_mut(&mut self) -> &mut VisualStyle {
+        node_field!(mut self, visual_style)
+    }
+
+    pub(crate) fn layout_mut(&mut self) -> &mut LayoutStyle {
+        node_field!(mut self, layout)
+    }
+
+    pub(crate) fn opacity_mut(&mut self) -> &mut Scalar {
+        node_field!(mut self, opacity)
+    }
+
+    /// Runs `apply` on a container's padding, gap, cross-axis alignment,
+    /// and overflow; does nothing for a leaf.
+    pub(crate) fn with_container_fields(
+        &mut self,
+        apply: impl FnOnce(&mut EdgeInsets, &mut i32, &mut crate::layout::Alignment, &mut Overflow),
+    ) {
+        match self {
+            Self::Column(node) => {
+                let style = &mut node.style;
+                apply(
+                    &mut style.padding,
+                    &mut style.gap,
+                    &mut style.align_items,
+                    &mut style.overflow,
+                );
+            }
+            Self::Row(node) => {
+                let style = &mut node.style;
+                apply(
+                    &mut style.padding,
+                    &mut style.gap,
+                    &mut style.align_items,
+                    &mut style.overflow,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    /// A container's children, mutably; empty for a leaf.
+    pub(crate) fn child_nodes_mut(&mut self) -> &mut [Node] {
+        match self {
+            Self::Column(node) => node.children_mut(),
+            Self::Row(node) => node.children_mut(),
+            _ => &mut [],
+        }
+    }
+}
+
 /// Anything that can stand in child position: one [`Node`], or any
 /// collection of them (`Vec<Node>`, `Option<Node>`, an iterator).
 ///
@@ -1127,6 +1278,8 @@ macro_rules! leaf_node {
             hidden: bool,
             command: Option<CommandId>,
             cursor: Option<Cursor>,
+            declarations: Vec<DeclarationSet>,
+            state_styles: StateStyles,
         }
 
         impl $name {
@@ -1166,6 +1319,8 @@ macro_rules! leaf_node {
                     hidden: false,
                     command: None,
                     cursor: None,
+                    declarations: Vec::new(),
+                    state_styles: StateStyles::new(),
                 }
             }
 
@@ -1286,6 +1441,8 @@ macro_rules! container_node {
             hidden: bool,
             command: Option<CommandId>,
             cursor: Option<Cursor>,
+            declarations: Vec<DeclarationSet>,
+            state_styles: StateStyles,
         }
 
         impl $name {
@@ -1306,6 +1463,8 @@ macro_rules! container_node {
                     hidden: false,
                     command: None,
                     cursor: None,
+                    declarations: Vec::new(),
+                    state_styles: StateStyles::new(),
                 }
             }
 

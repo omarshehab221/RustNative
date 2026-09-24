@@ -229,6 +229,7 @@ impl Application {
                 &crate::environment::keys::SIZE_CLASS,
                 crate::environment::SizeClasses::of(size.width, size.height),
             );
+            entry.components.set_environment(&crate::environment::keys::WINDOW_WIDTH, size.width);
         }
         let handled = entry.components.dispatch(event);
         let commands = entry.components.take_window_commands();
@@ -243,6 +244,7 @@ impl Application {
             &crate::environment::keys::SIZE_CLASS,
             crate::environment::SizeClasses::of(size.width, size.height),
         );
+        entry.components.set_environment(&crate::environment::keys::WINDOW_WIDTH, size.width);
     }
 
     /// Applies deferred window-open/close requests queued by a component

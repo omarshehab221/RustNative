@@ -10,8 +10,9 @@ use framework_core::{
     EdgeInsets, Event, InputInterest, InputRequests, ItemExtent, LayoutStyle, LiveRegion, MenuBar,
     MenuItem, NavigationCommand, NavigationStack, Navigator, Node, NodeId, Overflow, Paint,
     PanicPolicy, Persisted, Platform, Point, RectF, RowStyle, Services, Size, SizeMode, TaskHandle,
-    Transition, Vec2, VirtualListStyle, VirtualRange, Window,
+    Transition, Vec2, VirtualListStyle, VirtualRange, Window, classes,
 };
+use framework_core::{ColorScheme, environment::keys};
 use framework_windows::{FileStateStore, WindowsPlatform};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,16 +73,21 @@ impl Component for CounterPanel {
         Node::column_with_layout(
             "counter-panel",
             [
+                // Styled with utility classes: `dark:` follows the host's
+                // colour scheme (a live `WM_SETTINGCHANGE`), or the shell's
+                // override below — re-resolved on these same controls.
                 Node::label_with_layout(
                     "title",
                     self.props.title.clone(),
                     LayoutStyle::new().height(SizeMode::Fixed(32)),
-                ),
+                )
+                .with_class(classes!("panel-text font-semibold dark:text-sky-300")),
                 Node::label_with_layout(
                     "counter",
                     format!("Count: {}", self.count),
                     LayoutStyle::new().height(SizeMode::Fixed(32)),
-                ),
+                )
+                .with_class(classes!("panel-text")),
                 Node::text_input_with_layout(
                     "name",
                     self.name.clone(),
@@ -168,6 +174,7 @@ impl Component for CounterPanel {
             LayoutStyle::new(),
             ColumnStyle::new().padding(EdgeInsets::all(24)).gap(16).align_items(Alignment::Center),
         )
+        .with_class(classes!("bg-panel dark:bg-neutral-900 border-neutral-300 rounded-lg"))
     }
 
     fn update(&mut self, event: Event) {
@@ -269,6 +276,9 @@ struct AppShell {
     input_lab_requested: bool,
     long_list_requested: bool,
     preferences_requested: bool,
+    /// The colour scheme forced on the counter panel, or `None` to follow
+    /// the host's.
+    scheme: Option<ColorScheme>,
 }
 
 /// A separate root used to exercise the native multi-window host. It has no
@@ -863,6 +873,7 @@ impl AppShell {
             input_lab_requested: false,
             long_list_requested: false,
             preferences_requested: false,
+            scheme: None,
         }
     }
 
@@ -932,6 +943,12 @@ impl Component for AppShell {
             );
         }
 
+        // The scheme override, when there is one, is provided to the
+        // subtree; `None` follows the host.
+        if let Some(scheme) = self.scheme {
+            context.provide_env(&keys::COLOR_SCHEME, scheme);
+        }
+
         let panel = if self.panel_visible {
             Some(context.child_with_props(
                 "counter-panel",
@@ -959,6 +976,15 @@ impl Component for AppShell {
                         Node::button_with_layout(
                             "change-title",
                             "Change Child Props",
+                            LayoutStyle::new().height(SizeMode::Fixed(36)),
+                        ),
+                        Node::button_with_layout(
+                            "toggle-scheme",
+                            match self.scheme {
+                                None => "Scheme: System",
+                                Some(ColorScheme::Light) => "Scheme: Light",
+                                Some(ColorScheme::Dark) => "Scheme: Dark",
+                            },
                             LayoutStyle::new().height(SizeMode::Fixed(36)),
                         ),
                     ],
@@ -992,6 +1018,12 @@ impl Component for AppShell {
                     self.panel_visible = !self.panel_visible;
                 } else if target == NodeId::from_key("change-title") {
                     self.title_index = (self.title_index + 1) % 2;
+                } else if target == NodeId::from_key("toggle-scheme") {
+                    self.scheme = match self.scheme {
+                        None => Some(ColorScheme::Dark),
+                        Some(ColorScheme::Dark) => Some(ColorScheme::Light),
+                        Some(ColorScheme::Light) => None,
+                    };
                 }
             }
             Event::MenuAction { item, .. } => {
@@ -1045,6 +1077,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Window::new("Rust Native UI", Size::new(640, 360)).with_menu(menu),
         services,
     );
+    // The theme `app.css` describes (`framework_build::compile_styles`).
+    application.set_theme(framework_core::app_theme!());
     // A component panic is caught at the Win32 callback boundary regardless
     // (unwinding across `extern "system"` is undefined behavior, so that
     // part is not a policy). What *is* a policy is what happens next, and

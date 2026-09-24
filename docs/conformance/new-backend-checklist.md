@@ -30,6 +30,9 @@ Test paths are relative to the crate named; `native::…` tests live in
 | 17 | Capability grants: services obtainable only through a scoped grant (shape) | core `grant::tests::grants_are_scoped`; enforcement is Milestone 51 | same |
 | 18 | Typestate for handles, grants, validated values | `typestate.md`; core `handle::tests` | same |
 | 19 | Cursors per node | `integration::native_declared_cursor_is_shown` | n/a (no pointer) |
+| 20 | A style capability table: every property realized, approximated (how), or unavailable (why); unavailable is a build error for the target (Milestone 58) | `framework_style::WINDOWS`; `native::style_integration::the_windows_capability_table_is_what_the_backend_applies` (fonts, colours, border, region read back); compile-fail `framework-conformance/tests/style_ui_windows` | `framework_style::HEADLESS`; `tests/portable_surface.rs::the_headless_style_table_realizes_everything` |
+| 21 | A unit mapping: host unit, `rem` following the text setting, one rounding rule | `framework_style::WINDOWS_UNITS`; core `style::resolve::tests::a_rem_follows_the_text_scale_and_rounds_half_away_from_zero` | `framework_style::HEADLESS_UNITS` |
+| 22 | Runtime token resolution: theme, scheme, and text-scale changes restyle existing native objects | `native::style_integration` (same HWNDs across a scheme and a token switch) | core `tests/style_equivalence.rs::environment_variants_follow_the_environment_without_re_rendering` |
 
 Owed by deferred backends (Milestones 33–38, Web A–K): their own column in
 this table, and in particular real safe areas and hinges (35, 36), host

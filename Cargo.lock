@@ -349,6 +349,8 @@ name = "framework-build"
 version = "0.1.0"
 dependencies = [
  "framework-markup",
+ "framework-style",
+ "quote",
  "serde",
  "toml",
 ]
@@ -371,6 +373,7 @@ dependencies = [
  "async-trait",
  "criterion",
  "framework-macros",
+ "framework-style",
  "framework-types",
  "parking_lot",
  "proptest",
@@ -385,6 +388,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "framework-core",
+ "framework-style",
  "parking_lot",
  "serde",
 ]
@@ -394,7 +398,10 @@ name = "framework-macros"
 version = "0.1.0"
 dependencies = [
  "framework-markup",
+ "framework-style",
  "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -410,6 +417,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-style"
+version = "0.1.0"
+dependencies = [
+ "framework-types",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "framework-types"
 version = "0.1.0"
 dependencies = [
@@ -422,6 +438,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "framework-core",
+ "framework-style",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -899,7 +916,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crc32fast",
+ "framework-build",
  "framework-markup",
+ "framework-style",
  "prettyplease",
  "proc-macro2",
  "quote",

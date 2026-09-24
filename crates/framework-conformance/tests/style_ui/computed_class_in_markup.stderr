@@ -1,0 +1,5 @@
+error: `class` takes a string literal: a class name is resolved where it is written, so a computed class would style nothing silently — choose between literal class strings with `if`, or set typed properties with `style={…}`
+ --> tests/style_ui/computed_class_in_markup.rs:5:51
+  |
+5 |     let _ = rsx! { <Label key="l" text="x" class={color} /> };
+  |                                                   ^^^^^
