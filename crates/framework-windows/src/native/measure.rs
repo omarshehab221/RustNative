@@ -11,9 +11,9 @@
 //! their lifetime — see that subsystem's `mod.rs` for why measuring text and
 //! owning brushes are separate responsibilities.
 
-use framework_core::{IntrinsicMeasurer, NodeKind, Size};
+use framework_core::{IntrinsicMeasurer, NodeKind, Size, Typography};
 use windows_sys::Win32::Foundation::{HWND, RECT};
-use windows_sys::Win32::Graphics::Gdi::{DrawTextW, GetDC, ReleaseDC};
+use windows_sys::Win32::Graphics::Gdi::{DrawTextW, GetDC, HGDIOBJ, ReleaseDC, SelectObject};
 
 use super::win32::best_effort;
 
@@ -21,6 +21,32 @@ use super::win32::best_effort;
 /// intrinsic size reflects the font that will actually draw it.
 pub(crate) struct WindowsIntrinsicMeasurer {
     pub(crate) window: HWND,
+    /// The text scale fonts are realized at, so text measures in the font
+    /// that will draw it.
+    pub(crate) text_scale: f32,
+}
+
+thread_local! {
+    /// Fonts for measuring, by family, size, weight, and scale (in
+    /// thousandths) — a handful per application, kept for its life.
+    static FONTS: std::cell::RefCell<std::collections::HashMap<(String, u16, u16, u32), isize>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn measuring_font(typography: &Typography, scale: f32) -> HGDIOBJ {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a text scale in thousandths, small and positive"
+    )]
+    let milli = (scale * 1_000.0).round().max(0.0) as u32;
+    let key = (typography.family.clone(), typography.size, typography.weight, milli);
+    FONTS.with(|fonts| {
+        *fonts
+            .borrow_mut()
+            .entry(key)
+            .or_insert_with(|| super::rendering::styling::create_font(typography, scale) as isize)
+    }) as HGDIOBJ
 }
 
 impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
@@ -29,6 +55,16 @@ impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
     }
 
     fn measure(&self, kind: NodeKind, text: Option<&str>, max_width: Option<i32>) -> Size {
+        self.measure_styled(kind, text, max_width, None)
+    }
+
+    fn measure_styled(
+        &self,
+        kind: NodeKind,
+        text: Option<&str>,
+        max_width: Option<i32>,
+        typography: Option<&Typography>,
+    ) -> Size {
         const DT_WORDBREAK: u32 = 0x0000_0010;
         const DT_CALCRECT: u32 = 0x0000_0400;
 
@@ -50,6 +86,17 @@ impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
         if hdc.is_null() {
             return Size::new(1, 32);
         }
+
+        // Measured in the font that will draw it — the node's own, or the
+        // default the theme gives text — at the person's text scale.
+        let font = measuring_font(&typography.cloned().unwrap_or_default(), self.text_scale);
+        let previous = if font.is_null() {
+            std::ptr::null_mut()
+        } else {
+            // SAFETY: `hdc` is the live DC just obtained; `font` is a live
+            // font this module keeps; the previous object is restored below.
+            unsafe { SelectObject(hdc, font) }
+        };
 
         let text_wide = super::util::wide(text);
         let padding = match kind {
@@ -80,6 +127,10 @@ impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
         // `DrawTextW` to write the calculated bounds into with
         // `DT_CALCRECT`.
         let measured = unsafe { DrawTextW(hdc, text_wide.as_ptr(), -1, &raw mut rect, flags) };
+        if !previous.is_null() {
+            // SAFETY: restores the DC's own font before it is released.
+            unsafe { SelectObject(hdc, previous) };
+        }
         // SAFETY: `hdc` was obtained from `GetDC(self.window)` above and
         // is released here exactly once, pairing that call as its
         // documented contract requires.
@@ -118,7 +169,7 @@ mod tests {
     #[test]
     fn measuring_empty_text_does_not_touch_the_device_context() {
         let window = TestWindow::new();
-        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd };
+        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd, text_scale: 1.0 };
         let size = measurer.measure(NodeKind::Label, None, None);
         assert!(size.width > 0 && size.height > 0, "even an empty label reserves some space");
     }
@@ -126,7 +177,7 @@ mod tests {
     #[test]
     fn measuring_more_text_never_produces_a_narrower_result() {
         let window = TestWindow::new();
-        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd };
+        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd, text_scale: 1.0 };
         let short = measurer.measure(NodeKind::Label, Some("Hi"), None);
         let long = measurer.measure(
             NodeKind::Label,
@@ -143,7 +194,7 @@ mod tests {
     #[test]
     fn measuring_respects_a_max_width_constraint_for_wrapping_kinds() {
         let window = TestWindow::new();
-        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd };
+        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd, text_scale: 1.0 };
         let long_text = "word ".repeat(40);
         let unconstrained = measurer.measure(NodeKind::Label, Some(&long_text), None);
         let constrained = measurer.measure(NodeKind::Label, Some(&long_text), Some(80));
@@ -157,7 +208,7 @@ mod tests {
     #[test]
     fn measuring_a_pathologically_long_line_stays_within_the_coordinate_domain() {
         let window = TestWindow::new();
-        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd };
+        let measurer = WindowsIntrinsicMeasurer { window: window.hwnd, text_scale: 1.0 };
         let huge = "x".repeat(100_000);
         let size = measurer.measure(NodeKind::Label, Some(&huge), None);
         assert!(size.width > 0, "an enormous single line still measures to a usable width");

@@ -454,11 +454,26 @@ impl LayoutEngine {
 
         let gap_total = gap.max(0).saturating_mul(child_gap_count(children.len()));
         let usable_height = content.height.saturating_sub(gap_total).max(0);
+        // The width each child will get, computed exactly as the placement
+        // below computes it: a child's height is measured at that width, so
+        // wrapping text is as tall as it wraps (Milestone 41's layout
+        // conformance found labels measured at one line).
+        let child_width = |child: &TreeNode| {
+            let margin = child.layout.margin;
+            let available_width = content.width.saturating_sub(margin.horizontal()).max(0);
+            let alignment = child.layout.align_self.unwrap_or(align_items);
+            let width = match (alignment, child.layout.width) {
+                (Alignment::Stretch, SizeMode::Auto | SizeMode::Fill) => available_width,
+                (_, SizeMode::Auto) => {
+                    self.preferred_width(snapshot, child, measurer).min(available_width)
+                }
+                (_, mode) => resolve_width(mode, available_width),
+            };
+            child.layout.constraints.clamp_width(width.max(0).min(available_width))
+        };
         let preferred_height = children
             .iter()
-            .map(|child| {
-                self.preferred_height(snapshot, child, measurer, preferred_width_hint(child))
-            })
+            .map(|child| self.preferred_height(snapshot, child, measurer, Some(child_width(child))))
             .fold(0, i32::saturating_add);
         let fill_count =
             children.iter().filter(|child| matches!(child.layout.height, SizeMode::Fill)).count();
@@ -475,13 +490,13 @@ impl LayoutEngine {
             let height = match child.layout.height {
                 SizeMode::Fixed(value) => value.max(0),
                 SizeMode::Auto => {
-                    self.preferred_height(snapshot, child, measurer, preferred_width_hint(child))
+                    self.preferred_height(snapshot, child, measurer, Some(child_width(child)))
                 }
                 SizeMode::Fill => {
                     let extra = if fill_index == 0 { remainder } else { 0 };
                     fill_index += 1;
                     (self
-                        .preferred_height(snapshot, child, measurer, preferred_width_hint(child))
+                        .preferred_height(snapshot, child, measurer, Some(child_width(child)))
                         .saturating_add(share)
                         .saturating_add(extra))
                     .max(0)
@@ -834,7 +849,14 @@ impl LayoutEngine {
     ) -> i32 {
         let base = match node.kind {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar => {
-                measurer.measure(node.kind, node.text.as_deref(), None).width as i32
+                measurer
+                    .measure_styled(
+                        node.kind,
+                        node.text.as_deref(),
+                        None,
+                        node.visual_style.properties().typography_override(),
+                    )
+                    .width as i32
             }
             // A foreign object has the size its factory reports.
             NodeKind::Surface if node.foreign.is_some() => {
@@ -881,7 +903,14 @@ impl LayoutEngine {
         }
         match node.kind {
             NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::TabBar => {
-                measurer.measure(node.kind, node.text.as_deref(), max_width).height as i32
+                measurer
+                    .measure_styled(
+                        node.kind,
+                        node.text.as_deref(),
+                        max_width,
+                        node.visual_style.properties().typography_override(),
+                    )
+                    .height as i32
             }
             NodeKind::Surface if node.foreign.is_some() => {
                 measurer.measure_foreign(node.foreign.as_deref().unwrap_or_default()).height as i32

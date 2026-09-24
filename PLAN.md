@@ -2333,6 +2333,13 @@ render ever observes a partial set of them.
 **Done when** every guarantee above names a test, and no backend is called
 complete without passing the suite.
 
+**Status (2026-09-24): implemented** on Windows and the headless backend —
+every guarantee names its test in `docs/guarantees.md`; the shared suites
+run on both backends through `ConformanceHost`; layout, fidelity, text, leak,
+and modal-loop conformance run on Windows. Owed: a person's recorded
+Narrator pass, the drag-loop case, the comparison's other columns, and the
+deferred backends' columns. See `BUILD_STATUS.md`.
+
 **Depends on** Milestone 45 for the headless backend the suites run on.
 
 ## Milestone 42 — Budgets

@@ -22,9 +22,9 @@ use framework_core::{
 };
 use windows_sys::Win32::Foundation::{COLORREF, HWND};
 use windows_sys::Win32::Graphics::Gdi::{
-    CLIP_DEFAULT_PRECIS, COLOR_WINDOW, COLOR_WINDOWTEXT, CreateFontIndirectW, CreateSolidBrush,
-    DEFAULT_CHARSET, DEFAULT_PITCH, DEFAULT_QUALITY, DeleteObject, FF_DONTCARE, GetSysColor,
-    HBRUSH, HFONT, HGDIOBJ, LOGFONTW, OUT_DEFAULT_PRECIS,
+    CLIP_DEFAULT_PRECIS, COLOR_BTNFACE, COLOR_BTNTEXT, COLOR_WINDOW, COLOR_WINDOWTEXT,
+    CreateFontIndirectW, CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH, DEFAULT_QUALITY,
+    DeleteObject, FF_DONTCARE, GetSysColor, HBRUSH, HFONT, HGDIOBJ, LOGFONTW, OUT_DEFAULT_PRECIS,
 };
 
 use super::super::user_data::BackgroundColorSlot;
@@ -58,7 +58,11 @@ impl ControlStyle {
     /// P2.28). Any component still unset after resolution — which only
     /// happens for a snapshot that skipped theming entirely — falls back to
     /// the corresponding system color, so a control is never left unpainted.
-    pub(crate) fn resolve(resolved: &ResolvedStyle) -> Self {
+    pub(crate) fn resolve(
+        resolved: &ResolvedStyle,
+        kind: framework_core::NodeKind,
+        host: HostSettings,
+    ) -> Self {
         let style = resolved.properties();
         // SAFETY: `GetSysColor` takes a documented system-color index
         // constant and no pointer arguments; it cannot fail (an
@@ -70,12 +74,30 @@ impl ControlStyle {
         let background = style
             .background_override()
             .map_or_else(|| unsafe { GetSysColor(COLOR_WINDOW) }, color_ref);
+        // High contrast: the system's colours for the control's role, over
+        // anything the theme or the application chose — what the system's
+        // own controls do.
+        let (foreground, background) = if host.high_contrast {
+            let (text, back) = match kind {
+                framework_core::NodeKind::Button | framework_core::NodeKind::TabBar => {
+                    (COLOR_BTNTEXT, COLOR_BTNFACE)
+                }
+                _ => (COLOR_WINDOWTEXT, COLOR_WINDOW),
+            };
+            // SAFETY: `GetSysColor` takes a documented index and no
+            // pointers.
+            unsafe { (GetSysColor(text), GetSysColor(back)) }
+        } else {
+            (foreground, background)
+        };
         // SAFETY: `CreateSolidBrush` takes a plain `COLORREF` value and
         // no pointer arguments, so the call itself cannot be unsound; a
         // null return (GDI-handle-exhaustion) is a valid `HBRUSH` value
         // that `Drop` below already checks for before freeing.
         let background_brush = unsafe { CreateSolidBrush(background) };
-        let font = style.typography_override().map_or(std::ptr::null_mut(), create_font);
+        let font = style
+            .typography_override()
+            .map_or(std::ptr::null_mut(), |typography| create_font(typography, host.text_scale));
         let border = style.border_override().map(color_ref);
         let radius = style.border_radius_override().unwrap_or(0);
 
@@ -117,7 +139,17 @@ pub(crate) fn face_name(family: &str) -> &str {
     }
 }
 
-fn create_font(typography: &Typography) -> HFONT {
+/// A typography's pixel height at `scale`, rounded half away from zero.
+pub(crate) fn scaled_height(typography: &Typography, scale: f32) -> i32 {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a font size times a text scale, far inside i32's range"
+    )]
+    let height = (f32::from(typography.size) * scale).round() as i32;
+    height.max(1)
+}
+
+pub(crate) fn create_font(typography: &Typography, scale: f32) -> HFONT {
     let mut face_name = [0u16; 32];
     let encoded: Vec<u16> = self::face_name(&typography.family).encode_utf16().take(31).collect();
     face_name[..encoded.len()].copy_from_slice(&encoded);
@@ -127,7 +159,7 @@ fn create_font(typography: &Typography) -> HFONT {
     // units rather than a cell height, which is what the framework's
     // `Typography::size` is meant to represent.
     let logfont = LOGFONTW {
-        lfHeight: -i32::from(typography.size),
+        lfHeight: -scaled_height(typography, scale),
         lfWidth: 0,
         lfEscapement: 0,
         lfOrientation: 0,
@@ -163,6 +195,23 @@ pub(crate) struct StyleCache {
     realized: HashMap<NodeId, ControlStyle>,
     interaction: HashMap<NodeId, ControlState>,
     theme: Theme,
+    host: HostSettings,
+}
+
+/// The system settings every realized style follows without application
+/// code (Milestone 41's fidelity guarantees).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct HostSettings {
+    /// High contrast is on: controls take the system's colours.
+    pub(crate) high_contrast: bool,
+    /// The person's text scale: every font is this much larger.
+    pub(crate) text_scale: f32,
+}
+
+impl Default for HostSettings {
+    fn default() -> Self {
+        Self { high_contrast: false, text_scale: 1.0 }
+    }
 }
 
 impl StyleCache {
@@ -177,6 +226,19 @@ impl StyleCache {
     /// Replaces the theme every subsequent resolution is based on.
     pub(crate) fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
+    }
+
+    /// The text scale fonts are realized at.
+    pub(crate) fn text_scale(&self) -> f32 {
+        self.host.text_scale
+    }
+
+    /// Records the system settings styles follow; returns whether they
+    /// changed (every realized style must then be realized again).
+    pub(crate) fn set_host_settings(&mut self, host: HostSettings) -> bool {
+        let changed = self.host != host;
+        self.host = host;
+        changed
     }
 
     /// Resolves and stores `id`'s style for the given node kind, override,
@@ -198,7 +260,11 @@ impl StyleCache {
         } else {
             self.interaction.get(&id).copied().unwrap_or(ControlState::Normal)
         };
-        let resolved = ControlStyle::resolve(&self.theme.resolve(kind, state, style_override));
+        let resolved = ControlStyle::resolve(
+            &self.theme.resolve(kind, state, style_override),
+            kind,
+            self.host,
+        );
         self.realized.insert(id, resolved);
         &self.realized[&id]
     }
@@ -390,7 +456,11 @@ mod tests {
                     ),
                     ControlState::Normal,
                 );
-            let resolved = ControlStyle::resolve(&style);
+            let resolved = ControlStyle::resolve(
+                &style,
+                framework_core::NodeKind::Label,
+                HostSettings::default(),
+            );
             assert!(
                 !resolved.background_brush.is_null(),
                 "brush creation failed on iteration {i} of {ITERATIONS} — consistent with a \
@@ -408,7 +478,8 @@ mod tests {
     #[test]
     fn control_style_resolve_falls_back_to_system_colors_when_unset() {
         let style = ResolvedStyle::new(VisualStyle::default(), ControlState::Normal);
-        let resolved = ControlStyle::resolve(&style);
+        let resolved =
+            ControlStyle::resolve(&style, framework_core::NodeKind::Label, HostSettings::default());
         // No typography override was set, so no font handle should have
         // been created — the renderer falls back to the control's
         // default system font instead.

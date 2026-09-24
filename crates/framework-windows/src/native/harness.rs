@@ -102,6 +102,36 @@ pub(crate) struct NativeHarness {
     _lock: MutexGuard<'static, ()>,
 }
 
+impl Drop for NativeHarness {
+    /// Destroys the windows this harness created and discards what their
+    /// teardown queued (the primary window's `WM_QUIT` among it), so a
+    /// second harness on the same thread starts clean — without this, a
+    /// window would outlive the `Runtime` its `GWLP_USERDATA` points at.
+    fn drop(&mut self) {
+        let windows: Vec<HWND> = self
+            .registry
+            .runtimes
+            .values()
+            .filter(|runtime| !runtime.destroyed)
+            .map(|runtime| runtime.window)
+            .collect();
+        for hwnd in windows {
+            // SAFETY: `hwnd` is a window this harness's registry created and
+            // still owns; `IsWindow` accepts any handle value.
+            unsafe {
+                if IsWindow(hwnd) != 0 {
+                    windows_sys::Win32::UI::WindowsAndMessaging::DestroyWindow(hwnd);
+                }
+            }
+        }
+        let mut message = MSG::default();
+        // SAFETY: `message` is writable; removing without dispatching.
+        while unsafe { PeekMessageW(&raw mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) } != 0
+        {
+        }
+    }
+}
+
 impl NativeHarness {
     /// Attaches to `application`, creating every window it currently wants
     /// open, and pumps until the UI has settled.
@@ -270,7 +300,18 @@ impl NativeHarness {
     /// created one.
     pub(crate) fn control(&self, window: WindowId, key: &str) -> Option<HWND> {
         self.with_runtime(window, |runtime| {
-            runtime.renderer.registry.get(NodeId::from_key(key)).map(NativeObject::hwnd)
+            let registry = &runtime.renderer.registry;
+            // A root-component node's identity is its bare key; a child
+            // component's is scoped, so it is found by its local key.
+            registry.get(NodeId::from_key(key)).map(NativeObject::hwnd).or_else(|| {
+                runtime
+                    .renderer
+                    .snapshot
+                    .nodes()
+                    .find(|node| node.id.local_key().as_deref() == Some(key))
+                    .and_then(|node| registry.get(node.id))
+                    .map(NativeObject::hwnd)
+            })
         })
     }
 

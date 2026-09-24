@@ -17,11 +17,12 @@ workspace = true
 
 [dependencies]
 framework-core.workspace = true
+framework-headless.workspace = true
 
 [build-dependencies]
 framework-build.workspace = true
 
 [dev-dependencies]
-framework-headless.workspace = true
 framework-markup.workspace = true
+proptest = "1"
 trybuild = "1"

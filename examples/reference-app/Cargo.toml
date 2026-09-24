@@ -1,0 +1,21 @@
+[package]
+name = "reference-app"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The reference application of the published comparison: the layout conformance suite's reference screen on the Windows backend"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+framework-conformance.workspace = true
+framework-core.workspace = true
+framework-windows.workspace = true

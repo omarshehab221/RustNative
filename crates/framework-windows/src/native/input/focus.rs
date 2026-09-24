@@ -3,6 +3,7 @@
 
 use framework_core::{Event, NodeId};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetFocus, SetFocus};
+use windows_sys::Win32::UI::WindowsAndMessaging::{UIS_CLEAR, UISF_HIDEACCEL, UISF_HIDEFOCUS};
 
 use super::super::runtime::Runtime;
 
@@ -61,6 +62,19 @@ pub(crate) fn focus_next(runtime: &mut Runtime, backwards: bool) {
         unsafe {
             SetFocus(object.hwnd());
         }
+    }
+    // Keyboard navigation shows the focus rectangle (and accelerator
+    // underlines), as the system's dialog manager does on Tab: without
+    // this, a window activated by the mouse keeps them hidden.
+    // SAFETY: `runtime.window` is this runtime's live window; the
+    // parameters are the documented `WM_CHANGEUISTATE` packing.
+    unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW(
+            runtime.window,
+            windows_sys::Win32::UI::WindowsAndMessaging::WM_CHANGEUISTATE,
+            ((UISF_HIDEFOCUS | UISF_HIDEACCEL) << 16 | UIS_CLEAR) as usize,
+            0,
+        );
     }
 }
 

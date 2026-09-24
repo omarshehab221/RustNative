@@ -82,6 +82,15 @@ impl Runtime {
         }) else {
             return Ok(());
         };
+        let host = self.with_application(|application| {
+            use framework_core::environment::keys;
+            super::rendering::styling::HostSettings {
+                high_contrast: application.environment_for(self.window_id, &keys::CONTRAST)
+                    == framework_core::Contrast::High,
+                text_scale: application.environment_for(self.window_id, &keys::TEXT_SCALE).get(),
+            }
+        });
+        self.renderer.set_host_settings(host);
         let direction_changed = self.renderer.direction.set_base(direction);
         self.renderer.render(&tree, self.window, &theme)?;
         if direction_changed {

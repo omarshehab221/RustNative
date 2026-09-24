@@ -137,7 +137,10 @@ fn apply_visual(
             Some(radius) => current.border_radius(clamp_u16(radius)),
             None => current,
         },
-        (StyleProperty::FontSize, _) => match px(value, rem_px, em_px) {
+        // A font size is specified at the default text size: the backend
+        // scales every font — declared or themed — by the person's text
+        // scale, so scaling it here too would scale it twice.
+        (StyleProperty::FontSize, _) => match px(value, 16.0, em_px) {
             Some(size) => {
                 let typography = Typography { size: clamp_u16(size), ..typography() };
                 current.typography(typography)

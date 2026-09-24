@@ -146,7 +146,9 @@ pub const WINDOWS_UNITS: UnitMapping = UnitMapping {
     host_unit: "device pixels",
     pixel: "one logical pixel is one device pixel: layout is not yet scaled by `GetDpiForWindow / 96` (a surface \
             reports that ratio as its `scale_factor`; scaling layout itself is recorded as owed in BUILD_STATUS.md)",
-    rem: "16 logical pixels × the text-scale factor (`keys::TEXT_SCALE`, fed from the system text-size setting)",
+    rem: "16 logical pixels × the text-scale factor (`keys::TEXT_SCALE`, fed from the system text-size setting) for \
+          lengths; font sizes are specified at the default text size and every font — themed or declared — is \
+          scaled by the text scale when it is realized",
     rounding: "half away from zero, once, where a length becomes whole pixels",
 };
 
@@ -155,7 +157,7 @@ pub const HEADLESS_UNITS: UnitMapping = UnitMapping {
     backend: "headless",
     host_unit: "logical pixels",
     pixel: "one logical pixel is one unit (there is no device)",
-    rem: "16 logical pixels × the text-scale factor",
+    rem: "16 logical pixels × the text-scale factor for lengths; fonts are measured at the text scale",
     rounding: "half away from zero, once, where a length becomes whole pixels",
 };
 

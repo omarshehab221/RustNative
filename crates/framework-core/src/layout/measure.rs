@@ -19,6 +19,21 @@ pub trait IntrinsicMeasurer {
     /// wrapping within `max_width` if given.
     fn measure(&self, kind: NodeKind, text: Option<&str>, max_width: Option<i32>) -> Size;
 
+    /// [`Self::measure`] in the font the node will be drawn in, where the
+    /// node's resolved style names one — what a host measuring with real
+    /// font metrics needs, so a node never measures in one font and draws
+    /// in another.
+    fn measure_styled(
+        &self,
+        kind: NodeKind,
+        text: Option<&str>,
+        max_width: Option<i32>,
+        typography: Option<&crate::style::Typography>,
+    ) -> Size {
+        let _ = typography;
+        self.measure(kind, text, max_width)
+    }
+
     /// The natural size of a foreign object of the given factory `kind`
     /// ([`crate::Node::foreign`]): what the backend's factory reports, or
     /// nothing (the layout must size it) when this measurer knows none.

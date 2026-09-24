@@ -14,6 +14,54 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 41 — Guarantees and conformance suites — complete (Windows scope)
+
+**Built.** `docs/guarantees.md` lists every guarantee with its named test on
+each shipped backend.
+
+- **Shared suites** (`framework-conformance`): `host::ConformanceHost` /
+  `Driver`, implemented for the headless backend (`HeadlessHost`) and for
+  Windows over the native harness (`native::guarantees_integration`); suites
+  for the transient fast path (typing renders only the owning component,
+  scrolling renders nothing), batching (one render per message, never a
+  partial set), scope-bound cancellation, and native-object lifetime. Style
+  equivalence moved here beside syntax equivalence.
+- **Scope-bound cancellation as a property**: random mount/unmount/time
+  sequences (`tests/cancellation_property.rs`, proptest).
+- **Layout conformance**: `framework_core::localization::pseudo_localize`
+  (+40 %, accented, bracketed), the reference screen
+  (`framework_conformance::reference`), and the suite at text scales
+  1.0/1.5/2.0 × pseudo × mirrored — no clipping, no overlap, targets ≥ 24×24
+  inside their container, all reachable by Tab — on headless and, with the
+  system's font metrics, on Windows.
+- **Windows-only guarantees**: the GDI/USER leak gate (100 cycles of a styled
+  subtree), modal-loop conformance (menu tracking and the size loop keep
+  animations and tasks running), fidelity (system control classes, focus cues
+  on keyboard traversal, high contrast, text scale), and text through the
+  system's stack (Arabic, mixed bidi, Devanagari, emoji ZWJ, Thai, CJK).
+- **Fixes the suites found** (recorded in `docs/guarantees.md`): wrapping
+  labels were measured at one line (the column now measures at the width it
+  assigns); Windows measured text in the default window font rather than the
+  drawing font (`IntrinsicMeasurer::measure_styled`); the text scale did not
+  reach Windows fonts and high contrast did not reach colours (now applied to
+  every realized style, on existing objects — font sizes from declarations
+  are specified at the default text size so they are not scaled twice);
+  keyboard traversal left focus cues hidden (`WM_CHANGEUISTATE`); scheduled
+  work stalled in host modal loops; a test harness's windows outlived their
+  runtimes (the harness now tears them down).
+- `docs/conformance/windows-fidelity.md`,
+  `docs/conformance/windows-screen-reader-pass.md` (the checklist),
+  `docs/comparison/methodology.md`, `examples/reference-app`.
+
+**Verified.** Full gate; the Windows visual golden was re-blessed after the
+measurement fix (controls now sized for the Segoe UI font that draws them —
+reviewed by eye).
+
+**Not verified / owed.** A recorded Narrator pass is owed to a person — no
+pass is claimed. The OLE drag-and-drop modal loop is not exercised (it needs a
+physical button held). The comparison's self-drawing and embedded-engine
+columns are not measured. The deferred backends owe their columns.
+
 ### Milestone 40 — Interoperability and incremental adoption — complete (Windows scope)
 
 **Built.**

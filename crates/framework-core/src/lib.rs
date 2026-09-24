@@ -311,6 +311,7 @@ pub mod identity;
 pub mod input;
 pub mod layout;
 pub mod lifecycle;
+pub mod localization;
 pub mod menu;
 pub mod navigation;
 pub mod node;

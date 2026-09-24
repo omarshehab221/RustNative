@@ -93,6 +93,8 @@ pub(crate) struct Renderer {
     /// The window's DPI as `WM_DPICHANGED` last announced it, which is what
     /// a surface's scale factor follows once the window has moved.
     dpi: Option<u32>,
+    /// Set when the system settings styles follow changed.
+    restyle_all: bool,
     /// Surface size changes not yet reported (see
     /// [`Renderer::take_surface_changes`]).
     surface_changes: Vec<SurfaceChange>,
@@ -133,6 +135,7 @@ impl Renderer {
             pool: ControlPool::default(),
             surface_sizes: HashMap::new(),
             dpi: None,
+            restyle_all: false,
             surface_changes: Vec::new(),
             accessibility: AccessibilityBridge::default(),
             layout_engine: LayoutEngine,
@@ -157,6 +160,7 @@ impl Renderer {
 
         let diff = TreeDiff::between(&self.snapshot, &next);
         self.styles.set_theme(theme.clone());
+        let restyle_all = std::mem::take(&mut self.restyle_all);
         // Which item each list is scrolled to, captured against the tree
         // that is still on screen: once the operations below have run, the
         // items that answered that question may be gone.
@@ -175,6 +179,13 @@ impl Renderer {
 
         self.collect_appearance_transitions(&next);
         self.snapshot = next;
+        // A system setting changed (high contrast, text scale): every
+        // realized style follows it, on the objects that already exist.
+        if restyle_all {
+            for node in self.snapshot.nodes().cloned().collect::<Vec<_>>() {
+                self.apply_control_style(&node);
+            }
+        }
         self.virtual_lists.sync(&self.snapshot);
         if self.accessibility.commit(window, &self.snapshot, &self.registry) {
             crate::native::uia::schedule(window);
@@ -183,10 +194,18 @@ impl Renderer {
         // exist would otherwise accumulate for the life of the window.
         let snapshot = &self.snapshot;
         self.styles.retain_interaction(|id| snapshot.contains(id));
-        if layout_invalidated {
+        if layout_invalidated || restyle_all {
             self.relayout(window);
         }
         Ok(())
+    }
+
+    /// Records the system settings styles follow; a change restyles every
+    /// node and lays the window out again at the next render.
+    pub(crate) fn set_host_settings(&mut self, host: super::styling::HostSettings) {
+        if self.styles.set_host_settings(host) {
+            self.restyle_all = true;
+        }
     }
 
     /// Runs layout for the whole window and applies the result to every
@@ -211,7 +230,7 @@ impl Renderer {
             dimension_to_u32(client.right - client.left),
             dimension_to_u32(client.bottom - client.top),
         );
-        let measurer = WindowsIntrinsicMeasurer { window };
+        let measurer = WindowsIntrinsicMeasurer { window, text_scale: self.styles.text_scale() };
         let output = self.measure_and_lay_out(size, &measurer);
 
         self.collect_geometry_transitions(&output.rects);

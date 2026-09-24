@@ -101,6 +101,12 @@ impl NativeObjectRegistry {
         }
     }
 
+    /// How many native objects are realized.
+    #[cfg_attr(not(test), allow(dead_code, reason = "read by the guarantee suites' leak gate"))]
+    pub(crate) fn len(&self) -> usize {
+        self.objects.len()
+    }
+
     pub(crate) fn get(&self, id: NodeId) -> Option<&NativeObject> {
         self.objects.get(&id)
     }

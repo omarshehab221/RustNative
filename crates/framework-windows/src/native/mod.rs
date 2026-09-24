@@ -18,6 +18,8 @@ pub(crate) mod graphics;
 #[cfg(test)]
 mod graphics_integration;
 #[cfg(test)]
+mod guarantees_integration;
+#[cfg(test)]
 mod harness;
 mod host_traits;
 pub(crate) mod input;
