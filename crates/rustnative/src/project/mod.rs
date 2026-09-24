@@ -75,6 +75,18 @@ impl FrameworkSource {
         }
     }
 
+    /// The test half: the headless backend, which runs the previews as
+    /// golden tests.
+    fn dev_dependencies(&self) -> String {
+        match self {
+            Self::Published(version) => format!("framework-headless = \"{version}\"\n"),
+            Self::Path(path) => {
+                let path = normalized(path);
+                format!("framework-headless = {{ path = \"{path}/crates/framework-headless\" }}\n")
+            }
+        }
+    }
+
     /// The build-time half: the crate that embeds the icon, version
     /// information, and application manifest into the executable.
     fn build_dependencies(&self) -> String {
@@ -118,17 +130,23 @@ pub fn create(
         return Err(Error::Usage(format!("{} already exists", root.display())));
     }
     match syntax {
-        Syntax::Builder => write(&root.join("src"), "main.rs", &fill(templates::MAIN_RS, &config))?,
+        Syntax::Builder => {
+            write(&root.join("src"), "lib.rs", &fill(templates::LIB_RS, &config))?;
+            write(&root.join("src"), "main.rs", &fill(templates::MAIN_RS, &config))?;
+        }
         Syntax::Markup => {
+            write(&root.join("src"), "lib.rs", &fill(templates::MARKUP_LIB_RS, &config))?;
             write(&root.join("src"), "main.rs", &fill(templates::MARKUP_MAIN_RS, &config))?;
             write(&root.join("src"), "app.rsx", &fill(templates::MARKUP_APP_RSX, &config))?;
         }
     }
+    write(&root.join("tests"), "previews.rs", &fill(templates::PREVIEWS_TEST_RS, &config))?;
     write(
         &root,
         "Cargo.toml",
         &fill(templates::CARGO_TOML, &config)
             .replace("{{dependencies}}", &framework.dependencies())
+            .replace("{{dev-dependencies}}", &framework.dev_dependencies())
             .replace("{{build-dependencies}}", &framework.build_dependencies()),
     )?;
     let build_rs = match syntax {
@@ -154,6 +172,7 @@ fn fill(template: &str, config: &Config) -> String {
         .replace("{{display_name}}", &config.app.display_name)
         .replace("{{app_id}}", &config.app.id)
         .replace("{{version}}", &config.app.version)
+        .replace("{{crate_name}}", &config.app.name.replace('-', "_"))
 }
 
 fn write(directory: &Path, name: &str, contents: &str) -> Result<()> {
@@ -186,18 +205,29 @@ mod tests {
             Syntax::Builder,
         )
         .expect("created");
-        for file in
-            ["Cargo.toml", "rustnative.toml", ".gitignore", "README.md", "src/main.rs", "build.rs"]
-        {
+        for file in [
+            "Cargo.toml",
+            "rustnative.toml",
+            ".gitignore",
+            "README.md",
+            "src/main.rs",
+            "src/lib.rs",
+            "tests/previews.rs",
+            "build.rs",
+        ] {
             assert!(root.join(file).is_file(), "{file} is generated");
         }
         let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
         assert!(manifest.contains("name = \"demo-app\""));
         assert!(manifest.contains("framework-windows = \"0.1\""));
         assert!(manifest.contains("[build-dependencies]\nframework-build = \"0.1\""), "{manifest}");
+        let lib = std::fs::read_to_string(root.join("src/lib.rs")).unwrap();
+        assert!(lib.contains("com.example.demoapp"), "the app id reaches the source");
         let main = std::fs::read_to_string(root.join("src/main.rs")).unwrap();
-        assert!(main.contains("com.example.demoapp"), "the app id reaches the source");
-        assert!(!main.contains("{{"), "every placeholder is filled: {main}");
+        assert!(main.contains("use demo_app::"), "the shell names the library: {main}");
+        for text in [&lib, &main] {
+            assert!(!text.contains("{{"), "every placeholder is filled: {text}");
+        }
 
         let project = Project::find(&root.join("src")).expect("found from inside the project");
         assert_eq!(project.config.app.name, "demo-app");

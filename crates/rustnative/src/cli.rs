@@ -53,6 +53,16 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Browse the application's previews in the preview catalogue — every
+    /// preview across its configurations — or, with `--headless`, run them
+    /// as golden tests (`PLAN.md` Milestone 43).
+    Preview {
+        /// The preview to open first.
+        name: Option<String>,
+        /// Run the previews as golden tests on the headless backend instead.
+        #[arg(long)]
+        headless: bool,
+    },
     /// Measure the framework's budget scenarios for a target against
     /// `budgets/<target>.toml`, writing `target/budget-report.json`
     /// (`PLAN.md` Milestone 42). Run in the framework's repository.
@@ -182,10 +192,18 @@ impl Cli {
             .map_err(|cause| Error::Io { what: "find the current folder".to_owned(), cause })?;
         match self.command {
             Command::New { name, path, framework_path, syntax } => {
-                let parent = path.unwrap_or(here);
+                let parent = path.unwrap_or_else(|| here.clone());
+                // A relative checkout path names a folder from here, not from
+                // the new project, where Cargo will read it.
                 let framework = framework_path.map_or_else(
                     || FrameworkSource::Published(FRAMEWORK_VERSION.to_owned()),
-                    FrameworkSource::Path,
+                    |path| {
+                        FrameworkSource::Path(if path.is_absolute() {
+                            path
+                        } else {
+                            here.join(path)
+                        })
+                    },
                 );
                 let root = create(&parent, &name, &framework, syntax)?;
                 println!("Created {}", root.display());
@@ -236,6 +254,31 @@ impl Cli {
                 Ok(())
             }
             Command::Inspect { target, question } => crate::inspect::run(&target, question),
+            Command::Preview { name, headless } => {
+                let project = Project::find(&here)?;
+                if headless {
+                    let arguments = ["test".to_owned(), "--test".to_owned(), "previews".to_owned()];
+                    return crate::diagnostics::run_cargo(&project.root, &arguments);
+                }
+                // The application's own `main` shows the catalogue when asked.
+                let status = std::process::Command::new(
+                    std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
+                )
+                .current_dir(&project.root)
+                .arg("run")
+                .env(framework_core::preview::PREVIEW_VARIABLE, name.unwrap_or_default())
+                .status()
+                .map_err(|cause| Error::ToolMissing {
+                    tool: "cargo",
+                    hint: "install the Rust toolchain from https://rustup.rs".into(),
+                    cause: Some(cause.to_string()),
+                })?;
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err(Error::ToolFailed { tool: "cargo", code: status.code() })
+                }
+            }
             Command::Bench { target, check, low_end, build_times } => {
                 crate::bench::run(&here, target, check, low_end, build_times)
             }

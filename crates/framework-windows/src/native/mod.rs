@@ -38,6 +38,8 @@ mod message_loop;
 #[cfg(test)]
 mod navigation_integration;
 mod ownership;
+#[cfg(test)]
+mod preview_integration;
 mod registry;
 pub(crate) mod rendering;
 mod runtime;

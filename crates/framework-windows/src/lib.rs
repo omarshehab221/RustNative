@@ -107,6 +107,26 @@ pub use services::system::WindowsSystem;
 #[cfg(windows)]
 pub use surface::{SurfaceHandle, native_surface};
 
+/// Runs the preview catalogue (`framework_core::preview::Catalogue`) on
+/// this backend, opened at the preview named `first` — what an
+/// application's `main` does when `rustnative preview` runs it
+/// (`framework_core::preview::requested`).
+///
+/// # Errors
+///
+/// As [`WindowsPlatform`]'s `run`.
+pub fn run_catalogue(
+    previews: Vec<framework_core::preview::Preview>,
+    first: &str,
+) -> Result<(), Error> {
+    use framework_core::Platform as _;
+    let mut application = framework_core::Application::new(
+        framework_core::preview::Catalogue::open(previews, first),
+        framework_core::Window::new("Previews", framework_core::Size::new(960, 640)),
+    );
+    WindowsPlatform::new().run(&mut application)
+}
+
 /// The top-level `HWND` of window `id`, as an integer, if it is open on
 /// this backend — for code at the platform boundary (the escape hatch,
 /// dialogs owned by a window). `None` on every other operating system.

@@ -33,7 +33,7 @@ mod services;
 mod tree;
 
 pub use app::{HeadlessApp, STATE_FLUSH_DELAY};
-pub use golden::{check_golden, diff};
+pub use golden::{check_golden, diff, preview_goldens};
 pub use inspect::HeadlessInspect;
 pub use measure::HeadlessMeasurer;
 pub use platform::HeadlessPlatform;

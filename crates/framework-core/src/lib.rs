@@ -321,6 +321,7 @@ pub mod perf;
 pub mod permission;
 pub mod persistence;
 pub mod platform;
+pub mod preview;
 pub mod reconcile;
 pub mod scheduler;
 pub mod services;

@@ -5,17 +5,23 @@
 //! likely to change is in `src/main.rs`, and everything the tooling reads
 //! is in `rustnative.toml`.
 
-/// The generated `src/main.rs`.
-pub const MAIN_RS: &str = r#"#![cfg_attr(windows, windows_subsystem = "windows")]
+/// The generated `src/lib.rs`: the application itself — its root
+/// component and its previews. The executable (`src/main.rs`) is a thin
+/// shell around it, so a change to the application recompiles this crate
+/// and relinks the shell (`PLAN.md` Milestone 43).
+pub const LIB_RS: &str = r#"//! {{display_name}}: its root component and its previews.
 
-use framework_core::{
-    Application, Component, ComponentContext, Event, Node, NodeId, Platform, Size, Window, classes,
-};
-use framework_windows::WindowsPlatform;
+use framework_core::preview::{Preview, PreviewMatrix};
+use framework_core::{Component, Event, Node, NodeId, classes};
+
+/// The application's name, as people see it.
+pub const APP_NAME: &str = "{{display_name}}";
+/// The application's identity: its saved state and single instance.
+pub const APP_ID: &str = "{{app_id}}";
 
 /// The application's root component: state, a view of it, and what events
 /// do to it.
-struct App {
+pub struct App {
     clicks: u32,
 }
 
@@ -53,10 +59,27 @@ impl Component for App {
     }
 }
 
-const APP_NAME: &str = "{{display_name}}";
-const APP_ID: &str = "{{app_id}}";
+/// The application's previews: `rustnative preview` browses them, and
+/// `tests/previews.rs` makes each one a golden test.
+#[must_use]
+pub fn previews() -> Vec<Preview> {
+    vec![Preview::component::<App>("app", ()).with_matrix(PreviewMatrix::full())]
+}
+"#;
+
+/// The generated `src/main.rs`: the shell that runs the application — or,
+/// under `rustnative preview`, its preview catalogue.
+pub const MAIN_RS: &str = r#"#![cfg_attr(windows, windows_subsystem = "windows")]
+
+use framework_core::{Application, Component, Platform, Size, Window};
+use framework_windows::WindowsPlatform;
+use {{crate_name}}::{APP_ID, APP_NAME, App};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(first) = framework_core::preview::requested() {
+        framework_windows::run_catalogue({{crate_name}}::previews(), &first)?;
+        return Ok(());
+    }
     let mut application = Application::new(
         App::new(()),
         Window::new(APP_NAME, Size::new(480, 320)),
@@ -65,6 +88,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     application.set_theme(framework_core::app_theme!());
     WindowsPlatform::new().with_app_id(APP_ID).run(&mut application)?;
     Ok(())
+}
+"#;
+
+/// The generated `tests/previews.rs`: every preview, in every
+/// configuration, is a golden test (`C55-3`).
+pub const PREVIEWS_TEST_RS: &str = r#"//! Every preview is a golden test: a change to what one shows fails here
+//! until it is reviewed and blessed (`RUSTNATIVE_BLESS=1 rustnative test`).
+
+#[test]
+fn every_preview_matches_its_golden() {
+    let goldens = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
+    framework_headless::preview_goldens(&{{crate_name}}::previews(), &goldens);
 }
 "#;
 
@@ -80,6 +115,8 @@ publish = false
 
 [dependencies]
 {{dependencies}}
+[dev-dependencies]
+{{dev-dependencies}}
 [build-dependencies]
 {{build-dependencies}}
 "#;
@@ -121,7 +158,9 @@ A [Rust Native](https://github.com/<org>/RustNative) application.
 ```sh
 rustnative run windows      # build and run
 rustnative build windows    # build only, `--release` for an optimized build
-rustnative test             # run the project's tests
+rustnative test             # run the project's tests (every preview is a golden test)
+rustnative preview          # browse the previews across themes, locales, text sizes
+rustnative dev windows      # rebuild and restart on save, keeping the application's state
 rustnative doctor           # check the toolchains this machine has
 ```
 
@@ -130,31 +169,33 @@ identity (used for its saved state and to keep one instance running), the
 name people see, and its version.
 ";
 
-/// The markup template's `src/main.rs`: the same application as
-/// [`MAIN_RS`], with its component in `src/app.rsx`.
-pub const MARKUP_MAIN_RS: &str = r#"#![cfg_attr(windows, windows_subsystem = "windows")]
+/// The markup template's `src/lib.rs`: the same application as
+/// [`LIB_RS`], with its component in `src/app.rsx`.
+pub const MARKUP_LIB_RS: &str = r#"//! {{display_name}}: its root component and its previews.
 
-use framework_core::{Application, Component, Platform, Size, Window};
-use framework_windows::WindowsPlatform;
+use framework_core::preview::{Preview, PreviewMatrix};
+
+/// The application's name, as people see it.
+pub const APP_NAME: &str = "{{display_name}}";
+/// The application's identity: its saved state and single instance.
+pub const APP_ID: &str = "{{app_id}}";
 
 // The root component is written in markup: see `src/app.rsx`, which the
 // build script lowers with `framework_build::compile_rsx()`.
 framework_core::rsx_mod!(app);
 
-const APP_NAME: &str = "{{display_name}}";
-const APP_ID: &str = "{{app_id}}";
+pub use app::App;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut application = Application::new(
-        app::App::new(()),
-        Window::new(APP_NAME, Size::new(480, 320)),
-    );
-    // The theme `app.css` describes, compiled by the build script.
-    application.set_theme(framework_core::app_theme!());
-    WindowsPlatform::new().with_app_id(APP_ID).run(&mut application)?;
-    Ok(())
+/// The application's previews: `rustnative preview` browses them, and
+/// `tests/previews.rs` makes each one a golden test.
+#[must_use]
+pub fn previews() -> Vec<Preview> {
+    vec![Preview::component::<App>("app", ()).with_matrix(PreviewMatrix::full())]
 }
 "#;
+
+/// The markup template's `src/main.rs`: the same shell as [`MAIN_RS`].
+pub const MARKUP_MAIN_RS: &str = MAIN_RS;
 
 /// The markup template's `src/app.rsx`.
 pub const MARKUP_APP_RSX: &str = r#"// The application's root component: state, a view of it written in

@@ -92,6 +92,40 @@ macro_rules! assert_golden {
     };
 }
 
+/// Makes every preview, in every configuration of its matrix, a golden
+/// test (`PLAN.md` Milestone 43, `C55-3`): each is launched on this backend
+/// inside a [`framework_core::preview::PreviewFrame`] and its realized
+/// model compared with `directory/<preview>-<configuration>.golden`. A
+/// golden that does not exist yet is written (a new preview has nothing to
+/// have changed from); `RUSTNATIVE_BLESS=1` rewrites existing ones.
+///
+/// # Panics
+///
+/// When a golden differs or is missing — the preview changed, or rotted.
+pub fn preview_goldens(previews: &[framework_core::preview::Preview], directory: &Path) {
+    use framework_core::preview::PreviewFrame;
+    use framework_core::{Component as _, Size, Window};
+    for preview in previews {
+        for configuration in preview.matrix().configurations() {
+            let name = format!("{}-{configuration}", preview.name());
+            let window = Window::new(name.clone(), Size::new(configuration.width, 720));
+            let props = (preview.clone(), configuration);
+            let app = crate::HeadlessApp::launch(window, move || PreviewFrame::new(props.clone()));
+            let path = directory.join(format!("{name}.golden"));
+            // A preview seen for the first time records its golden: there is
+            // nothing yet to have changed from. Review it, and commit it.
+            if !path.exists() {
+                let written = std::fs::create_dir_all(directory)
+                    .and_then(|()| std::fs::write(&path, app.golden()));
+                assert!(written.is_ok(), "cannot write golden {}: {written:?}", path.display());
+                eprintln!("new golden: {} (review it, and commit it)", path.display());
+                continue;
+            }
+            check_golden(&path, &app.golden());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
