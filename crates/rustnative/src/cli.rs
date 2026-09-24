@@ -53,6 +53,17 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Inspect a running application: its tree, components and state,
+    /// layout and style explanations, trace, tasks, capabilities; the
+    /// overlay; recording (`PLAN.md` Milestone 44).
+    Inspect {
+        /// Where the application is.
+        #[command(flatten)]
+        target: crate::inspect::Target,
+        /// What to ask.
+        #[command(subcommand)]
+        question: crate::inspect::Question,
+    },
     /// Print the builder form a file's markup lowers to — a `.rsx` file, or
     /// the `rsx!` calls in a `.rs` file — or, with `--classes`/`--styles`,
     /// the declarations and typed values a class string or declaration
@@ -192,6 +203,7 @@ impl Cli {
                 }
                 Ok(())
             }
+            Command::Inspect { target, question } => crate::inspect::run(&target, question),
             Command::Expand { file, classes, styles } => {
                 let text = match (file, classes, styles) {
                     (Some(file), _, _) => crate::markup::expand_file(&file)?,

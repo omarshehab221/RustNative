@@ -115,6 +115,7 @@ impl Runtime {
         // measured, either of which moves the window of items it needs.
         virtual_list::after_render(self);
         self.report_surface_changes();
+        super::inspect::sync_overlay(self);
         Ok(())
     }
 
@@ -150,6 +151,7 @@ impl Runtime {
         // A resized window shows a different number of items.
         virtual_list::after_render(self);
         self.report_surface_changes();
+        super::inspect::sync_overlay(self);
     }
 
     /// Tells components their native surfaces changed size.
@@ -226,7 +228,13 @@ impl Runtime {
     }
 
     pub(crate) fn pump_tasks(&mut self) -> Result<(), Error> {
-        if self.with_application(|application| application.pump_tasks_for(self.window_id)) {
+        // An inspector's requests wake the loop the same way (`PLAN.md`
+        // Milestone 44); an answered edit or overlay change is realized
+        // like a task's result.
+        let inspected = super::inspect::poll(self);
+        if self.with_application(|application| application.pump_tasks_for(self.window_id))
+            || inspected
+        {
             self.render()?;
         }
         self.apply_input_requests();

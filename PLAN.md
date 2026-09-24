@@ -2513,6 +2513,17 @@ embedded in reduced form, and the inspector is part of the shipped CLI.
 
 **Depends on** Milestone 39's audit for stable capability vocabulary.
 
+**Status (2026-09-24): implemented** on Windows and the headless backend.
+- One protocol is answered by both backends, over a token-authenticated
+  transport.
+- `rustnative inspect` is shipped.
+- The overlay is drawn on the canvas path.
+- Recordings replay deterministically and become tests.
+- `inspect::compact` is the reduced form.
+
+Owed with their backends: the terminal and embedded reduced forms, and the
+`C88`/`C92` device items. See `docs/inspection.md` and `BUILD_STATUS.md`.
+
 ## Milestone 45 — Test infrastructure
 
 Section 2.13 caps verification at the hardware this project has. A headless

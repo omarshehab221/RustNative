@@ -115,6 +115,11 @@ impl Renderer {
             .map(|rect| Size::new(dimension_to_u32(rect.width), dimension_to_u32(rect.height)))
     }
 
+    /// Every laid-out node's rectangle, in its parent's coordinates.
+    pub(crate) const fn layout_rects(&self) -> &HashMap<NodeId, Rect> {
+        &self.layout
+    }
+
     /// The snapshot currently realized.
     pub(crate) fn snapshot(&self) -> &TreeSnapshot {
         &self.snapshot

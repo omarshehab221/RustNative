@@ -420,7 +420,7 @@ impl Event {
 
 /// A platform-independent keyboard key. Backends translate their native
 /// virtual-key constants into this set rather than exposing them directly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum KeyCode {
     /// The Enter/Return key.
@@ -463,7 +463,9 @@ pub enum KeyCode {
 }
 
 /// Which modifier keys were held down when a [`KeyCode`] was produced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[allow(
     clippy::struct_excessive_bools,
     reason = "four independent physical keys, each held or not; not a state machine in disguise"

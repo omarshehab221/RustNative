@@ -435,6 +435,7 @@ dependencies = [
  "framework-style",
  "parking_lot",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -978,6 +979,7 @@ dependencies = [
  "clap",
  "crc32fast",
  "framework-build",
+ "framework-core",
  "framework-interop",
  "framework-markup",
  "framework-style",

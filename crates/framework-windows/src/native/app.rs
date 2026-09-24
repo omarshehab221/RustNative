@@ -75,6 +75,9 @@ pub(crate) fn run_application(
     // so the first frame is already in the person's scheme, scale, and
     // direction.
     super::host_traits::apply(application, &super::host_traits::read());
+    // `RUSTNATIVE_INSPECT=1` attaches the inspector (`PLAN.md` Milestone
+    // 44); requests are answered when the primary window's loop is woken.
+    let _ = application.enable_inspection_from_env();
 
     // SAFETY: `application` is borrowed for the whole of this function,
     // and `registry` — along with every `Runtime` it creates, each of which

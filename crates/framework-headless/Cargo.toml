@@ -20,6 +20,8 @@ framework-core.workspace = true
 framework-style.workspace = true
 async-trait.workspace = true
 parking_lot.workspace = true
+# The inspection protocol's state values (`framework_core::inspect`).
+serde_json = "1"
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

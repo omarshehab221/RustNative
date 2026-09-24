@@ -14,6 +14,90 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 44 — Inspection and diagnostics — complete (Windows scope)
+
+**Built.** `docs/inspection.md`.
+
+- **One protocol** (`framework_core::inspect`), answered by
+  `Application::inspect`; the backend supplies what only it knows through
+  `InspectBackend`. It covers:
+  - the declarative tree, with each node's component and the classes as
+    written;
+  - components with state, which `Component::inspect` shows and
+    `Component::edit` makes editable, through a message;
+  - realized host objects and the mapping to nodes;
+  - layout explanations;
+  - style provenance by precedence level (`C18-2`: class, declaration, typed
+    override, component default, token, state variant). `DeclarationSet` now
+    records the class or declaration each declaration came from;
+  - the event/task trace with every component's render-or-skip reason
+    (`C04-2`);
+  - tasks, host-object lifetimes, capabilities and refusals (style table and
+    unit mapping included), and mappers (`C24-2`);
+  - state history, the overlay, and recording.
+- **Transport**: token-authenticated, versioned line-delimited JSON over TCP.
+  - It is loopback by default, or an explicit address for a remote machine.
+  - It turns on with `RUSTNATIVE_INSPECT` and publishes an endpoint file.
+  - Requests are answered on the UI thread, woken through the scheduler waker.
+- **Client**: `rustnative inspect` (tree, components, realized, state, set,
+  explain, style, trace, tasks, lifetimes, caps, mappers, history, overlay,
+  record, stop, to-test).
+- **Overlay** (layout, events, frame cost) is a `DrawList` built by the core.
+  - On Windows it is a layered, click-through, topmost canvas popup drawn
+    through the canvas path.
+  - On headless it is `HeadlessApp::overlay()`.
+- **Record, replay, and time travel** (`C61`):
+  - Recordings hold input, virtual-time stamps, and the HTTP exchanges
+    (`RecordingHttp`). Nodes are named root-relative, so a recording replays
+    across binaries.
+  - Redaction by node key, and secret headers are never recorded.
+  - Replay is deterministic on headless (`HeadlessApp::replay`) and runs on any
+    `Application` (`Recording::replay`).
+  - State history can be stepped back through.
+  - `Recording::to_test` produces a generated test.
+    `framework-headless/tests/replayed_session.rs` is one, checked in and run.
+- **Reduced form**: `inspect::compact`, deferred formatting (message ids and
+  arguments, host-side format table), tested round trip.
+- **Backends**: Windows (`native::inspect`, polled on the primary window's
+  wake; answers from the registry's window classes, `HWND`s, and Win32
+  rectangles; a lifetime log added to the registry) and headless
+  (`HeadlessInspect`).
+
+**Fixes this milestone made.** The style explanation first reported
+typography that a class copied from the theme (a class setting only the
+weight) as a typed override. It now reads typed overrides from the
+as-authored tree. A second `enable_inspection` started a second listener; it
+now returns the running one.
+
+**Verified.** Full gate (fmt, clippy, tests, docs, MSRV, deny). One test
+failed once under the full workspace run:
+`rustnative/tests/packaging.rs::the_portable_zip_is_reproducible_and_its_checksums_verify`
+found two package runs' archives differed. It passed alone and in a full run
+of its own binary, so it is recorded as flaky under load and watched, not
+fixed. The protocol is verified in these places:
+- in the core (`framework-core/tests/inspection.rs`: tree, state editing,
+  layout and style explanations, trace, history, redacted recording and replay,
+  overlay, transport with and without the token);
+- on headless (`framework-headless/tests/inspection.rs`: realized objects,
+  capabilities, lifetimes, overlay; a session with HTTP recorded and replayed
+  without the server; the generated test);
+- on Windows over the real transport (`native::inspect_integration`: answers
+  from the native objects, an edit reaching the control, the overlay popup's
+  styles and draw list, hiding it);
+- the CLI against a live application (`rustnative/tests/inspect.rs`).
+
+**Not verified / owed.** These are owed with their backends (36, 37):
+- the terminal and embedded reduced forms: `compact` exists, but no probe or
+  serial transport does;
+- emitting the trace to embedded trace formats and debugger
+  kernel-awareness (`C92`);
+- device sensor recordings (`C88`).
+
+Also not done:
+- Only HTTP responses are recorded (storage and clipboard are not).
+- On Windows only the primary window answers `realized` and `lifetimes`.
+- Scroll offsets are not applied to the overlay's rectangles.
+
 ### Milestone 41 — Guarantees and conformance suites — complete (Windows scope)
 
 **Built.** `docs/guarantees.md` lists every guarantee with its named test on

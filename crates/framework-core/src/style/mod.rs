@@ -33,8 +33,9 @@ pub use theme::{
 pub mod decl {
     pub use framework_style::{
         Color, Condition, ConditionEnv, ConditionalDeclaration, Declaration, DeclarationSet,
-        Direction, Fixed, Keyword, Length, Pointer, Scheme, ShadowLayer, State, StyleCapabilities,
-        StyleProperty, StyleSupport, StyleValue, TokenTable, UnitMapping, ValueKind,
+        Direction, Fixed, Keyword, Length, Pointer, Scheme, SetKind, ShadowLayer, State,
+        StyleCapabilities, StyleProperty, StyleSupport, StyleValue, TokenTable, UnitMapping,
+        ValueKind,
     };
 }
 

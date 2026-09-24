@@ -146,6 +146,24 @@ pub trait Component: 'static {
 
     /// Called when the component leaves the active component tree.
     fn unmounted(&mut self) {}
+
+    /// This component's state as the inspector shows it (`PLAN.md`
+    /// Milestone 44), or `None` — the default — to show nothing. What it
+    /// returns is also what the inspector's state history records after
+    /// each change.
+    fn inspect(&self) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// The message that sets `field` to `value`, for the inspector's state
+    /// editing, or `None` — the default — when that field is not editable.
+    ///
+    /// An edit is a message, delivered and rendered like any other, so
+    /// editing state from the inspector goes through the same path as the
+    /// application changing it itself.
+    fn edit(&self, _field: &str, _value: &serde_json::Value) -> Option<Self::Message> {
+        None
+    }
 }
 
 /// A stable slot for composing one component directly outside a managed

@@ -601,38 +601,79 @@ impl fmt::Display for ConditionalDeclaration {
     }
 }
 
+/// How a [`DeclarationSet`] was written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SetKind {
+    /// Utility classes (`classes!`, `class=`).
+    #[default]
+    Classes,
+    /// Declarations (`styles!`, `style=`).
+    Declarations,
+}
+
 /// The declarations one `classes!`/`styles!` call lowered to, in source
 /// order (a later declaration of the same property, under the same
-/// condition, wins). Built at compile time; copying one copies a pointer.
+/// condition, wins), with the class or declaration each came from — what
+/// the inspector reports as its provenance. Built at compile time; copying
+/// one copies two pointers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct DeclarationSet(&'static [ConditionalDeclaration]);
+pub struct DeclarationSet {
+    declarations: &'static [ConditionalDeclaration],
+    sources: &'static [&'static str],
+    kind: SetKind,
+}
 
 impl DeclarationSet {
     /// No declarations.
-    pub const EMPTY: Self = Self(&[]);
+    pub const EMPTY: Self = Self { declarations: &[], sources: &[], kind: SetKind::Classes };
 
-    /// Wraps declarations a macro wrote into a `static`.
+    /// Wraps declarations a macro wrote into a `static`, with no record of
+    /// where each came from.
     #[must_use]
     pub const fn from_static(declarations: &'static [ConditionalDeclaration]) -> Self {
-        Self(declarations)
+        Self { declarations, sources: &[], kind: SetKind::Classes }
+    }
+
+    /// Wraps declarations with, for each, the class or declaration it came
+    /// from (`sources` has one entry per declaration).
+    #[must_use]
+    pub const fn from_sources(
+        declarations: &'static [ConditionalDeclaration],
+        sources: &'static [&'static str],
+        kind: SetKind,
+    ) -> Self {
+        Self { declarations, sources, kind }
     }
 
     /// The declarations, in order.
     #[must_use]
     pub const fn declarations(self) -> &'static [ConditionalDeclaration] {
-        self.0
+        self.declarations
+    }
+
+    /// The class or declaration declaration `index` came from, when
+    /// recorded.
+    #[must_use]
+    pub fn source(self, index: usize) -> Option<&'static str> {
+        self.sources.get(index).copied()
+    }
+
+    /// How the set was written.
+    #[must_use]
+    pub const fn kind(self) -> SetKind {
+        self.kind
     }
 
     /// Whether any declaration depends on the environment.
     #[must_use]
     pub fn reads_environment(self) -> bool {
-        self.0.iter().any(|declaration| declaration.condition.reads_environment())
+        self.declarations.iter().any(|declaration| declaration.condition.reads_environment())
     }
 }
 
 impl fmt::Display for DeclarationSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (index, declaration) in self.0.iter().enumerate() {
+        for (index, declaration) in self.declarations.iter().enumerate() {
             if index > 0 {
                 f.write_str("; ")?;
             }

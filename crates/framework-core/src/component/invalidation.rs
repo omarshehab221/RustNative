@@ -32,6 +32,21 @@ pub enum RenderCause {
     Forced,
 }
 
+impl std::fmt::Display for RenderCause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Initial => f.write_str("initial"),
+            Self::Event => f.write_str("event"),
+            Self::Message => f.write_str("message"),
+            Self::Props => f.write_str("props"),
+            Self::Environment(key) => write!(f, "environment({key})"),
+            Self::Preference(key) => write!(f, "preference({key})"),
+            Self::Theme => f.write_str("theme"),
+            Self::Forced => f.write_str("forced"),
+        }
+    }
+}
+
 /// One component's render in the most recent render pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderRecord {

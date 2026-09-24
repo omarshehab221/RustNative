@@ -17,7 +17,12 @@ pub(crate) struct NativeObjectRegistry {
     /// an object is removed its window may already be gone, so it cannot
     /// be asked then.
     top_levels: HashMap<NodeId, isize>,
+    /// Objects created and destroyed, for the inspector's lifetimes view.
+    lifetimes: framework_core::inspect::Lifetimes,
 }
+
+/// How many recent creations and destructions the inspector is shown.
+const RECENT_LIFETIMES: usize = 64;
 
 #[derive(Debug)]
 pub(crate) enum NativeObject {
@@ -46,6 +51,20 @@ pub(crate) enum NativeObject {
 }
 
 impl NativeObject {
+    /// What kind of host object this is, for the inspector.
+    pub(crate) fn host_type(&self) -> String {
+        match self {
+            Self::Container { .. } => "container (viewport + content windows)".to_owned(),
+            Self::Label(_) => "STATIC".to_owned(),
+            Self::Button(_) => "BUTTON".to_owned(),
+            Self::TextInput(_) => "EDIT".to_owned(),
+            Self::Canvas(_) => super::graphics::canvas::CANVAS_CLASS_NAME.to_owned(),
+            Self::TabBar(_) => "SysTabControl32".to_owned(),
+            Self::Surface { .. } => "surface".to_owned(),
+            Self::Foreign { kind, .. } => format!("foreign `{kind}`"),
+        }
+    }
+
     pub(crate) fn hwnd(&self) -> HWND {
         match self {
             Self::Container { viewport, .. } => *viewport,
@@ -111,6 +130,35 @@ impl NativeObjectRegistry {
         self.objects.get(&id)
     }
 
+    /// Every realized object.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&NodeId, &NativeObject)> {
+        self.objects.iter()
+    }
+
+    /// Objects created and destroyed, most recent last.
+    pub(crate) fn lifetimes(&self) -> framework_core::inspect::Lifetimes {
+        self.lifetimes.clone()
+    }
+
+    fn log(&mut self, created: bool, id: NodeId, object: &NativeObject) {
+        let lifetimes = &mut self.lifetimes;
+        if created {
+            lifetimes.created += 1;
+        } else {
+            lifetimes.destroyed += 1;
+        }
+        lifetimes.live = lifetimes.created.saturating_sub(lifetimes.destroyed);
+        if lifetimes.recent.len() == RECENT_LIFETIMES {
+            lifetimes.recent.remove(0);
+        }
+        lifetimes.recent.push(framework_core::inspect::LifetimeEvent {
+            created,
+            node: framework_core::inspect::node_name(id),
+            key: id.local_key(),
+            host_type: object.host_type(),
+        });
+    }
+
     pub(crate) fn insert(&mut self, id: NodeId, object: NativeObject) -> Result<(), Error> {
         if self.objects.contains_key(&id) {
             return Err(Error::DuplicateNodeId { node: id });
@@ -123,12 +171,14 @@ impl NativeObjectRegistry {
         let root = top_level(object.hwnd());
         self.top_levels.insert(id, root);
         crate::handle::record(id, root, object.hwnd() as isize);
+        self.log(true, id, &object);
         self.objects.insert(id, object);
         Ok(())
     }
 
     pub(crate) fn remove(&mut self, id: NodeId) -> Option<NativeObject> {
         let object = self.objects.remove(&id)?;
+        self.log(false, id, &object);
         if let Some(root) = self.top_levels.remove(&id) {
             crate::handle::forget(id, root);
         }

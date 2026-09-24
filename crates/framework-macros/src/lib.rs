@@ -155,6 +155,15 @@ fn style_macro(input: proc_macro2::TokenStream, kind: Kind) -> proc_macro2::Toke
             .map(str::to_owned)
             .collect(),
     };
+    // Each declaration's provenance: the class (or declaration) it came
+    // from, for the inspector (`PLAN.md` Milestone 44, `C18-2`).
+    let sources: Vec<String> = pieces
+        .iter()
+        .flat_map(|piece| {
+            let count = resolve(piece).map_or(0, |declarations| declarations.len());
+            std::iter::repeat_n(piece.clone(), count)
+        })
+        .collect();
     let unavailable = pieces.iter().flat_map(|piece| {
         let declarations = resolve(piece).unwrap_or_default();
         declarations.into_iter().filter_map(move |declaration| {
@@ -181,5 +190,11 @@ fn style_macro(input: proc_macro2::TokenStream, kind: Kind) -> proc_macro2::Toke
         )
     });
     let prelude = quote_spanned!(span=> #tracking #(#unavailable)*);
-    framework_style::tokens::declaration_set(&declarations, &quote!(::framework_core), &prelude)
+    framework_style::tokens::declaration_set(
+        &declarations,
+        &sources,
+        matches!(kind, Kind::Declarations),
+        &quote!(::framework_core),
+        &prelude,
+    )
 }

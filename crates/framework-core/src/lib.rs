@@ -309,6 +309,7 @@ pub mod graphics;
 pub mod handle;
 pub mod identity;
 pub mod input;
+pub mod inspect;
 pub mod layout;
 pub mod lifecycle;
 pub mod localization;

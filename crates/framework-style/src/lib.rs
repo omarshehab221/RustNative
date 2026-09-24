@@ -65,8 +65,8 @@ pub use capability::{
 };
 pub use model::{
     Color, Condition, ConditionEnv, ConditionalDeclaration, Declaration, DeclarationSet, Direction,
-    Fixed, Keyword, Length, Pointer, Scheme, ShadowLayer, State, StyleProperty, StyleValue,
-    ValueKind,
+    Fixed, Keyword, Length, Pointer, Scheme, SetKind, ShadowLayer, State, StyleProperty,
+    StyleValue, ValueKind,
 };
 pub use sheet::StyleError;
 pub use token_table::TokenTable;

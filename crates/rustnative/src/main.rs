@@ -31,6 +31,7 @@ mod config;
 mod diagnostics;
 mod doctor;
 mod error;
+mod inspect;
 mod lsp;
 mod markup;
 mod package;

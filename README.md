@@ -24,12 +24,16 @@ The current working backend is Windows/Win32. The framework core is designed to 
 Two notes on what "planned" means here. macOS and iOS are fully planned platforms that this project has no hardware to build or verify on yet, so their milestones are specified and designed for but not started — order follows hardware, not priority. And a backend advertises a capability only once it genuinely realizes it, so "planned" never reaches an application as a claim of support.
 
 Milestones 39–58 are being built on the Windows backend (every milestone and
-tier except the other backends, which come later). Done so far: **Milestone 58
-— the style spellings** (utility classes and declarations over typed styles,
-`app.css`, per-backend capability tables), **Milestone 53 — the markup
-syntax**, **Milestone 39 — portable-surface obligations**, and **Milestone 45 —
-test infrastructure** (the headless reference backend), after Milestone 32's
-packaging and the milestones before it. See `BUILD_STATUS.md` for what each pass
+tier except the other backends, which come later). Done so far: **Milestone 44
+— inspection and diagnostics** (one protocol every backend answers, the
+`rustnative inspect` client, an in-app overlay, record and replay), **Milestone
+41 — guarantees and conformance suites**, **Milestone 40 — interoperability
+and incremental adoption**, **Milestone 58 — the style spellings** (utility
+classes and declarations over typed styles, `app.css`, per-backend capability
+tables), **Milestone 53 — the markup syntax**, **Milestone 39 —
+portable-surface obligations**, and **Milestone 45 — test infrastructure** (the
+headless reference backend), after Milestone 32's packaging and the milestones
+before it. See `BUILD_STATUS.md` for what each pass
 verified, what it found while doing so, and what is still open.
 
 ## Architecture
@@ -1208,6 +1212,14 @@ need (`rustnative fmt`, `expand`, and `lsp`, and diagnostics from `build`,
 `check`, and `test` reported at the `.rsx` source). Nothing else in the CLI is
 affected, because nothing below the markup lowering can tell the two syntaxes
 apart.
+
+`rustnative inspect` is the inspector (Milestone 44, `docs/inspection.md`).
+Start an application with `RUSTNATIVE_INSPECT=1` and ask it for its tree,
+components and state (editable), why a node has its geometry, where each of its
+style properties came from, the trace of events and renders with every
+component's render-or-skip reason, its tasks, host-object lifetimes, and what
+the host refused. It can also show the in-app overlay, or record a session
+that `inspect to-test` turns into a headless regression test.
 
 A project is a folder with a `rustnative.toml`: the application's identity (the
 same id its saved state and single-instance mutex use), its display name,

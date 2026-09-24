@@ -599,6 +599,83 @@ impl HeadlessApp {
     }
 
     // ------------------------------------------------------------------
+    // Inspection (`PLAN.md` Milestone 44)
+    // ------------------------------------------------------------------
+
+    /// Answers an inspection request with this backend's model, then
+    /// settles (an edit renders).
+    pub fn inspect(
+        &mut self,
+        request: &framework_core::inspect::Request,
+    ) -> framework_core::inspect::Reply {
+        let reply = self.app.inspect(request, &crate::HeadlessInspect::new(&self.trees));
+        self.settle();
+        reply
+    }
+
+    /// Each inspectable component's state in the current window, by key
+    /// path relative to the root — what a recording's `final_state` is
+    /// compared with.
+    #[must_use]
+    pub fn inspected_state(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+        self.app
+            .components_for(self.window)
+            .map(framework_core::ComponentTree::relative_states)
+            .unwrap_or_default()
+    }
+
+    /// The overlay over the current window, drawn over the realized
+    /// model's window rectangles, or `None` when it is hidden.
+    #[must_use]
+    pub fn overlay(&self) -> Option<framework_core::DrawList> {
+        let rects = crate::HeadlessInspect::new(&self.trees).window_rects(self.window);
+        self.app.overlay_draw_list(self.window, &rects)
+    }
+
+    /// Replays `recording` deterministically: its HTTP responses become
+    /// this app's (relaunching it with them, when there are any), and each
+    /// input arrives after the virtual time it arrived after when recorded.
+    /// Returns how many inputs were replayed.
+    ///
+    /// # Errors
+    ///
+    /// An input whose target is not in the tree when it is reached, or
+    /// whose text was redacted.
+    pub fn replay(
+        &mut self,
+        recording: &framework_core::inspect::Recording,
+    ) -> Result<usize, framework_core::inspect::ReplayError> {
+        if !recording.http.is_empty() {
+            let http = MockHttp::new();
+            for exchange in &recording.http {
+                match exchange.response() {
+                    Ok(response) => http.expect(exchange.method(), exchange.url.clone(), response),
+                    Err(error) => {
+                        http.expect_failure(exchange.method(), exchange.url.clone(), error);
+                    }
+                }
+            }
+            self.services = self.services.clone().with_http(Arc::new(http.clone()));
+            self.http = Some(http);
+            self.relaunch_fresh();
+        }
+        let mut replayed = 0;
+        let mut previous = 0;
+        for input in &recording.inputs {
+            self.advance(Duration::from_millis(input.at_ms.saturating_sub(previous)));
+            previous = input.at_ms;
+            let Some(tree) = self.app.components_for(self.window) else {
+                return Err(framework_core::inspect::ReplayError::MissingWindow(self.window));
+            };
+            if let Some(event) = recording.event(tree, self.window, &input.event)? {
+                self.dispatch(event);
+                replayed += 1;
+            }
+        }
+        Ok(replayed)
+    }
+
+    // ------------------------------------------------------------------
     // Time and settling
     // ------------------------------------------------------------------
 
@@ -614,6 +691,9 @@ impl HeadlessApp {
     /// happens, then realizes the result — what a host's loop does between
     /// two inputs.
     pub fn settle(&mut self) {
+        // Requests from an attached inspector are answered between inputs,
+        // as a native host answers them when its loop is woken.
+        self.app.poll_inspection(&crate::HeadlessInspect::new(&self.trees));
         for _ in 0..1_000 {
             self.executor.run_until_stalled();
             let changed = self.app.pump_tasks();

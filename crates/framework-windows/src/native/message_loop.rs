@@ -761,6 +761,8 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
                 );
                 let window = runtime.window_id;
                 runtime.dispatch_or_quit(Event::WindowMoved { window, position });
+                // An owned popup does not follow its owner.
+                super::inspect::sync_overlay(runtime);
             });
             0
         }

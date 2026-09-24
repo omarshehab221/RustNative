@@ -114,10 +114,12 @@ impl Platform for HeadlessPlatform {
     }
 
     fn run(&mut self, application: &mut Application) -> Result<(), Self::Error> {
+        let _ = application.enable_inspection_from_env();
         self.realize(application);
         let mut quiet_since = Instant::now();
         while quiet_since.elapsed() < self.idle_timeout {
-            if application.pump_tasks() {
+            let inspected = application.poll_inspection(&crate::HeadlessInspect::new(&self.trees));
+            if application.pump_tasks() || inspected {
                 self.realize(application);
                 quiet_since = Instant::now();
             } else {

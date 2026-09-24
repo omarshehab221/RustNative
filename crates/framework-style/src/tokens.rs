@@ -162,9 +162,14 @@ pub fn value(value: &StyleValue, krate: &TokenStream) -> TokenStream {
 
 /// A `DeclarationSet` expression over a `static` holding `declarations`,
 /// with `prelude` (items or statements) at the start of its block.
+/// `sources` names the class or declaration each came from (one per
+/// declaration, or empty when unknown); `declared` says the set was
+/// written as declarations rather than classes.
 #[must_use]
 pub fn declaration_set(
     declarations: &[ConditionalDeclaration],
+    sources: &[String],
+    declared: bool,
     krate: &TokenStream,
     prelude: &TokenStream,
 ) -> TokenStream {
@@ -179,10 +184,14 @@ pub fn declaration_set(
             declaration: #path::Declaration { property: #property, value: #value },
         })
     });
+    let sources = if sources.len() == count { sources } else { &[] };
+    let source_count = sources.len();
+    let kind = if declared { quote!(Declarations) } else { quote!(Classes) };
     quote!({
         #prelude
         static DECLARATIONS: [#path::ConditionalDeclaration; #count] = [#(#items),*];
-        #path::DeclarationSet::from_static(&DECLARATIONS)
+        static SOURCES: [&str; #source_count] = [#(#sources),*];
+        #path::DeclarationSet::from_sources(&DECLARATIONS, &SOURCES, #path::SetKind::#kind)
     })
 }
 

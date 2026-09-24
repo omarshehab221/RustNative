@@ -94,6 +94,9 @@ pub struct Application {
     executor: Option<std::sync::Arc<dyn crate::Executor>>,
     /// The environment every window's root starts from.
     environment: crate::environment::Environment,
+    /// Tracing, history, recording, the overlay, and the inspection
+    /// server (`crate::inspect`).
+    pub(crate) inspection: crate::inspect::Inspection,
 }
 
 impl fmt::Debug for Application {
@@ -180,6 +183,7 @@ impl Application {
             motion: crate::MotionPreference::default(),
             executor,
             environment: crate::environment::Environment::new(),
+            inspection: crate::inspect::Inspection::default(),
         };
         application.update_size_class(WindowId::PRIMARY);
         // A component may request another window from its first render. The
@@ -200,6 +204,22 @@ impl Application {
     /// returns `false` without effect if `event` names a different window,
     /// or if `id` does not name an open window.
     pub fn dispatch_to_window(&mut self, id: WindowId, event: Event) -> bool {
+        if !self.inspection.active() {
+            return self.dispatch_untraced(id, event);
+        }
+        let started = std::time::Instant::now();
+        self.record_input(id, &event);
+        let description = format!("{event:?}");
+        let handled = self.dispatch_untraced(id, event);
+        self.trace_change(id, started, |pass| crate::inspect::TraceKind::Event {
+            event: description,
+            handled,
+            pass: handled.then_some(pass),
+        });
+        handled
+    }
+
+    fn dispatch_untraced(&mut self, id: WindowId, event: Event) -> bool {
         if event_window_id(&event).is_some_and(|event_window| event_window != id) {
             return false;
         }
@@ -398,6 +418,10 @@ impl Application {
         self.windows.get(&id).map(|entry| &entry.components)
     }
 
+    pub(crate) fn components_mut(&mut self, id: WindowId) -> Option<&mut ComponentTree> {
+        self.windows.get_mut(&id).map(|entry| &mut entry.components)
+    }
+
     /// Pumps completed background-task results for every open window.
     /// Returns whether any window's tree changed as a result.
     pub fn pump_tasks(&mut self) -> bool {
@@ -411,12 +435,16 @@ impl Application {
     /// Pumps completions for one native window without causing unrelated
     /// windows to rerender.
     pub fn pump_tasks_for(&mut self, id: WindowId) -> bool {
+        let started = std::time::Instant::now();
         let Some(entry) = self.windows.get_mut(&id) else {
             return false;
         };
         let changed = entry.components.pump_tasks();
         let commands = entry.components.take_window_commands();
         self.apply_window_commands(commands);
+        if changed && self.inspection.active() {
+            self.trace_change(id, started, |pass| crate::inspect::TraceKind::Tasks { pass });
+        }
         changed
     }
 

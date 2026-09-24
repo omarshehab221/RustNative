@@ -45,6 +45,9 @@ trait ManagedComponent {
     fn props_changed(&mut self);
     fn updated(&mut self);
     fn unmounted(&mut self);
+    fn type_name(&self) -> &'static str;
+    fn inspect(&self) -> Option<serde_json::Value>;
+    fn edit(&self, field: &str, value: &serde_json::Value) -> Option<Box<dyn Any>>;
 }
 
 impl<C: Component> ManagedComponent for C {
@@ -99,6 +102,18 @@ impl<C: Component> ManagedComponent for C {
 
     fn unmounted(&mut self) {
         Component::unmounted(self);
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<C>()
+    }
+
+    fn inspect(&self) -> Option<serde_json::Value> {
+        Component::inspect(self)
+    }
+
+    fn edit(&self, field: &str, value: &serde_json::Value) -> Option<Box<dyn Any>> {
+        Component::edit(self, field, value).map(|message| Box::new(message) as Box<dyn Any>)
     }
 }
 
@@ -1547,6 +1562,8 @@ fn scope_component_node_ids(
         | Node::TabBar(_) => {}
     }
 }
+
+mod inspection;
 
 #[cfg(test)]
 mod tests;

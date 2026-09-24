@@ -25,6 +25,7 @@
 
 mod app;
 mod golden;
+mod inspect;
 mod measure;
 mod platform;
 mod query;
@@ -33,6 +34,7 @@ mod tree;
 
 pub use app::{HeadlessApp, STATE_FLUSH_DELAY};
 pub use golden::{check_golden, diff};
+pub use inspect::HeadlessInspect;
 pub use measure::HeadlessMeasurer;
 pub use platform::HeadlessPlatform;
 pub use query::{Found, Query, QueryError};

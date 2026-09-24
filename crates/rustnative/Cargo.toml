@@ -25,6 +25,8 @@ clap = { version = "4", features = ["derive"] }
 framework-markup.workspace = true
 framework-style.workspace = true
 framework-interop.workspace = true
+# `inspect` speaks the runtime's inspection protocol (Milestone 44).
+framework-core.workspace = true
 # The style file's location, read the way the build script reads it.
 framework-build.workspace = true
 prettyplease = "0.2"

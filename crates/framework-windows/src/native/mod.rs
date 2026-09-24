@@ -25,6 +25,9 @@ mod host_traits;
 pub(crate) mod input;
 #[cfg(test)]
 mod input_integration;
+mod inspect;
+#[cfg(test)]
+mod inspect_integration;
 #[cfg(test)]
 mod integration;
 mod lifecycle;

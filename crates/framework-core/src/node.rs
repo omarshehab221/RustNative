@@ -1231,6 +1231,15 @@ impl Node {
         }
     }
 
+    /// A container's children; empty for a leaf.
+    pub(crate) fn child_nodes(&self) -> &[Node] {
+        match self {
+            Self::Column(node) => node.children(),
+            Self::Row(node) => node.children(),
+            _ => &[],
+        }
+    }
+
     /// A container's children, mutably; empty for a leaf.
     pub(crate) fn child_nodes_mut(&mut self) -> &mut [Node] {
         match self {
