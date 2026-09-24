@@ -1,0 +1,353 @@
+//! `rustnative bench`: the budget harness (`PLAN.md` Milestone 42).
+//!
+//! It measures the framework's budget scenarios for a target and compares
+//! each measurement with `budgets/<target>.toml`:
+//!
+//! - the scenarios `examples/bench-app` runs, built in release;
+//!   (including the markup and style compile steps, against the same parser
+//!   and vocabulary the build uses);
+//! - the artifact's size;
+//! - with `--build-times`, a clean and an incremental build of
+//!   `examples/hello-label`.
+//!
+//! It writes `target/budget-report.json`. With `--check` it fails on any
+//! measurement over its budget, beyond the key's declared noise tolerance,
+//! and on any measurement the budget file does not declare, so the file
+//! cannot fall behind what is measured.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::Instant;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::error::{Error, Result};
+
+/// The targets with a budget file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum BenchTarget {
+    /// The Windows backend.
+    Windows,
+    /// The headless reference backend.
+    Headless,
+}
+
+impl BenchTarget {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Windows => "windows",
+            Self::Headless => "headless",
+        }
+    }
+
+    /// The bench-app scenarios this target runs, with how many times each.
+    const fn scenarios(self) -> &'static [(&'static str, usize)] {
+        match self {
+            Self::Windows => {
+                &[("startup", 5), ("interaction", 3), ("animation", 1), ("core", 1), ("compile", 1)]
+            }
+            Self::Headless => &[("headless", 3), ("core", 1), ("compile", 1)],
+        }
+    }
+}
+
+/// One budgeted key.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Budget {
+    /// The most it may measure.
+    pub max: f64,
+    /// The fraction above `max` a measurement may reach before failing: the
+    /// declared noise of this measurement on a shared runner.
+    #[serde(default)]
+    pub tolerance: f64,
+    /// Whether it is measured only on request (build times).
+    #[serde(default)]
+    pub optional: bool,
+}
+
+/// A budget file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BudgetFile {
+    /// The target it is for.
+    pub target: String,
+    /// Each key's budget.
+    pub budget: BTreeMap<String, Budget>,
+}
+
+/// One key's verdict.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Verdict {
+    /// What was measured.
+    pub measured: f64,
+    /// Its budget.
+    pub max: f64,
+    /// The most it may measure with the tolerance.
+    pub limit: f64,
+    /// Whether it is within the limit.
+    pub within: bool,
+}
+
+/// What a bench run found.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Report {
+    /// The target.
+    pub target: String,
+    /// Whether the low-end profile was used.
+    pub low_end: bool,
+    /// Each budgeted key's verdict.
+    pub verdicts: BTreeMap<String, Verdict>,
+    /// Measurements the budget file does not declare.
+    pub unbudgeted: Vec<String>,
+    /// Budgeted keys that were not measured (and are not optional).
+    pub unmeasured: Vec<String>,
+}
+
+impl Report {
+    /// Whether everything is within budget and accounted for.
+    #[must_use]
+    pub fn passes(&self) -> bool {
+        self.verdicts.values().all(|verdict| verdict.within)
+            && self.unbudgeted.is_empty()
+            && self.unmeasured.is_empty()
+    }
+}
+
+/// Compares `measured` with `budgets`.
+#[must_use]
+pub fn judge(budgets: &BudgetFile, measured: &BTreeMap<String, f64>, low_end: bool) -> Report {
+    let mut verdicts = BTreeMap::new();
+    let mut unbudgeted = Vec::new();
+    for (key, value) in measured {
+        match budgets.budget.get(key) {
+            Some(budget) => {
+                let limit = budget.max * (1.0 + budget.tolerance);
+                verdicts.insert(
+                    key.clone(),
+                    Verdict { measured: *value, max: budget.max, limit, within: *value <= limit },
+                );
+            }
+            None => unbudgeted.push(key.clone()),
+        }
+    }
+    let unmeasured = budgets
+        .budget
+        .iter()
+        .filter(|(key, budget)| !budget.optional && !measured.contains_key(*key))
+        .map(|(key, _)| key.clone())
+        .collect();
+    Report { target: budgets.target.clone(), low_end, verdicts, unbudgeted, unmeasured }
+}
+
+/// The repository root: the nearest ancestor holding `budgets/`.
+fn root(here: &Path) -> Result<PathBuf> {
+    here.ancestors().find(|dir| dir.join("budgets").is_dir()).map(Path::to_path_buf).ok_or_else(
+        || {
+            Error::Usage(format!(
+                "no `budgets/` folder above {} — `rustnative bench` measures the framework's own \
+             budgets and runs in its repository",
+                here.display()
+            ))
+        },
+    )
+}
+
+fn io(what: impl Into<String>) -> impl FnOnce(std::io::Error) -> Error {
+    let what = what.into();
+    move |cause| Error::Io { what, cause }
+}
+
+fn cargo() -> Command {
+    Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+}
+
+fn checked(tool: &'static str, mut command: Command) -> Result<std::process::Output> {
+    let output = command.output().map_err(|cause| Error::ToolMissing {
+        tool,
+        hint: "install the Rust toolchain from https://rustup.rs".into(),
+        cause: Some(cause.to_string()),
+    })?;
+    if output.status.success() {
+        return Ok(output);
+    }
+    // What the tool said, so the failure is actionable.
+    eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    Err(Error::ToolFailed { tool, code: output.status.code() })
+}
+
+/// The median of each key over several runs.
+fn medians(runs: &[BTreeMap<String, f64>]) -> BTreeMap<String, f64> {
+    let mut keys: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for run in runs {
+        for (key, value) in run {
+            keys.entry(key.clone()).or_default().push(*value);
+        }
+    }
+    keys.into_iter()
+        .map(|(key, mut values)| {
+            values.sort_by(f64::total_cmp);
+            let middle = values[values.len() / 2];
+            (key, middle)
+        })
+        .collect()
+}
+
+fn numbers(value: &Value) -> BTreeMap<String, f64> {
+    value
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(key, value)| Some((key.clone(), value.as_f64()?)))
+        .collect()
+}
+
+/// A clean and an incremental build of `examples/hello-label`, in its own
+/// target folder so nothing else's cache helps.
+fn build_times(root: &Path) -> Result<BTreeMap<String, f64>> {
+    let target = root.join("target").join("bench-build");
+    let _ = std::fs::remove_dir_all(&target);
+    let build = || {
+        let mut command = cargo();
+        command.current_dir(root).args(["build", "-p", "hello-label", "--target-dir"]).arg(&target);
+        let started = Instant::now();
+        checked("cargo", command).map(|_| started.elapsed().as_secs_f64())
+    };
+    let clean = build()?;
+    // An edit to the application: its main file is rewritten unchanged,
+    // which is what an editor's save does to the timestamp.
+    let main = root.join("examples/hello-label/src/main.rs");
+    let text = std::fs::read(&main).map_err(io("read hello-label's main.rs"))?;
+    std::fs::write(&main, text).map_err(io("touch hello-label's main.rs"))?;
+    let incremental = build()?;
+    Ok(BTreeMap::from([
+        ("build_time_clean_s".to_owned(), clean),
+        ("build_time_incremental_s".to_owned(), incremental),
+    ]))
+}
+
+/// Runs the harness.
+pub fn run(
+    here: &Path,
+    target: BenchTarget,
+    check: bool,
+    low_end: bool,
+    build: bool,
+) -> Result<()> {
+    let root = root(here)?;
+    let budget_path = root.join("budgets").join(format!("{}.toml", target.name()));
+    let text = std::fs::read_to_string(&budget_path)
+        .map_err(io(format!("read {}", budget_path.display())))?;
+    let budgets: BudgetFile = toml::from_str(&text)
+        .map_err(|error| Error::Usage(format!("{}: {error}", budget_path.display())))?;
+
+    println!("bench: building the scenarios (release)");
+    let mut command = cargo();
+    command.current_dir(&root).args(["build", "--release", "-p", "bench-app"]);
+    checked("cargo", command)?;
+    let exe =
+        root.join("target/release").join(format!("bench-app{}", std::env::consts::EXE_SUFFIX));
+
+    let mut measured = BTreeMap::new();
+    for (scenario, runs) in target.scenarios() {
+        println!("bench: {scenario} ×{runs}");
+        let mut results = Vec::new();
+        for _ in 0..*runs {
+            let mut command = Command::new(&exe);
+            command.args(["--scenario", scenario]);
+            if low_end {
+                command.arg("--low-end");
+            }
+            let output = checked("bench-app", command)?;
+            let line = String::from_utf8_lossy(&output.stdout);
+            let value: Value = serde_json::from_str(line.trim()).map_err(|error| {
+                Error::Usage(format!("bench-app {scenario} printed no measurement: {error}"))
+            })?;
+            results.push(numbers(&value));
+        }
+        measured.extend(medians(&results));
+    }
+    measured.remove("frames");
+    if target == BenchTarget::Windows {
+        let size = std::fs::metadata(&exe).map_err(io("read bench-app's size"))?.len();
+        #[allow(clippy::cast_precision_loss, reason = "kilobytes")]
+        measured.insert("artifact_size_kb".to_owned(), size as f64 / 1024.0);
+    }
+    if build {
+        println!("bench: clean and incremental builds");
+        measured.extend(build_times(&root)?);
+    }
+
+    let report = judge(&budgets, &measured, low_end);
+    let report_path = root.join("target/budget-report.json");
+    std::fs::write(&report_path, serde_json::to_vec_pretty(&report).unwrap_or_default())
+        .map_err(io(format!("write {}", report_path.display())))?;
+    for (key, verdict) in &report.verdicts {
+        println!(
+            "{} {key:<28} {:>10.3}  (budget {}, limit {:.3})",
+            if verdict.within { "ok  " } else { "OVER" },
+            verdict.measured,
+            verdict.max,
+            verdict.limit
+        );
+    }
+    for key in &report.unbudgeted {
+        println!("NEW  {key:<28} {:>10.3}  (not in {})", measured[key], budget_path.display());
+    }
+    for key in &report.unmeasured {
+        println!("MISS {key:<28} (budgeted, not measured)");
+    }
+    println!("bench: report in {}", report_path.display());
+    if check && !report.passes() {
+        return Err(Error::Usage(format!(
+            "over budget or unaccounted for (see {})",
+            report_path.display()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn budgets() -> BudgetFile {
+        toml::from_str(
+            r#"
+            target = "test"
+            [budget]
+            cold_start_ms = { max = 100, tolerance = 0.2 }
+            build_time_clean_s = { max = 60, optional = true }
+            layout_us_1k_nodes = { max = 500 }
+            "#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_regression_beyond_the_tolerance_fails_and_within_it_passes() {
+        let measured = |cold: f64| {
+            BTreeMap::from([
+                ("cold_start_ms".to_owned(), cold),
+                ("layout_us_1k_nodes".to_owned(), 400.0),
+            ])
+        };
+        assert!(judge(&budgets(), &measured(119.0), false).passes());
+        let over = judge(&budgets(), &measured(121.0), false);
+        assert!(!over.passes());
+        assert!(!over.verdicts["cold_start_ms"].within);
+    }
+
+    #[test]
+    fn unbudgeted_and_unmeasured_keys_fail() {
+        let measured = BTreeMap::from([
+            ("cold_start_ms".to_owned(), 50.0),
+            ("layout_us_1k_nodes".to_owned(), 1.0),
+            ("new_metric".to_owned(), 1.0),
+        ]);
+        assert_eq!(judge(&budgets(), &measured, false).unbudgeted, ["new_metric"]);
+        let missing = BTreeMap::from([("cold_start_ms".to_owned(), 50.0)]);
+        // The optional build time is not required; the layout key is.
+        assert_eq!(judge(&budgets(), &missing, false).unmeasured, ["layout_us_1k_nodes"]);
+    }
+}

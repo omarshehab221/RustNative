@@ -14,6 +14,72 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 42 — Budgets — complete (Windows scope)
+
+**Built.**
+- **Budget files**: `budgets/windows.toml` and `budgets/headless.toml`, with
+  every key defined in `budgets/SCHEMA.md`. Each key declares its budget
+  (`max`) and its noise (`tolerance`); the measured values are kept in
+  comments.
+- **Startup phase model** (`C62`, `framework_core::perf`): process start,
+  runtime ready, first frame, first content, interactive.
+  - Windows marks each phase, with the process start taken from
+    `GetProcessTimes`. The headless backend marks them too.
+  - `RUSTNATIVE_STARTUP_TRACE=1` prints the phases.
+  - `RUSTNATIVE_EXIT_AT=interactive` quits at interactive: the scripted
+    startup.
+  - Frame times and realization times are recorded for the harness.
+- **Harness**: `examples/bench-app` runs the scenarios: startup, interaction
+  (`BM_CLICK` posted to the real button, timed until the change is realized),
+  animation frame times, the core on 1k nodes, the markup/style compile
+  steps, and headless launch and input.
+  - `rustnative bench --target windows|headless [--check] [--low-end]
+    [--build-times]` takes medians and writes `target/budget-report.json`.
+  - `--check` fails on a regression beyond tolerance, and on any key that is
+    unbudgeted or unmeasured.
+  - CI job `budgets` runs it on Windows (with build times) and on headless
+    pinned to one core.
+- **PGO** (`C62-2`): `rustnative build windows --release --pgo` builds
+  instrumented, runs the scripted startup, merges the profiles with
+  `llvm-profdata`, and rebuilds with `-Cprofile-use`. Without the
+  `llvm-tools` component it fails at once with the `rustup` command to run.
+- **No claim without a number**: `framework-conformance/tests/doc_claims.rs`
+  rejects performance adjectives in README/docs that do not cite `budgets/`.
+  README's "Performance budgets" section quotes the file.
+
+**Fixes the budgets found.**
+- **Click-to-realized** on a 40-row form was about 29 ms. Two causes:
+  - Every relayout re-measured every label through a new device context and
+    `DrawTextW` (20 ms). The Windows measurer now caches measurements, which
+    are pure for a font, text, width, and scale.
+  - Every relayout moved every window (4–10 ms). The renderer now moves only
+    windows whose rectangle changed. It forgets positions on a direction
+    flip and on node removal.
+
+  The median is now 7–13 ms.
+- **Fonts and brushes** were created per control (about 0.3 ms and two GDI
+  handles each). Styles now share them through a reference-counted pool,
+  freed with the last user. The GDI leak gate still holds.
+- **Tried and reverted**: batching the first layout's moves with
+  `DeferWindowPos` made no measurable difference.
+- **Recorded, not fixed**: the primary window's first `ShowWindow` costs
+  about 130 ms of startup (DWM, the OS's work). Process start to runtime
+  ready (about 50 ms) is loader and runtime initialization.
+
+**Verified.** Full gate. `rustnative bench --check` passes on both targets on
+the reference machine. The scripted startup exits at interactive, and the PGO
+missing-tool path is exercised.
+
+**Not verified / owed.**
+- The optimized half of the PGO build is not run here, because `llvm-tools`
+  is not installed on this machine (it is a download the person decides on).
+- The CI runners' numbers are unknown until CI runs. The tolerances reflect
+  this desktop's noise (±50–100% on microbenchmarks); a runner that differs
+  will need its own calibration.
+- Web metrics (`C42-4`), edge and server keys, embedded RAM/flash and
+  boot-to-first-frame (`C83-2`), and the device matrix are owed with their
+  backends.
+
 ### Milestone 44 — Inspection and diagnostics — complete (Windows scope)
 
 **Built.** `docs/inspection.md`.

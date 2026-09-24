@@ -96,6 +96,7 @@ impl Runtime {
         if direction_changed {
             // Nothing in the tree moved, but every position now reads from
             // the other edge.
+            self.renderer.forget_positions();
             self.renderer.relayout(self.window);
         }
         if self.report_container_sizes() {
@@ -116,6 +117,8 @@ impl Runtime {
         virtual_list::after_render(self);
         self.report_surface_changes();
         super::inspect::sync_overlay(self);
+        // The input-latency budget measures to here: the change realized.
+        framework_core::perf::realized();
         Ok(())
     }
 

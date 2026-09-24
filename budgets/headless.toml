@@ -1,0 +1,16 @@
+# The headless reference backend's budgets (`PLAN.md` Milestone 42). See
+# SCHEMA.md. Measured on the same reference machine as `windows.toml`; CI runs
+# them pinned to one core (`--low-end`).
+target = "headless"
+
+[budget]
+# Launching the bench screen (forty rows) and settling it (median of 3 runs).
+launch_ms = { max = 6, tolerance = 1.0 }                  # 2.5–4
+# A click through hit-testing and the input path, to the settled change.
+input_latency_ms = { max = 4, tolerance = 1.0 }           # 1.6–2.5
+
+tree_diff_us_1k_nodes = { max = 600, tolerance = 1.0 }
+layout_us_1k_nodes = { max = 900, tolerance = 1.0 }
+render_us_1k_nodes = { max = 5000, tolerance = 1.5 }
+rsx_compile_ms_per_kloc = { max = 12, tolerance = 1.0 }
+class_resolve_us = { max = 30, tolerance = 1.0 }

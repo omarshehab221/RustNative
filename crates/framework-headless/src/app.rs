@@ -139,6 +139,8 @@ impl HeadlessApp {
         theme: Theme,
         state: Arc<MemoryStateStore>,
     ) -> Self {
+        use framework_core::perf::{self, StartupPhase};
+        perf::mark(StartupPhase::RuntimeReady);
         let executor = ManualExecutor::new();
         let services = services.with_clock(Arc::new(executor.clone()));
         let app = factory(services.clone(), theme.clone(), Arc::new(executor.clone()));
@@ -160,6 +162,12 @@ impl HeadlessApp {
             window: WindowId::PRIMARY,
         };
         headless.settle();
+        // The model is realized and settled: there is no paint, so the
+        // first frame, first content, and interactive coincide here
+        // (`framework_core::perf`).
+        perf::mark(StartupPhase::FirstFrame);
+        perf::mark(StartupPhase::FirstContent);
+        perf::mark(StartupPhase::Interactive);
         headless
     }
 
@@ -776,6 +784,7 @@ impl HeadlessApp {
     }
 
     fn realize_all(&mut self) {
+        framework_core::perf::realized();
         let ids = self.app.window_ids();
         self.trees.retain(|id, _| ids.contains(id));
         for id in ids {

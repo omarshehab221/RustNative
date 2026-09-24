@@ -192,6 +192,8 @@ fn cancel_property(runtime: &mut Runtime, node: NodeId, property: AnimatedProper
 /// One frame: advance the timeline, apply what moved, tell components what
 /// ended.
 pub(crate) fn frame(runtime: &mut Runtime) {
+    // Frame times, for the frame-time budget (`framework_core::perf`).
+    framework_core::perf::frame();
     driver::handled(runtime.window);
     let now = runtime.animation.clock.now();
     let output = runtime.animation.timeline.tick(now);

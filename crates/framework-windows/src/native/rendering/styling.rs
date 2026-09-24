@@ -3,9 +3,10 @@
 //! Two things live here, both concerned with the same question — "what GDI
 //! objects does painting this node need, and who frees them?":
 //!
-//! - [`ControlStyle`], the per-node bundle of colors, brush, and font. It
-//!   owns its GDI handles and frees them on drop, so a style change or a
-//!   node removal cannot leak one.
+//! - [`ControlStyle`], the per-node bundle of colors, brush, and font. Its
+//!   brush and font are shared with every other style that uses the same
+//!   ones ([`GdiPool`]) and freed with the last of them, so a style change
+//!   or a node removal cannot leak one.
 //! - [`StyleCache`], the renderer's map from node to realized style, plus
 //!   the transient interaction state (hover/press/focus) that feeds style
 //!   resolution.
@@ -14,6 +15,8 @@
 //!   a `WNDPROC` that cannot reach the renderer.
 
 use std::collections::HashMap;
+use std::hash::Hash;
+use std::rc::{Rc, Weak};
 
 #[cfg(test)]
 use framework_core::VisualStyle;
@@ -46,6 +49,69 @@ pub(crate) struct ControlStyle {
     pub(crate) border: Option<COLORREF>,
     /// The resolved corner radius — a container's window region.
     pub(crate) radius: u16,
+    /// Keeps the shared brush and font alive while this style is realized.
+    _shared: Vec<Rc<Shared>>,
+}
+
+/// A GDI object shared by every realized style that uses it, deleted when
+/// the last of them lets go.
+#[derive(Debug)]
+pub(crate) struct Shared(HGDIOBJ);
+
+impl Drop for Shared {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: a GDI object this value exclusively owns (every user
+            // holds it through the one `Rc`), deleted once.
+            unsafe { DeleteObject(self.0) };
+        }
+    }
+}
+
+/// Fonts and brushes by what they are, so forty labels in one font share
+/// one `HFONT` rather than creating forty — which cost a third of a
+/// millisecond and a GDI handle per control at startup (`PLAN.md`
+/// Milestone 42's startup budget).
+#[derive(Debug, Default)]
+pub(crate) struct GdiPool {
+    fonts: HashMap<(String, u16, u16, u32), Weak<Shared>>,
+    brushes: HashMap<COLORREF, Weak<Shared>>,
+}
+
+impl GdiPool {
+    fn shared<K: Eq + Hash>(
+        objects: &mut HashMap<K, Weak<Shared>>,
+        key: K,
+        create: impl FnOnce() -> HGDIOBJ,
+    ) -> Rc<Shared> {
+        if let Some(shared) = objects.get(&key).and_then(Weak::upgrade) {
+            return shared;
+        }
+        objects.retain(|_, object| object.strong_count() > 0);
+        let shared = Rc::new(Shared(create()));
+        // A failed creation is not remembered: the next style tries again.
+        if !shared.0.is_null() {
+            objects.insert(key, Rc::downgrade(&shared));
+        }
+        shared
+    }
+
+    fn brush(&mut self, color: COLORREF) -> Rc<Shared> {
+        // SAFETY: `CreateSolidBrush` takes a plain `COLORREF` and no
+        // pointers; a null return (handle exhaustion) is not remembered.
+        Self::shared(&mut self.brushes, color, || unsafe { CreateSolidBrush(color) } as HGDIOBJ)
+    }
+
+    fn font(&mut self, typography: &Typography, scale: f32) -> Rc<Shared> {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a text scale in thousandths, small and positive"
+        )]
+        let milli = (scale * 1_000.0).round().max(0.0) as u32;
+        let key = (typography.family.clone(), typography.size, typography.weight, milli);
+        Self::shared(&mut self.fonts, key, || create_font(typography, scale) as HGDIOBJ)
+    }
 }
 
 impl ControlStyle {
@@ -62,6 +128,7 @@ impl ControlStyle {
         resolved: &ResolvedStyle,
         kind: framework_core::NodeKind,
         host: HostSettings,
+        pool: &mut GdiPool,
     ) -> Self {
         let style = resolved.properties();
         // SAFETY: `GetSysColor` takes a documented system-color index
@@ -90,34 +157,20 @@ impl ControlStyle {
         } else {
             (foreground, background)
         };
-        // SAFETY: `CreateSolidBrush` takes a plain `COLORREF` value and
-        // no pointer arguments, so the call itself cannot be unsound; a
-        // null return (GDI-handle-exhaustion) is a valid `HBRUSH` value
-        // that `Drop` below already checks for before freeing.
-        let background_brush = unsafe { CreateSolidBrush(background) };
-        let font = style
-            .typography_override()
-            .map_or(std::ptr::null_mut(), |typography| create_font(typography, host.text_scale));
+        let brush = pool.brush(background);
+        let font =
+            style.typography_override().map(|typography| pool.font(typography, host.text_scale));
         let border = style.border_override().map(color_ref);
         let radius = style.border_radius_override().unwrap_or(0);
 
-        Self { foreground, background, background_brush, font, border, radius }
-    }
-}
-
-impl Drop for ControlStyle {
-    fn drop(&mut self) {
-        // SAFETY: `background_brush`/`font` are either null (checked
-        // before use, matching `DeleteObject`'s documented no-op on
-        // null) or GDI handles this `ControlStyle` exclusively owns and
-        // has not freed before, since `Drop::drop` runs at most once.
-        unsafe {
-            if !self.background_brush.is_null() {
-                DeleteObject(self.background_brush as HGDIOBJ);
-            }
-            if !self.font.is_null() {
-                DeleteObject(self.font as HGDIOBJ);
-            }
+        Self {
+            foreground,
+            background,
+            background_brush: brush.0 as HBRUSH,
+            font: font.as_ref().map_or(std::ptr::null_mut(), |font| font.0 as HFONT),
+            border,
+            radius,
+            _shared: std::iter::once(brush).chain(font).collect(),
         }
     }
 }
@@ -196,6 +249,7 @@ pub(crate) struct StyleCache {
     interaction: HashMap<NodeId, ControlState>,
     theme: Theme,
     host: HostSettings,
+    pool: GdiPool,
 }
 
 /// The system settings every realized style follows without application
@@ -264,6 +318,7 @@ impl StyleCache {
             &self.theme.resolve(kind, state, style_override),
             kind,
             self.host,
+            &mut self.pool,
         );
         self.realized.insert(id, resolved);
         &self.realized[&id]
@@ -460,6 +515,7 @@ mod tests {
                 &style,
                 framework_core::NodeKind::Label,
                 HostSettings::default(),
+                &mut GdiPool::default(),
             );
             assert!(
                 !resolved.background_brush.is_null(),
@@ -476,10 +532,40 @@ mod tests {
     }
 
     #[test]
+    fn styles_share_one_font_and_brush_and_free_them_with_the_last() {
+        let mut pool = GdiPool::default();
+        let style = ResolvedStyle::new(
+            VisualStyle::default().background(Color::rgb(1, 2, 3)).typography(Typography {
+                family: "Segoe UI".to_owned(),
+                size: 14,
+                weight: 400,
+            }),
+            ControlState::Normal,
+        );
+        let resolve = |pool: &mut GdiPool| {
+            let label = framework_core::NodeKind::Label;
+            ControlStyle::resolve(&style, label, HostSettings::default(), pool)
+        };
+        let (first, second) = (resolve(&mut pool), resolve(&mut pool));
+        assert_eq!(first.font, second.font);
+        assert_eq!(first.background_brush, second.background_brush);
+        let live =
+            |pool: &GdiPool| pool.fonts.values().filter(|font| font.strong_count() > 0).count();
+        drop(first);
+        assert_eq!(live(&pool), 1, "still used by the second style");
+        drop(second);
+        assert_eq!(live(&pool), 0, "freed with the last style that used it");
+    }
+
+    #[test]
     fn control_style_resolve_falls_back_to_system_colors_when_unset() {
         let style = ResolvedStyle::new(VisualStyle::default(), ControlState::Normal);
-        let resolved =
-            ControlStyle::resolve(&style, framework_core::NodeKind::Label, HostSettings::default());
+        let resolved = ControlStyle::resolve(
+            &style,
+            framework_core::NodeKind::Label,
+            HostSettings::default(),
+            &mut GdiPool::default(),
+        );
         // No typography override was set, so no font handle should have
         // been created — the renderer falls back to the control's
         // default system font instead.

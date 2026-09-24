@@ -2385,6 +2385,15 @@ performance claim in the project's documentation lacks a number behind it.
 
 **Depends on** Milestone 45 for reproducible measurement harnesses.
 
+**Status (2026-09-24): implemented** for Windows and headless:
+- budget files in `budgets/`;
+- `rustnative bench --check` enforced in CI;
+- the startup phase model and a PGO build;
+- a documentation test that no performance claim lacks a budget.
+
+Web, edge, embedded, and device keys are owed with their backends. See
+`BUILD_STATUS.md`.
+
 ## Milestone 43 — The developer loop
 
 The substrate chosen in section 2 gives this project almost every root-layer

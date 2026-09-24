@@ -12,15 +12,16 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BN_CLICKED, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW, DestroyWindow,
-    DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PostMessageW, RegisterClassW,
-    SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos, TranslateMessage, WM_CAPTURECHANGED, WM_CHAR,
-    WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY,
-    WM_DPICHANGED, WM_ENDSESSION, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_NOTIFY, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE,
-    WM_POWERBROADCAST, WM_QUERYENDSESSION, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK,
-    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
+    DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PM_NOREMOVE, PeekMessageW,
+    PostMessageW, PostQuitMessage, RegisterClassW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+    TranslateMessage, WM_CAPTURECHANGED, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN,
+    WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_ENDSESSION, WM_KEYDOWN,
+    WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN,
+    WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_NOTIFY,
+    WM_PAINT, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE, WM_POWERBROADCAST,
+    WM_QUERYENDSESSION, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETTINGCHANGE,
+    WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK, WM_XBUTTONDOWN, WM_XBUTTONUP,
+    WNDCLASSW,
 };
 
 use super::container::container_proc;
@@ -60,8 +61,11 @@ pub(crate) enum LoopStep {
 
 pub(crate) fn run_message_loop() -> Result<(), Error> {
     let mut message = MSG::default();
+    let exit_when_interactive =
+        std::env::var("RUSTNATIVE_EXIT_AT").is_ok_and(|value| value == "interactive");
 
     loop {
+        mark_interactive_when_idle(exit_when_interactive);
         // SAFETY: `message` is a valid, exclusively borrowed `MSG` for
         // `GetMessageW` to write into; a null `hWnd` filter is the
         // documented way to retrieve messages for every window owned by
@@ -83,6 +87,27 @@ pub(crate) fn run_message_loop() -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+/// Marks the startup model's "interactive" the first time the queue is
+/// empty after the first window painted — the application has nothing left
+/// to do and will answer the next input at once. With
+/// `RUSTNATIVE_EXIT_AT=interactive` it then quits: the scripted startup a
+/// profile-guided build and the startup budget run (`PLAN.md` Milestone 42).
+fn mark_interactive_when_idle(exit: bool) {
+    use framework_core::perf::{self, StartupPhase};
+    if perf::reached(StartupPhase::Interactive) || !perf::reached(StartupPhase::FirstContent) {
+        return;
+    }
+    let mut peeked = MSG::default();
+    // SAFETY: `peeked` is writable; `PM_NOREMOVE` leaves the queue as it
+    // was.
+    let pending =
+        unsafe { PeekMessageW(&raw mut peeked, std::ptr::null_mut(), 0, 0, PM_NOREMOVE) } != 0;
+    if !pending && perf::mark(StartupPhase::Interactive) && exit {
+        // SAFETY: plain call on this thread.
+        unsafe { PostQuitMessage(0) };
+    }
 }
 
 /// Everything the message loop does with one message: framework-level
@@ -634,6 +659,12 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
     let default = || unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
 
     match message {
+        // A framework window's first paint is the startup model's "first
+        // content" (`framework_core::perf`, `PLAN.md` Milestone 42).
+        WM_PAINT => {
+            framework_core::perf::mark(framework_core::perf::StartupPhase::FirstContent);
+            default()
+        }
         // The window moved to a monitor of another DPI (or the DPI changed
         // under it): take the size Windows suggests, and tell every
         // surface its new scale — the surface hand-off contract

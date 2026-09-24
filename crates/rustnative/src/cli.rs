@@ -53,6 +53,24 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Measure the framework's budget scenarios for a target against
+    /// `budgets/<target>.toml`, writing `target/budget-report.json`
+    /// (`PLAN.md` Milestone 42). Run in the framework's repository.
+    Bench {
+        /// The target whose budget file to measure against.
+        #[arg(long, value_enum, default_value = "windows")]
+        target: crate::bench::BenchTarget,
+        /// Fail on a measurement over budget, or one the budget file does
+        /// not declare.
+        #[arg(long)]
+        check: bool,
+        /// Pin the scenarios to one core: the low-end reference profile.
+        #[arg(long)]
+        low_end: bool,
+        /// Also time a clean and an incremental build.
+        #[arg(long)]
+        build_times: bool,
+    },
     /// Inspect a running application: its tree, components and state,
     /// layout and style explanations, trace, tasks, capabilities; the
     /// overlay; recording (`PLAN.md` Milestone 44).
@@ -105,6 +123,10 @@ enum Command {
         /// Build with optimizations.
         #[arg(long)]
         release: bool,
+        /// Profile-guided: instrument, run a scripted startup, rebuild with
+        /// the profile (needs `rustup component add llvm-tools`).
+        #[arg(long, requires = "release")]
+        pgo: bool,
     },
     /// Build and run the application.
     Run {
@@ -171,8 +193,18 @@ impl Cli {
                 println!("  rustnative run windows");
                 Ok(())
             }
-            Command::Build { platform, release } => {
-                cargo_for(platform, &here, "build", release, &[])
+            Command::Build { platform, release, pgo } => {
+                if pgo {
+                    if platform.backend().is_none() {
+                        return Err(Error::NoBackend {
+                            platform,
+                            milestone: platform.planned_milestone(),
+                        });
+                    }
+                    crate::pgo::build(&Project::find(&here)?)
+                } else {
+                    cargo_for(platform, &here, "build", release, &[])
+                }
             }
             Command::Run { platform, release } => cargo_for(platform, &here, "run", release, &[]),
             Command::Check { platform } => cargo_for(platform, &here, "check", false, &[]),
@@ -204,6 +236,9 @@ impl Cli {
                 Ok(())
             }
             Command::Inspect { target, question } => crate::inspect::run(&target, question),
+            Command::Bench { target, check, low_end, build_times } => {
+                crate::bench::run(&here, target, check, low_end, build_times)
+            }
             Command::Expand { file, classes, styles } => {
                 let text = match (file, classes, styles) {
                     (Some(file), _, _) => crate::markup::expand_file(&file)?,

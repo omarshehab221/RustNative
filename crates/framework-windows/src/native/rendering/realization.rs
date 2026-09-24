@@ -72,6 +72,11 @@ pub(crate) struct Renderer {
     /// `SetWindowTextW` rather than from the person typing.
     pub(crate) suppress_text_change: HashSet<NodeId>,
     layout: HashMap<NodeId, Rect>,
+    /// The rectangle each object was last moved to, with the object it was
+    /// — so a relayout moves only what moved. Moving every object on every
+    /// relayout cost 4–10 ms a click on a form of forty rows (`PLAN.md`
+    /// Milestone 42's input-latency budget).
+    positioned: HashMap<NodeId, (isize, Rect)>,
     /// Per-frame animated values — see `rendering::animated`.
     animated: AnimatedOverrides,
     /// Transitions the last render or layout pass found, waiting for
@@ -132,6 +137,7 @@ impl Renderer {
             snapshot: TreeSnapshot::default(),
             suppress_text_change: HashSet::new(),
             layout: HashMap::new(),
+            positioned: HashMap::new(),
             animated: AnimatedOverrides::default(),
             pending_transitions: Vec::new(),
             removed_nodes: Vec::new(),
@@ -299,6 +305,13 @@ impl Renderer {
                 scale_factor: Scalar::new(scale),
             });
         }
+    }
+
+    /// Forgets where every object was moved, so the next relayout moves
+    /// them all — after a change that moves objects without changing their
+    /// rectangles (the window's reading direction).
+    pub(crate) fn forget_positions(&mut self) {
+        self.positioned.clear();
     }
 
     /// Records the DPI `WM_DPICHANGED` announced for this window.
@@ -625,6 +638,7 @@ impl Renderer {
         self.styles.forget(id);
         self.suppress_text_change.remove(&id);
         self.layout.remove(&id);
+        self.positioned.remove(&id);
     }
 
     /// Whether `node` is inside a virtual list, and so interchangeable with
@@ -736,7 +750,7 @@ impl Renderer {
         }
     }
 
-    fn position_node(&self, id: NodeId) {
+    fn position_node(&mut self, id: NodeId) {
         let Some(object) = self.registry.get(id) else {
             return;
         };
@@ -746,6 +760,13 @@ impl Renderer {
         // Whatever is animating this node wins over the laid-out geometry
         // until its animation ends (see `rendering::animated`).
         let rect = self.animated.rect_for(id, rect);
+        let placed = (object.hwnd() as isize, rect);
+        if self.positioned.insert(id, placed) == Some(placed) {
+            if object.content_hwnd().is_some() {
+                self.scroll.apply(id, &self.registry, rect);
+            }
+            return;
+        }
 
         // The layout engine always returns rectangles relative to the native
         // parent. Scrolling is deliberately NOT part of those rectangles;

@@ -24,7 +24,8 @@ The current working backend is Windows/Win32. The framework core is designed to 
 Two notes on what "planned" means here. macOS and iOS are fully planned platforms that this project has no hardware to build or verify on yet, so their milestones are specified and designed for but not started — order follows hardware, not priority. And a backend advertises a capability only once it genuinely realizes it, so "planned" never reaches an application as a claim of support.
 
 Milestones 39–58 are being built on the Windows backend (every milestone and
-tier except the other backends, which come later). Done so far: **Milestone 44
+tier except the other backends, which come later). Done so far: **Milestone 42
+— budgets** (a budget file per shipped target, enforced in CI), **Milestone 44
 — inspection and diagnostics** (one protocol every backend answers, the
 `rustnative inspect` client, an in-app overlay, record and replay), **Milestone
 41 — guarantees and conformance suites**, **Milestone 40 — interoperability
@@ -1227,6 +1228,31 @@ version, publisher, and URL schemes. Every platform on the roadmap is
 recognized; the ones whose backend does not exist yet say so, with the
 milestone that brings them, and exit with a distinct code rather than
 quietly building for Windows.
+
+## Performance budgets
+
+Performance numbers in this project come from the budget files
+(`budgets/windows.toml`, `budgets/headless.toml`, with the keys defined in
+`budgets/SCHEMA.md`), not from adjectives. `rustnative bench --target
+<target>` measures them, and `--check` fails the build on a regression beyond
+each key's declared noise. CI runs it on every push. A documentation test
+(`framework-conformance/tests/doc_claims.rs`) rejects a performance claim in
+this README or `docs/` that does not point at a budget.
+
+The Windows budgets, per `budgets/windows.toml`:
+
+- **Startup:** interactive in at most 450 ms from process creation, on a form
+  of 125 native controls.
+- **Memory:** 24 MB resident.
+- **Input latency:** 16 ms median from a click on the real button window to
+  the realized change.
+- **Frame time:** 17.5 ms median during a transition.
+- **Artifact size:** a 3.5 MB release executable.
+
+`RUSTNATIVE_STARTUP_TRACE=1` prints any application's startup phases:
+process start, runtime ready, first frame, first content, interactive.
+`rustnative build windows --release --pgo` builds profile-guided from a
+scripted startup.
 
 ## Packaging
 

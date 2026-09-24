@@ -26,6 +26,7 @@
 
 #![deny(missing_docs)]
 
+mod bench;
 mod cli;
 mod config;
 mod diagnostics;
@@ -35,6 +36,7 @@ mod inspect;
 mod lsp;
 mod markup;
 mod package;
+mod pgo;
 mod platform;
 mod project;
 mod toolchain;

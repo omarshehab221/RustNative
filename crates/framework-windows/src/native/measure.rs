@@ -33,14 +33,36 @@ thread_local! {
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
-fn measuring_font(typography: &Typography, scale: f32) -> HGDIOBJ {
+/// What a measurement depends on: the kind (its padding and wrapping), the
+/// text, the width it may take, the font, and the text scale.
+type MeasureKey = (NodeKind, String, Option<i32>, Option<(String, u16, u16)>, u32);
+
+/// Measurements are kept up to this many; then the cache starts over.
+const MEASUREMENTS_KEPT: usize = 8_192;
+
+thread_local! {
+    /// Measurements already taken. Measuring is a pure function of its
+    /// key — a font measures a string the same way every time — and a
+    /// relayout asks for the same few hundred again (the budget scenario
+    /// found each costing a device context and a `DrawTextW`, 20 ms a
+    /// relayout for a form of forty rows; `PLAN.md` Milestone 42).
+    static MEASUREMENTS: std::cell::RefCell<std::collections::HashMap<MeasureKey, Size>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn text_scale_milli(scale: f32) -> u32 {
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         reason = "a text scale in thousandths, small and positive"
     )]
     let milli = (scale * 1_000.0).round().max(0.0) as u32;
-    let key = (typography.family.clone(), typography.size, typography.weight, milli);
+    milli
+}
+
+fn measuring_font(typography: &Typography, scale: f32) -> HGDIOBJ {
+    let key =
+        (typography.family.clone(), typography.size, typography.weight, text_scale_milli(scale));
     FONTS.with(|fonts| {
         *fonts
             .borrow_mut()
@@ -59,6 +81,37 @@ impl IntrinsicMeasurer for WindowsIntrinsicMeasurer {
     }
 
     fn measure_styled(
+        &self,
+        kind: NodeKind,
+        text: Option<&str>,
+        max_width: Option<i32>,
+        typography: Option<&Typography>,
+    ) -> Size {
+        let key = (
+            kind,
+            text.unwrap_or_default().to_owned(),
+            max_width,
+            typography
+                .map(|typography| (typography.family.clone(), typography.size, typography.weight)),
+            text_scale_milli(self.text_scale),
+        );
+        if let Some(size) = MEASUREMENTS.with(|cache| cache.borrow().get(&key).copied()) {
+            return size;
+        }
+        let size = self.measure_uncached(kind, text, max_width, typography);
+        MEASUREMENTS.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= MEASUREMENTS_KEPT {
+                cache.clear();
+            }
+            cache.insert(key, size);
+        });
+        size
+    }
+}
+
+impl WindowsIntrinsicMeasurer {
+    fn measure_uncached(
         &self,
         kind: NodeKind,
         text: Option<&str>,

@@ -317,6 +317,7 @@ pub mod menu;
 pub mod navigation;
 pub mod node;
 pub mod panic;
+pub mod perf;
 pub mod permission;
 pub mod persistence;
 pub mod platform;

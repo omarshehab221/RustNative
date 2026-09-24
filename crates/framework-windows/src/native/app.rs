@@ -46,6 +46,38 @@ impl Drop for OleApartment {
     }
 }
 
+/// Tells the startup model when this process was created (`GetProcessTimes`),
+/// so its phases are measured from the process's start rather than from
+/// `run`.
+fn process_start() {
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::System::SystemInformation::GetSystemTimePreciseAsFileTime;
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+    let zero = || FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+    let (mut created, mut exited, mut kernel, mut user, mut now) =
+        (zero(), zero(), zero(), zero(), zero());
+    // SAFETY: the current process's pseudo-handle; five writable
+    // `FILETIME`s.
+    let read = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &raw mut created,
+            &raw mut exited,
+            &raw mut kernel,
+            &raw mut user,
+        )
+    } != 0;
+    // SAFETY: a writable `FILETIME`.
+    unsafe { GetSystemTimePreciseAsFileTime(&raw mut now) };
+    let ticks =
+        |time: FILETIME| (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime);
+    if read {
+        // `FILETIME`s count 100-nanosecond intervals.
+        let before = ticks(now).saturating_sub(ticks(created)).saturating_mul(100);
+        framework_core::perf::set_process_start(std::time::Duration::from_nanos(before));
+    }
+}
+
 pub(crate) fn run_application(
     application: &mut Application,
     app_id: Option<&str>,
@@ -65,8 +97,10 @@ pub(crate) fn run_application(
         Some(super::single_instance::Claim::First(instance)) => Some(instance),
         None => None,
     };
+    process_start();
     let instance = module_instance();
     register_window_classes(instance)?;
+    framework_core::perf::mark(framework_core::perf::StartupPhase::RuntimeReady);
     // Declared before the registry so it is dropped after it: OLE must stay
     // initialized until every window has revoked its drop target.
     let _ole = OleApartment::enter();
@@ -95,6 +129,8 @@ pub(crate) fn run_application(
     // structural rather than a fact about this one function's body.
     let mut registry = Box::new(unsafe { WindowRegistry::new(application) });
     registry.sync()?;
+    // The first window exists, its tree realized.
+    framework_core::perf::mark(framework_core::perf::StartupPhase::FirstFrame);
     if let Some(url) = launch_url {
         super::single_instance::deliver_later(url);
     }

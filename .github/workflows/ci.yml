@@ -96,6 +96,32 @@ jobs:
       - name: cargo test -p framework-headless (one core)
         run: taskset -c 0 cargo test -p framework-headless -- --test-threads=1
 
+  budgets:
+    # Milestone 42: each shipped target's budget file, enforced. A
+    # measurement over its budget (beyond its declared noise) fails the
+    # build like a failing test; the report is kept either way.
+    name: budgets (windows, and headless on one core)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bench: cargo run --release -p rustnative-cli -- bench --target windows --check --build-times
+          - os: ubuntu-latest
+            bench: taskset -c 0 cargo run --release -p rustnative-cli -- bench --target headless --check --low-end
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: rustnative bench --check
+        run: ${{ matrix.bench }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: budget-report-${{ matrix.os }}
+          path: target/budget-report.json
+
   supply-chain:
     name: cargo-deny + cargo-audit
     runs-on: ubuntu-latest
