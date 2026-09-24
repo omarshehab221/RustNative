@@ -41,3 +41,12 @@ class_resolve_us = { max = 30, tolerance = 1.0 }          # 10–39
 # Build time (`--build-times`): `examples/hello-label`, debug.
 build_time_clean_s = { max = 300, tolerance = 0.5, optional = true }       # 234
 build_time_incremental_s = { max = 15, tolerance = 0.5, optional = true }  # 10
+
+# The development loop (Milestone 43): a save to the application's main
+# file rebuilt, restarted, and its state restored (`rustnative dev --once`
+# on `examples/hello-label`).
+dev_loop_restart_ms = { max = 12000, tolerance = 0.5, optional = true }     # 6900
+# The first-run target: `rustnative new`, `cd`, `rustnative run windows` —
+# three commands — from nothing to the application interactive, with the
+# framework's dependencies already built.
+first_run_s = { max = 60, tolerance = 0.5, optional = true }

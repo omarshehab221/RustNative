@@ -531,6 +531,12 @@ pub(crate) fn poison_runtime_and_quit(runtime_ptr: *mut Runtime, message: String
     let action =
         runtime.with_application(|application| application.handle_component_panic(&report));
 
+    // A development run shows where it happened — in the `.rsx` file when
+    // the panicking code was lowered from markup — before the policy acts
+    // (`framework_core::dev`, `PLAN.md` Milestone 43).
+    if let Some(site) = framework_core::dev::take_panic() {
+        show_dev_error(runtime.window, &site.to_string());
+    }
     match action {
         PanicAction::Terminate => {
             // The host is put back before the loop unwinds: whatever the
@@ -630,6 +636,17 @@ fn quit_message_loop() {
 /// panic and read the message back: every caught panic reported
 /// "component panicked with a non-string payload", discarding the one piece
 /// of diagnostic information a caught panic carries.
+/// The development error overlay: the panic and its source position, in a
+/// window owned by the application's.
+fn show_dev_error(owner: HWND, text: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+    let text = super::util::wide(format!("A component panicked.\n\n{text}"));
+    let title = super::util::wide("RustNative — development error");
+    // SAFETY: both strings are NUL-terminated wide buffers alive for the
+    // call; a stale or null owner is accepted.
+    unsafe { MessageBoxW(owner, text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };
+}
+
 pub(crate) fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(message) = payload.downcast_ref::<&str>() {
         (*message).to_string()

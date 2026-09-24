@@ -340,3 +340,31 @@ fn the_transport_answers_with_the_token_and_refuses_without_it() {
     let refused = send_request(&wrong, &Request::Hello).unwrap();
     assert_eq!(refused, Reply::Error("wrong token".into()));
 }
+
+#[test]
+fn a_style_file_s_tokens_reach_the_running_application_and_quit_is_a_request() {
+    let mut app = screen();
+    let token = |app: &Application| {
+        app.theme()
+            .tokens()
+            .resolve(&framework_core::StyleValue::Token("color-accent".to_owned().into()))
+    };
+    assert_eq!(token(&app), None);
+    let css = "@theme {\n  --color-accent: #102030;\n}\n";
+    let count: usize = ask(&mut app, &Request::SetStyleFile { css: css.into() });
+    assert!(count > 0);
+    assert_eq!(
+        token(&app),
+        Some(framework_core::StyleValue::Color(Color::rgb(0x10, 0x20, 0x30))),
+        "the new token is resolvable without a rebuild"
+    );
+    assert!(matches!(
+        app.inspect(&Request::SetStyleFile { css: "@theme {".into() }, &NoBackend),
+        Reply::Error(_)
+    ));
+
+    assert!(!app.take_quit_request());
+    let _: bool = ask(&mut app, &Request::Quit);
+    assert!(app.take_quit_request(), "the backend closes the application");
+    assert!(!app.take_quit_request(), "once");
+}

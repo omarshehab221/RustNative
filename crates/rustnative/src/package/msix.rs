@@ -251,6 +251,7 @@ mod tests {
                 icon: None,
                 url_schemes: schemes.iter().map(|scheme| (*scheme).to_owned()).collect(),
             },
+            resources: std::collections::BTreeMap::new(),
         }
     }
 

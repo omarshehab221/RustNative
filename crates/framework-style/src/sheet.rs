@@ -167,7 +167,8 @@ struct Parser<'a> {
 
 impl Parser<'_> {
     fn rest(&self) -> &str {
-        &self.text[self.position..]
+        // Past the end after an unterminated block: nothing is left.
+        self.text.get(self.position..).unwrap_or_default()
     }
 
     fn skip_space(&mut self) {
@@ -221,6 +222,14 @@ impl Parser<'_> {
         let start = self.position;
         let (end, brace) = self.statement_end();
         self.position = end;
+        // A block that runs off the end of the file (half-typed in an
+        // editor) is an error, not a block.
+        if let Some(open) = brace {
+            if !self.text[..end].ends_with('}') {
+                self.errors.push(StyleError::new("this `{` is never closed", open..open + 1));
+                return None;
+            }
+        }
         let statement = &self.text[start..end];
         let range = start..end;
         let Some(at_rule) = statement.strip_prefix('@') else {
@@ -439,6 +448,29 @@ fn statements(text: &str, open: usize, close: usize) -> Vec<(&str, Range<usize>)
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_file_cut_off_anywhere_is_an_error_not_a_panic() {
+        // What an editor holds between keystrokes: every prefix of a real
+        // style file (the development loop and the language server parse
+        // them; a panic here stopped both).
+        let file = "@theme {
+  --color-accent: oklch(0.55 0.19 255);
+}
+
+@utility headline {
+  @apply text-lg font-semibold text-accent;
+}
+@custom-variant pointer-coarse (@media (pointer: coarse));
+";
+        for end in 0..=file.len() {
+            if file.is_char_boundary(end) {
+                let _ = parse(&file[..end]);
+            }
+        }
+        assert!(parse("@theme {").is_err());
+    }
+
     use super::*;
 
     #[test]

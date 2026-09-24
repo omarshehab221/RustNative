@@ -98,6 +98,7 @@ pub(crate) fn run_application(
         None => None,
     };
     process_start();
+    framework_core::dev::capture_panics();
     let instance = module_instance();
     register_window_classes(instance)?;
     framework_core::perf::mark(framework_core::perf::StartupPhase::RuntimeReady);

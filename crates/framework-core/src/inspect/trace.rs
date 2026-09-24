@@ -89,6 +89,7 @@ pub(crate) struct Inspection {
     pub(crate) overlay: Option<OverlayMode>,
     pub(crate) recorder: Option<Recorder>,
     pub(crate) http: Option<HttpTape>,
+    pub(crate) quit: bool,
 }
 
 impl std::fmt::Debug for Inspection {

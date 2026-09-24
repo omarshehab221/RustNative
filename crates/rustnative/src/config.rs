@@ -60,6 +60,32 @@ impl std::error::Error for ConfigError {}
 pub struct Config {
     /// What the application is.
     pub app: App,
+    /// Development resources (`[resources.<name>]`), provisioned by
+    /// `rustnative dev` when absent and handed to the application as
+    /// `RUSTNATIVE_RESOURCE_<NAME>` (`framework_core::dev::resource`).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub resources: std::collections::BTreeMap<String, Resource>,
+}
+
+/// One development resource.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Resource {
+    /// What it is.
+    pub kind: ResourceKind,
+    /// A file or folder, relative to the project, it starts as a copy of.
+    #[serde(default)]
+    pub seed: Option<PathBuf>,
+}
+
+/// What a development resource is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ResourceKind {
+    /// A folder (a local stand-in for a bucket, a data directory).
+    Directory,
+    /// A file (a local database file, a settings file).
+    File,
 }
 
 /// The `[app]` table.
@@ -167,6 +193,7 @@ impl Config {
                 icon: None,
                 url_schemes: Vec::new(),
             },
+            resources: std::collections::BTreeMap::new(),
         }
     }
 }

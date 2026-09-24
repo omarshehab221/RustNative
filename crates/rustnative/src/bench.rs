@@ -8,7 +8,8 @@
 //!   and vocabulary the build uses);
 //! - the artifact's size;
 //! - with `--build-times`, a clean and an incremental build of
-//!   `examples/hello-label`.
+//!   `examples/hello-label`, the development loop's restart on it, and the
+//!   first-run target (new project to running application).
 //!
 //! It writes `target/budget-report.json`. With `--check` it fails on any
 //! measurement over its budget, beyond the key's declared noise tolerance,
@@ -223,7 +224,52 @@ fn build_times(root: &Path) -> Result<BTreeMap<String, f64>> {
     Ok(BTreeMap::from([
         ("build_time_clean_s".to_owned(), clean),
         ("build_time_incremental_s".to_owned(), incremental),
+        ("dev_loop_restart_ms".to_owned(), dev_loop(root)?),
+        ("first_run_s".to_owned(), first_run(root, &target)?),
     ]))
+}
+
+/// The development loop's restart: `rustnative dev windows --once` on
+/// `examples/hello-label` — a save, the rebuild, the restart, and the
+/// state restored (Milestone 43).
+fn dev_loop(root: &Path) -> Result<f64> {
+    let exe = std::env::current_exe().map_err(io("find rustnative itself"))?;
+    let mut command = Command::new(exe);
+    command.current_dir(root.join("examples/hello-label")).args(["dev", "windows", "--once"]);
+    let output = checked("rustnative dev", command)?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let restart: crate::dev::Restart = text
+        .lines()
+        .rev()
+        .find_map(|line| serde_json::from_str(line).ok())
+        .ok_or_else(|| Error::Usage("`rustnative dev --once` reported no restart".into()))?;
+    Ok(restart.total_ms)
+}
+
+/// The first-run target (Milestone 43): the three documented commands —
+/// `rustnative new`, `cd`, `rustnative run windows` — timed from creation
+/// to the application interactive. The dependencies are already compiled
+/// in `target` (the clean build above), which excludes their first
+/// download and build, as the target states.
+fn first_run(root: &Path, target: &Path) -> Result<f64> {
+    let exe = std::env::current_exe().map_err(io("find rustnative itself"))?;
+    // Outside the framework's workspace, as a developer's project is.
+    let parent = std::env::temp_dir().join("rustnative-bench-first-run");
+    let _ = std::fs::remove_dir_all(&parent);
+    std::fs::create_dir_all(&parent).map_err(io("create the first-run folder"))?;
+    let started = Instant::now();
+    let mut new = Command::new(&exe);
+    new.current_dir(&parent)
+        .args(["new", "first-run", "--syntax", "builder", "--framework-path"])
+        .arg(root);
+    checked("rustnative new", new)?;
+    let mut run = Command::new(&exe);
+    run.current_dir(parent.join("first-run"))
+        .args(["run", "windows"])
+        .env("CARGO_TARGET_DIR", target)
+        .env("RUSTNATIVE_EXIT_AT", "interactive");
+    checked("rustnative run", run)?;
+    Ok(started.elapsed().as_secs_f64())
 }
 
 /// Runs the harness.

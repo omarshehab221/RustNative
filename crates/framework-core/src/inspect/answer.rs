@@ -103,6 +103,30 @@ impl Application {
         answered > 0
     }
 
+    /// Replaces the theme's tokens with those `css` (an `app.css`) declares,
+    /// over the default theme's, and re-resolves every window's style —
+    /// the live half of theme editing. Returns how many tokens it set.
+    ///
+    /// # Errors
+    ///
+    /// The file does not parse.
+    pub fn apply_style_file(&mut self, css: &str) -> Result<usize, String> {
+        let vocabulary = framework_style::Vocabulary::with_style_file(css).map_err(|errors| {
+            errors.iter().map(|error| error.message.clone()).collect::<Vec<_>>().join("; ")
+        })?;
+        let tokens = vocabulary.token_table();
+        let count = vocabulary.token_names().count();
+        let theme = self.theme().clone().with_tokens(tokens);
+        self.set_theme(theme);
+        Ok(count)
+    }
+
+    /// Whether an inspector asked the application to close since the last
+    /// call — a backend closes its windows when it did.
+    pub fn take_quit_request(&mut self) -> bool {
+        std::mem::take(&mut self.inspection.quit)
+    }
+
     /// Shows the in-application overlay in `mode`, or hides it.
     pub fn set_overlay(&mut self, mode: Option<OverlayMode>) {
         self.inspection.overlay = mode;
@@ -311,6 +335,14 @@ impl Application {
                 Some(recording) => Reply::of(&recording),
                 None => Reply::Error("nothing is being recorded".into()),
             },
+            Request::SetStyleFile { css } => match self.apply_style_file(css) {
+                Ok(tokens) => Reply::of(&tokens),
+                Err(error) => Reply::Error(error),
+            },
+            Request::Quit => {
+                self.inspection.quit = true;
+                Reply::of(&true)
+            }
         }
     }
 

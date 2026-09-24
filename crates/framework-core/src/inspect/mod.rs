@@ -185,6 +185,17 @@ pub enum Request {
     },
     /// Stops recording, answering the [`Recording`].
     StopRecording,
+    /// Re-resolves the running application's style against a new style
+    /// file's tokens, without a rebuild — the development loop's live theme
+    /// edit (Milestone 43). Only token values may differ from the file the
+    /// application was built with; a new or removed utility is a rebuild.
+    SetStyleFile {
+        /// The style file's text.
+        css: String,
+    },
+    /// Asks the application to close, as the person closing its window
+    /// would: state is flushed and placement saved.
+    Quit,
 }
 
 /// The runtime's answer.

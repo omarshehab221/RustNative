@@ -154,10 +154,41 @@ enum Command {
     },
     /// Run the application's tests.
     Test {
+        /// Run the tests again on every save (`rustnative test --watch`).
+        #[arg(long)]
+        watch: bool,
         /// Arguments passed through to `cargo test`, flags included
         /// (`rustnative test --offline -- --nocapture`).
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         arguments: Vec<String>,
+    },
+    /// The development loop: build, run, and on every save either apply a
+    /// token-only `app.css` change live or rebuild and restart with the
+    /// application's state kept (`PLAN.md` Milestone 43).
+    Dev {
+        /// Which platform to run on.
+        platform: Platform,
+        /// Run on another machine, through its `rustnative dev-agent`.
+        #[arg(long, requires = "token")]
+        remote: Option<std::net::SocketAddr>,
+        /// The agent's token.
+        #[arg(long, requires = "remote")]
+        token: Option<String>,
+        /// Restart once after starting, print how long it took as JSON, and
+        /// exit — what the budget harness measures.
+        #[arg(long)]
+        once: bool,
+    },
+    /// Receive builds from `rustnative dev --remote` and run them on this
+    /// machine. It runs what a holder of the printed token sends, so it
+    /// listens on loopback unless given another address.
+    DevAgent {
+        /// The address to listen on.
+        #[arg(long, default_value = "127.0.0.1:7878")]
+        listen: std::net::SocketAddr,
+        /// Stop after this many deployments.
+        #[arg(long)]
+        max_deployments: Option<usize>,
     },
     /// Build the application and package it for distribution.
     Package {
@@ -178,6 +209,13 @@ enum Command {
         /// Print the findings as JSON.
         #[arg(long)]
         json: bool,
+        /// Install the missing toolchain pieces `rustup` can install
+        /// (`PLAN.md` Milestone 43, `C90`).
+        #[arg(long)]
+        install: bool,
+        /// With `--install`, print the commands instead of running them.
+        #[arg(long, requires = "install")]
+        dry_run: bool,
     },
 }
 
@@ -187,6 +225,7 @@ impl Cli {
     /// # Errors
     ///
     /// Whatever the command could not do; see [`Error::exit_code`].
+    #[allow(clippy::too_many_lines, reason = "one arm per command, each a few lines")]
     pub fn run(self) -> Result<()> {
         let here = std::env::current_dir()
             .map_err(|cause| Error::Io { what: "find the current folder".to_owned(), cause })?;
@@ -226,11 +265,28 @@ impl Cli {
             }
             Command::Run { platform, release } => cargo_for(platform, &here, "run", release, &[]),
             Command::Check { platform } => cargo_for(platform, &here, "check", false, &[]),
-            Command::Test { arguments } => {
+            Command::Test { watch, arguments } => {
                 let project = Project::find(&here)?;
                 let mut command = vec!["test".to_owned()];
                 command.extend(arguments);
+                if watch {
+                    return crate::dev::watch_tests(&project, &command);
+                }
                 crate::diagnostics::run_cargo(&project.root, &command)
+            }
+            Command::Dev { platform, remote, token, once } => {
+                if platform.backend().is_none() {
+                    return Err(Error::NoBackend {
+                        platform,
+                        milestone: platform.planned_milestone(),
+                    });
+                }
+                let remote =
+                    remote.zip(token).map(|(addr, token)| crate::dev::Remote { addr, token });
+                crate::dev::run(&here, remote, once)
+            }
+            Command::DevAgent { listen, max_deployments } => {
+                crate::dev::agent(listen, max_deployments)
             }
             Command::Bindgen { file, lang, out } => {
                 let source = std::fs::read_to_string(&file).map_err(|cause| Error::Io {
@@ -356,7 +412,10 @@ impl Cli {
                 }
                 Ok(())
             }
-            Command::Doctor { json } => {
+            Command::Doctor { json, install, dry_run } => {
+                if install {
+                    return crate::doctor::install(dry_run);
+                }
                 let report = Report::gather();
                 if json {
                     let text = report.to_json().map_err(|cause| Error::Io {

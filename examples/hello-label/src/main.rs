@@ -29,6 +29,12 @@ struct CounterPanelProps {
 
 enum CounterMessage {
     AsyncCompleted,
+    /// Set by the inspector, or by `rustnative dev` restoring state after a
+    /// restart (`Component::edit`).
+    Restore {
+        count: u32,
+        name: String,
+    },
 }
 
 struct CounterPanel {
@@ -230,7 +236,25 @@ impl Component for CounterPanel {
                 self.async_requested = false;
                 "Completed".clone_into(&mut self.async_status);
             }
+            CounterMessage::Restore { count, name } => {
+                self.count = count;
+                self.name = name;
+            }
         }
+    }
+
+    fn inspect(&self) -> Option<serde_json::Value> {
+        Some(serde_json::json!({ "count": self.count, "name": self.name }))
+    }
+
+    fn edit(&self, field: &str, value: &serde_json::Value) -> Option<Self::Message> {
+        let (mut count, mut name) = (self.count, self.name.clone());
+        match field {
+            "count" => count = u32::try_from(value.as_u64()?).ok()?,
+            "name" => value.as_str()?.clone_into(&mut name),
+            _ => return None,
+        }
+        Some(CounterMessage::Restore { count, name })
     }
 
     fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node {

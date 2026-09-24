@@ -302,6 +302,7 @@ pub mod capability;
 pub mod clock;
 pub mod command;
 pub mod component;
+pub mod dev;
 pub mod environment;
 pub mod event;
 pub mod grant;

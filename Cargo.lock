@@ -615,6 +615,7 @@ dependencies = [
  "framework-build",
  "framework-core",
  "framework-windows",
+ "serde_json",
 ]
 
 [[package]]

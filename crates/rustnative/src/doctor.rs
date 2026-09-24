@@ -167,6 +167,63 @@ impl Report {
     }
 }
 
+/// What `rustup` can add that a `rustnative` command needs: `(what,
+/// rustup arguments, why)`.
+const INSTALLABLE: [(&str, [&str; 3], &str); 1] = [(
+    "llvm-tools",
+    ["component", "add", "llvm-tools"],
+    "`rustnative build --release --pgo` merges its profiles with llvm-profdata",
+)];
+
+/// The installable pieces this toolchain lacks.
+#[must_use]
+pub fn missing_installable() -> Vec<(&'static str, [&'static str; 3], &'static str)> {
+    let installed = std::process::Command::new("rustup")
+        .args(["component", "list", "--installed"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default();
+    INSTALLABLE
+        .into_iter()
+        .filter(|(name, _, _)| !installed.lines().any(|line| line.starts_with(name)))
+        .collect()
+}
+
+/// `rustnative doctor --install`: adds what `rustup` can add and a command
+/// needs. The Windows SDK and the MSVC build tools are the person's to
+/// install (`doctor` says where); device toolchains are owed with their
+/// backends.
+///
+/// # Errors
+///
+/// `rustup` cannot be run, or fails.
+pub fn install(dry_run: bool) -> crate::error::Result<()> {
+    let missing = missing_installable();
+    if missing.is_empty() {
+        println!("nothing to install: every piece rustup can add is present");
+        return Ok(());
+    }
+    for (name, arguments, why) in missing {
+        println!("{name}: {why}");
+        println!("  rustup {}", arguments.join(" "));
+        if dry_run {
+            continue;
+        }
+        let status =
+            std::process::Command::new("rustup").args(arguments).status().map_err(|cause| {
+                crate::error::Error::ToolMissing {
+                    tool: "rustup",
+                    hint: "install Rust through https://rustup.rs".into(),
+                    cause: Some(cause.to_string()),
+                }
+            })?;
+        if !status.success() {
+            return Err(crate::error::Error::ToolFailed { tool: "rustup", code: status.code() });
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

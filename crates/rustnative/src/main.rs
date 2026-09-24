@@ -29,6 +29,7 @@
 mod bench;
 mod cli;
 mod config;
+mod dev;
 mod diagnostics;
 mod doctor;
 mod error;

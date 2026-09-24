@@ -22,9 +22,9 @@ use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
 use windows_sys::Win32::Graphics::Gdi::{ClientToScreen, MapWindowPoints};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetClientRect, GetParent, GetWindowRect, HWND_TOPMOST,
-    IsWindow, LWA_COLORKEY, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetLayeredWindowAttributes,
-    SetWindowPos, ShowWindow, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_EX_TRANSPARENT, WS_POPUP,
+    IsWindow, LWA_COLORKEY, PostMessageW, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
+    SetLayeredWindowAttributes, SetWindowPos, ShowWindow, WM_CLOSE, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 use super::graphics::canvas;
@@ -150,7 +150,15 @@ impl InspectBackend for WindowsInspect<'_> {
 /// whether any was answered.
 pub(crate) fn poll(runtime: &Runtime) -> bool {
     let backend = WindowsInspect { window: runtime.window_id, renderer: &runtime.renderer };
-    runtime.with_application(|application| application.poll_inspection(&backend))
+    let answered = runtime.with_application(|application| application.poll_inspection(&backend));
+    // Asked to close (the development loop restarting it): closed as the
+    // person closing the window would, so state is flushed and placement
+    // saved.
+    if runtime.with_application(framework_core::Application::take_quit_request) {
+        // SAFETY: posting to this runtime's own live window.
+        let _ = unsafe { PostMessageW(runtime.window, WM_CLOSE, 0, 0) };
+    }
+    answered
 }
 
 /// Shows, moves, redraws, or removes `runtime`'s overlay to match the
