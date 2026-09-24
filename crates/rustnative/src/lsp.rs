@@ -36,6 +36,10 @@ struct Document {
 pub struct State {
     documents: HashMap<String, Document>,
     lowered_to_source: HashMap<String, String>,
+    /// The text of every open `.rs` and `.rsx` document, as the editor
+    /// has it — what completion, hover, definition, structural edits, and
+    /// diagnostic narrowing read (Milestone 43).
+    texts: HashMap<String, String>,
 }
 
 /// Reads one LSP message (`Content-Length` framing).
@@ -210,11 +214,26 @@ impl State {
         let method = message.get("method").and_then(Value::as_str).unwrap_or("").to_owned();
         let uri =
             message.pointer("/params/textDocument/uri").and_then(Value::as_str).map(str::to_owned);
+        if method.starts_with("rustnative/") {
+            return self.structural(&method, &message, uri.as_deref());
+        }
+        if let Some(uri) = &uri {
+            self.track(&method, uri, &message);
+        }
         let Some(uri) = uri.filter(|uri| {
             std::path::Path::new(uri)
                 .extension()
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("rsx"))
         }) else {
+            // A `.rs` document: forwarded as it is, unless it asks about
+            // markup or a class string the proxy answers itself.
+            if let Some(uri) = message.pointer("/params/textDocument/uri").and_then(Value::as_str) {
+                if let Some(result) = self.assist(uri, &method, &message, false) {
+                    return Routed::Client(
+                        json!({ "jsonrpc": "2.0", "id": message["id"], "result": result }),
+                    );
+                }
+            }
             return Routed::Server(message);
         };
         match method.as_str() {
@@ -265,18 +284,10 @@ impl State {
                 message["params"]["contentChanges"] = json!([{ "text": lowered.source }]);
                 Routed::Server(message)
             }
-            "textDocument/completion" => {
-                if let Some(items) = self.markup_completion(&uri, &message) {
+            "textDocument/completion" | "textDocument/hover" | "textDocument/definition" => {
+                if let Some(result) = self.assist(&uri, &method, &message, true) {
                     return Routed::Client(
-                        json!({ "jsonrpc": "2.0", "id": message["id"], "result": items }),
-                    );
-                }
-                self.forward_with_positions(&uri, message)
-            }
-            "textDocument/hover" => {
-                if let Some(hover) = self.markup_hover(&uri, &message) {
-                    return Routed::Client(
-                        json!({ "jsonrpc": "2.0", "id": message["id"], "result": hover }),
+                        json!({ "jsonrpc": "2.0", "id": message["id"], "result": result }),
                     );
                 }
                 self.forward_with_positions(&uri, message)
@@ -302,24 +313,43 @@ impl State {
     pub fn route_server(&self, mut message: Value) -> Value {
         if message.get("method").and_then(Value::as_str) == Some("textDocument/publishDiagnostics")
         {
-            let lowered =
+            let mut message = self.route_diagnostics(message);
+            // Narrowed to the class or attribute each one names.
+            let uri =
                 message.pointer("/params/uri").and_then(Value::as_str).unwrap_or("").to_owned();
-            if let Some(source_uri) = self.lowered_to_source.get(&lowered) {
-                let map = &self.documents[source_uri].map;
-                message["params"]["uri"] = json!(source_uri);
-                if let Some(diagnostics) =
-                    message.pointer_mut("/params/diagnostics").and_then(Value::as_array_mut)
-                {
-                    for diagnostic in diagnostics {
-                        if let Some(range) = diagnostic.get_mut("range") {
-                            map_range(map, range, true);
-                        }
+            if let (Some(text), Some(diagnostics)) = (
+                self.texts.get(&uri),
+                message.pointer_mut("/params/diagnostics").and_then(Value::as_array_mut),
+            ) {
+                for diagnostic in diagnostics {
+                    if let Some(range) = crate::lsp_assist::narrow(text, diagnostic) {
+                        diagnostic["range"] = range;
                     }
                 }
             }
             return message;
         }
         self.rewrite_locations(&mut message);
+        message
+    }
+
+    /// A diagnostic for a lowered file becomes one for its `.rsx` file.
+    fn route_diagnostics(&self, mut message: Value) -> Value {
+        let lowered =
+            message.pointer("/params/uri").and_then(Value::as_str).unwrap_or("").to_owned();
+        if let Some(source_uri) = self.lowered_to_source.get(&lowered) {
+            let map = &self.documents[source_uri].map;
+            message["params"]["uri"] = json!(source_uri);
+            if let Some(diagnostics) =
+                message.pointer_mut("/params/diagnostics").and_then(Value::as_array_mut)
+            {
+                for diagnostic in diagnostics {
+                    if let Some(range) = diagnostic.get_mut("range") {
+                        map_range(map, range, true);
+                    }
+                }
+            }
+        }
         message
     }
 
@@ -352,51 +382,138 @@ impl State {
         }
     }
 
-    /// The text of line `line` up to `character`, in the `.rsx` document.
-    fn prefix(&self, uri: &str, message: &Value) -> Option<String> {
-        let document = self.documents.get(uri)?;
-        let (line, character) = position(message.pointer("/params/position")?)?;
-        let text = document.source.lines().nth(line)?;
-        Some(text.chars().take(character).collect())
-    }
-
-    fn markup_completion(&self, uri: &str, message: &Value) -> Option<Value> {
-        let prefix = self.prefix(uri, message)?;
-        match tag_context(&prefix)? {
-            TagContext::ElementName => Some(json!(element_table()
-                .iter()
-                .map(|spec| json!({ "label": spec.name, "kind": 7, "detail": format!("Node::{:?}", spec.constructor) }))
-                .collect::<Vec<_>>())),
-            TagContext::Attribute(element) => {
-                let spec = element_spec(&element)?;
-                Some(json!(spec
-                    .attrs
-                    .iter()
-                    .map(|attr| json!({ "label": attr.name, "kind": 10, "detail": attr.method }))
-                    .collect::<Vec<_>>()))
+    /// Keeps the editor's text of `uri` as it opens and changes.
+    fn track(&mut self, method: &str, uri: &str, message: &Value) {
+        match method {
+            "textDocument/didOpen" => {
+                let text = message.pointer("/params/textDocument/text").and_then(Value::as_str);
+                self.texts.insert(uri.to_owned(), text.unwrap_or_default().to_owned());
             }
+            "textDocument/didChange" => {
+                let text = self.texts.entry(uri.to_owned()).or_default();
+                for change in message
+                    .pointer("/params/contentChanges")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let new_text = change.get("text").and_then(Value::as_str).unwrap_or("");
+                    match change.get("range") {
+                        None => new_text.clone_into(text),
+                        Some(range) => apply_change(text, range, new_text),
+                    }
+                }
+            }
+            "textDocument/didClose" => {
+                self.texts.remove(uri);
+            }
+            _ => {}
         }
     }
 
-    fn markup_hover(&self, uri: &str, message: &Value) -> Option<Value> {
-        let document = self.documents.get(uri)?;
+    /// What the proxy answers itself for `method` at the request's
+    /// position: markup completion, hover, and definition, and class-string
+    /// completion and hover — in a `.rsx` file, or inside `rsx!` and the
+    /// class macros in a `.rs` file.
+    fn assist(&self, uri: &str, method: &str, message: &Value, rsx_file: bool) -> Option<Value> {
+        let text = self.texts.get(uri)?;
         let (line, character) = position(message.pointer("/params/position")?)?;
-        let text: Vec<char> = document.source.lines().nth(line)?.chars().collect();
-        let is_word = |c: char| c.is_alphanumeric() || c == '_';
-        let start =
-            (0..character.min(text.len())).rev().take_while(|&i| is_word(text[i])).last()?;
-        let end = (character..text.len())
-            .take_while(|&i| is_word(text[i]))
-            .last()
-            .map_or(character, |i| i + 1);
-        let word: String = text[start..end].iter().collect();
-        let before: String = text[..start].iter().collect();
-        let TagContext::Attribute(element) = tag_context(&before)? else { return None };
-        let attr = element_spec(&element)?.attrs.into_iter().find(|attr| attr.name == word)?;
-        Some(
-            json!({ "contents": { "kind": "markdown", "value": format!("`{word}` → `{}`", attr.method) } }),
-        )
+        let at = crate::lsp_assist::offset(text, line, character)?;
+        let path = uri_to_path(uri)?;
+        if let Some(string) = crate::lsp_assist::class_string_at(text, at, rsx_file) {
+            let (class, typed) = crate::lsp_assist::class_at(text, string, at);
+            let vocabulary = crate::lsp_assist::vocabulary_for(&path);
+            return match method {
+                "textDocument/completion" if !string.declarations => {
+                    Some(crate::lsp_assist::class_completion(&vocabulary, &typed))
+                }
+                "textDocument/hover" => {
+                    crate::lsp_assist::class_hover(&vocabulary, &class, string.declarations)
+                }
+                _ => None,
+            };
+        }
+        let in_markup = crate::markup_edit::regions(text, rsx_file)
+            .iter()
+            .any(|(start, end)| (*start..=*end).contains(&at));
+        if !in_markup {
+            return None;
+        }
+        let line_text: Vec<char> = text.lines().nth(line)?.chars().collect();
+        match method {
+            "textDocument/completion" => {
+                markup_completion(&line_text.iter().take(character).collect::<String>())
+            }
+            "textDocument/hover" => markup_hover(&line_text, character),
+            "textDocument/definition" => {
+                let elements = crate::markup_edit::scan(text, rsx_file);
+                let element = crate::markup_edit::element_at(&elements, at)?;
+                let attr = crate::lsp_assist::attribute_at(element, at)?;
+                let spec = element_spec(&element.name)?;
+                let method = spec.attrs.into_iter().find(|spec| spec.name == attr.name)?.method;
+                crate::lsp_assist::builder_method_location(method, &path)
+            }
+            _ => None,
+        }
     }
+
+    /// Answers a structural edit with a workspace edit, never forwarded.
+    fn structural(&self, method: &str, message: &Value, uri: Option<&str>) -> Routed {
+        let rsx_file = uri.is_some_and(|uri| {
+            Path::new(uri)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("rsx"))
+        });
+        let answer = uri
+            .and_then(|uri| self.texts.get(uri))
+            .ok_or_else(|| "the document is not open".to_owned())
+            .and_then(|text| {
+                crate::lsp_assist::structural(method, &message["params"], text, rsx_file)
+            });
+        Routed::Client(match answer {
+            Ok(edit) => json!({ "jsonrpc": "2.0", "id": message["id"], "result": edit }),
+            Err(error) => json!({
+                "jsonrpc": "2.0",
+                "id": message["id"],
+                "error": { "code": -32602, "message": error },
+            }),
+        })
+    }
+}
+
+/// Element and attribute completion, from the text before the cursor.
+fn markup_completion(prefix: &str) -> Option<Value> {
+    match tag_context(prefix)? {
+        TagContext::ElementName => Some(json!(element_table()
+            .iter()
+            .map(|spec| json!({ "label": spec.name, "kind": 7, "detail": format!("Node::{:?}", spec.constructor) }))
+            .collect::<Vec<_>>())),
+        TagContext::Attribute(element) => {
+            let spec = element_spec(&element)?;
+            Some(json!(spec
+                .attrs
+                .iter()
+                .map(|attr| json!({ "label": attr.name, "kind": 10, "detail": attr.method }))
+                .collect::<Vec<_>>()))
+        }
+    }
+}
+
+/// Hover naming the builder method an attribute calls.
+fn markup_hover(text: &[char], character: usize) -> Option<Value> {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let start = (0..character.min(text.len())).rev().take_while(|&i| is_word(text[i])).last()?;
+    let end = (character..text.len())
+        .take_while(|&i| is_word(text[i]))
+        .last()
+        .map_or(character, |i| i + 1);
+    let word: String = text[start..end].iter().collect();
+    let before: String = text[..start].iter().collect();
+    let TagContext::Attribute(element) = tag_context(&before)? else { return None };
+    let attr = element_spec(&element)?.attrs.into_iter().find(|attr| attr.name == word)?;
+    Some(
+        json!({ "contents": { "kind": "markdown", "value": format!("`{word}` → `{}`", attr.method) } }),
+    )
 }
 
 /// Where the cursor is inside markup.
@@ -658,5 +775,60 @@ mod tests {
                 .is_some_and(|text| text.contains("ColumnStyle::gap"))
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rsx_in_a_rust_file_gets_the_same_assistance_as_a_rsx_file() {
+        let mut state = State::default();
+        let uri = "file:///C:/app/src/view.rs";
+        let text = "fn view() -> Node {
+    rsx! {
+        <Label key=\"a\" text=\"A\" class=\"font-bo\" />
+    }
+}
+";
+        let open = json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": { "textDocument": { "uri": uri, "languageId": "rust", "version": 1, "text": text } } });
+        assert!(
+            matches!(state.route_client(open), Routed::Server(_)),
+            "a .rs document is forwarded unchanged"
+        );
+        let line = text.lines().nth(2).unwrap();
+        let class = line.find("font-bo").unwrap() + "font-bo".len();
+        let complete = json!({ "jsonrpc": "2.0", "id": 1, "method": "textDocument/completion", "params": { "textDocument": { "uri": uri }, "position": { "line": 2, "character": class } } });
+        let Routed::Client(answer) = state.route_client(complete) else {
+            panic!("answered by the proxy")
+        };
+        let labels: Vec<&str> = answer["result"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["label"].as_str())
+            .collect();
+        assert!(labels.contains(&"font-bold"), "{labels:?}");
+
+        let attribute = line.find("text=").unwrap() + 1;
+        let hover = json!({ "jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": { "textDocument": { "uri": uri }, "position": { "line": 2, "character": attribute } } });
+        let Routed::Client(answer) = state.route_client(hover) else {
+            panic!("answered by the proxy")
+        };
+        assert!(answer["result"]["contents"]["value"].as_str().unwrap().contains("text"));
+
+        // Outside the macro, Rust is the Rust server's.
+        let rust = json!({ "jsonrpc": "2.0", "id": 3, "method": "textDocument/hover", "params": { "textDocument": { "uri": uri }, "position": { "line": 0, "character": 4 } } });
+        assert!(matches!(state.route_client(rust), Routed::Server(_)));
+
+        let edit = json!({ "jsonrpc": "2.0", "id": 4, "method": "rustnative/setAttribute", "params": { "textDocument": { "uri": uri }, "position": { "line": 2, "character": 9 }, "name": "text", "value": "\"B\"" } });
+        let Routed::Client(answer) = state.route_client(edit) else {
+            panic!("answered by the proxy")
+        };
+        assert_eq!(answer["result"]["changes"][uri][0]["newText"], json!("\"B\""));
+
+        // A diagnostic about the class is narrowed to it.
+        let start = line.find("\"font-bo").unwrap();
+        let published = json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": [{ "range": { "start": { "line": 2, "character": start }, "end": { "line": 2, "character": start + 9 } }, "message": "`font-bo` is not a class in the vocabulary" }] } });
+        let routed = state.route_server(published);
+        let range = &routed["params"]["diagnostics"][0]["range"];
+        assert_eq!(range["start"]["character"], json!(start + 1));
+        assert_eq!(range["end"]["character"], json!(start + 8));
     }
 }

@@ -24,7 +24,8 @@ The current working backend is Windows/Win32. The framework core is designed to 
 Two notes on what "planned" means here. macOS and iOS are fully planned platforms that this project has no hardware to build or verify on yet, so their milestones are specified and designed for but not started — order follows hardware, not priority. And a backend advertises a capability only once it genuinely realizes it, so "planned" never reaches an application as a claim of support.
 
 Milestones 39–58 are being built on the Windows backend (every milestone and
-tier except the other backends, which come later). Done so far: **Milestone 42
+tier except the other backends, which come later). Done so far: **Milestone 43
+— the developer loop**, **Milestone 42
 — budgets** (a budget file per shipped target, enforced in CI), **Milestone 44
 — inspection and diagnostics** (one protocol every backend answers, the
 `rustnative inspect` client, an in-app overlay, record and replay), **Milestone
@@ -1213,6 +1214,18 @@ need (`rustnative fmt`, `expand`, and `lsp`, and diagnostics from `build`,
 `check`, and `test` reported at the `.rsx` source). Nothing else in the CLI is
 affected, because nothing below the markup lowering can tell the two syntaxes
 apart.
+
+`rustnative dev windows` is the development loop (Milestone 43,
+`docs/developer-loop.md`). A token-only `app.css` change is applied to the
+running application without a rebuild. Anything else is rebuilt and
+restarted, with the application's state kept. `--remote` runs the
+application on another machine through `rustnative dev-agent`. The loop's
+wall-clock time is a budget in `budgets/windows.toml`. `rustnative preview`
+browses the application's previews across themes, locales, and text sizes,
+and every preview is a golden test. `rustnative generate` writes components,
+screens, and services, each with its preview and test, in the project's
+syntax. `rustnative lsp` gives `.rsx` files and `rsx!` the same completion,
+hover, definitions, class-string help, and structural edits.
 
 `rustnative inspect` is the inspector (Milestone 44, `docs/inspection.md`).
 Start an application with `RUSTNATIVE_INSPECT=1` and ask it for its tree,

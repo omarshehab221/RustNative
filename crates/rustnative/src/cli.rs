@@ -53,6 +53,13 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Generate a component, a screen, or a service, with its preview and
+    /// its test, in the project's syntax (`PLAN.md` Milestone 43).
+    Generate {
+        /// What to generate.
+        #[command(subcommand)]
+        what: crate::generate::Generate,
+    },
     /// Browse the application's previews in the preview catalogue — every
     /// preview across its configurations — or, with `--headless`, run them
     /// as golden tests (`PLAN.md` Milestone 43).
@@ -310,6 +317,7 @@ impl Cli {
                 Ok(())
             }
             Command::Inspect { target, question } => crate::inspect::run(&target, question),
+            Command::Generate { what } => crate::generate::run(&here, &what),
             Command::Preview { name, headless } => {
                 let project = Project::find(&here)?;
                 if headless {

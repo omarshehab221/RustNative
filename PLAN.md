@@ -2473,6 +2473,18 @@ every shipped backend, including at least one device target.
 **Depends on** Milestone 39 (teardown policy) and the state contracts in
 Milestone 47 for what "preserved" means.
 
+**Status (2026-09-24): implemented** on Windows (local and remote host):
+- `rustnative dev` applies live theme edits, and rebuilds and restarts with
+  state preserved, within the `dev_loop_restart_ms` budget;
+- the first-run target is budgeted;
+- previews, the catalogue, and preview goldens;
+- `rustnative generate`;
+- editor assistance in both syntaxes, with structural editing;
+- development resources, the error dialog, and `doctor --install`.
+
+Owed: device targets (Milestones 35–37) and dynamic-library reload. See
+`docs/developer-loop.md` and `BUILD_STATUS.md`.
+
 ## Milestone 44 — Inspection and diagnostics
 
 Section 9's tooling list, made concrete and no longer deferred. Same reasoning

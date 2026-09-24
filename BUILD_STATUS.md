@@ -14,6 +14,79 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 43 — The developer loop — complete (Windows scope)
+
+**Built.** `docs/developer-loop.md`.
+
+- **`rustnative dev windows`** watches the project and handles each save in
+  one of two ways, printing which:
+  - A token-only `app.css` change is pushed live through inspection's new
+    `SetStyleFile`: the theme is re-resolved in place, with no rebuild.
+    Utility, `inline`-theme, and token-name changes are rebuilds.
+  - Anything else is rebuilt, restarted, and restored:
+    1. a failed build leaves the running application as it was;
+    2. otherwise its state is snapshotted (inspection `Components`);
+    3. it is closed as a person would close it (the new `Quit`: flushed,
+       placement saved);
+    4. a copy of the new build is started (Windows will not overwrite a
+       running executable);
+    5. the state is restored field by field through `Component::edit`.
+- **Remote host**: `rustnative dev-agent`, with a CSPRNG token and a
+  two-phase deploy, so a refusal sends nothing. It writes only into its own
+  folder and hands back the application's inspection endpoint.
+- **Budgets**: `dev_loop_restart_ms` (6.9 s on `examples/hello-label`, of
+  which the build is 5.7 s; two state fields restored). `first_run_s` covers
+  three commands, new to interactive.
+- **Previews and catalogue** (`C55`): `framework_core::preview`, covering
+  `Preview`, `PreviewMatrix` (48 configurations when full), `PreviewFrame`,
+  and `Catalogue`.
+  - `rustnative preview` opens it natively.
+  - `framework_headless::preview_goldens` makes every preview a golden test
+    (`C55-3`), in the templates' `tests/previews.rs`.
+- **Templates**: the application is a library (with `previews()`) and the
+  executable is a thin shell, so an application change recompiles one crate.
+- **`rustnative generate`** (`C57-1`) covers components, screens (routes
+  wired into `router()`), and services. Each comes with its preview and its
+  test, in either syntax, verified by building and testing both generated
+  projects.
+- **Editor assistance** in `.rsx` and inside `rsx!` alike:
+  - attribute completion and hover, with go-to-definition to the builder
+    method;
+  - class-string completion (variants kept) and hover naming properties,
+    tokens, and resolved values;
+  - diagnostics narrowed to the class or attribute they name;
+  - the structural editing requests (`C56`), as format-preserving
+    workspace edits (`markup_edit`).
+- **Development services** (`C58`):
+  - `[resources]` are provisioned locally;
+  - `rustnative test --watch`;
+  - a development run's panic dialog gives the source position, in the
+    `.rsx` file via the source map (`framework_core::dev`).
+- **`rustnative doctor --install [--dry-run]`** (`C90`) adds what `rustup`
+  can.
+
+**Found and fixed.**
+- The style-sheet parser panicked on an unterminated block (a half-typed
+  `app.css`). It is now an error, and every prefix of a real file is tested.
+- A relative `--framework-path` was written relative to the new project. It
+  is now resolved from where the command runs.
+- The inspection and agent tokens now come from the OS CSPRNG, after a
+  security review of the first version.
+
+**Verified.** Full gate. `rustnative dev --once` on hello-label restores its
+state; this is an ignored test that the interactive CI pass runs. Both
+templates, with generated items, build and pass their tests.
+
+**Not verified / owed.**
+- The device loop, board quickstarts, and development builds on devices are
+  owed with Milestones 35–37. Only the Windows remote host is verified, over
+  loopback.
+- Dynamic-library reload (`--hot`) is not built. It would duplicate the
+  framework's process-wide state across a `cdylib` boundary unless the
+  framework itself is shared. Restart-with-state is the loop instead.
+- Live locale catalogue pushes wait for Milestone 46.
+- `generate server-resource` waits for Milestone 49.
+
 ### Milestone 42 — Budgets — complete (Windows scope)
 
 **Built.**
