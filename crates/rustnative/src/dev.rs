@@ -31,7 +31,6 @@
 //! application.
 
 use std::collections::BTreeMap;
-use std::hash::{BuildHasher, Hasher};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -558,15 +557,6 @@ pub struct Deployed {
     pub error: Option<String>,
 }
 
-fn token() -> String {
-    let random = || {
-        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-        hasher.write_u32(std::process::id());
-        hasher.finish()
-    };
-    format!("{:016x}{:016x}", random(), random())
-}
-
 /// Sends `executable` to the agent at `remote` and has it started with
 /// `args`.
 ///
@@ -622,7 +612,8 @@ pub fn agent(listen: SocketAddr, max_deployments: Option<usize>) -> Result<()> {
     let addr = listener
         .local_addr()
         .map_err(|cause| Error::Io { what: "read the agent's address".into(), cause })?;
-    let token = token();
+    let token = framework_core::inspect::new_token()
+        .map_err(|cause| Error::Io { what: "generate the agent's token".into(), cause })?;
     println!("rustnative dev-agent listening on {addr} token {token}");
     let _ = std::io::stdout().flush();
     let folder = std::env::temp_dir().join("rustnative-dev-agent");

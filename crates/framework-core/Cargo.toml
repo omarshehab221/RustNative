@@ -31,6 +31,9 @@ async-trait.workspace = true
 # state file, and forgiving of fields added in a later version).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The inspection server's and the development agent's tokens: the operating
+# system's cryptographic random number generator.
+getrandom = "0.3"
 
 [features]
 # The markup syntax (`rsx!`, and `.rsx` files, which lower to it). On by

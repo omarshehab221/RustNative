@@ -432,6 +432,7 @@ dependencies = [
  "framework-macros",
  "framework-style",
  "framework-types",
+ "getrandom 0.3.4",
  "parking_lot",
  "proptest",
  "serde",

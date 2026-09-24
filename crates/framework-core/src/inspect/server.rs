@@ -13,7 +13,6 @@
 //! [`InspectServer::poll`] — the application is never touched off its
 //! thread.
 
-use std::hash::{BuildHasher, Hasher};
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -64,16 +63,20 @@ impl std::fmt::Debug for InspectServer {
     }
 }
 
-/// A token no other process can predict: 128 bits from the standard
-/// library's per-process random hash keys, which it seeds from the
-/// operating system's generator.
-fn token() -> String {
-    let random = || {
-        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-        hasher.write_u32(std::process::id());
-        hasher.finish()
-    };
-    format!("{:016x}{:016x}", random(), random())
+/// A token no other process can predict: 128 bits from the operating
+/// system's cryptographic random number generator.
+///
+/// # Errors
+///
+/// The generator is unavailable.
+pub fn new_token() -> io::Result<String> {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
+    Ok(bytes.iter().fold(String::with_capacity(32), |mut token, byte| {
+        use std::fmt::Write as _;
+        let _ = write!(token, "{byte:02x}");
+        token
+    }))
 }
 
 impl InspectServer {
@@ -86,7 +89,7 @@ impl InspectServer {
     pub fn start(bind: SocketAddr, wake: Arc<dyn Fn() + Send + Sync>) -> io::Result<Self> {
         let listener = TcpListener::bind(bind)?;
         let endpoint =
-            Endpoint { addr: listener.local_addr()?, token: token(), pid: std::process::id() };
+            Endpoint { addr: listener.local_addr()?, token: new_token()?, pid: std::process::id() };
         let (sender, requests) = mpsc::channel();
         let token = endpoint.token.clone();
         std::thread::Builder::new().name("rustnative-inspect".into()).spawn(move || {

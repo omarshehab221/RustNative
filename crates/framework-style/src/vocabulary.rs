@@ -229,6 +229,15 @@ impl Vocabulary {
         self.tokens.keys().map(String::as_str)
     }
 
+    /// The class names this vocabulary resolves, as suggestions: fixed
+    /// utilities, one example of each spacing and sizing prefix (`p-4`),
+    /// the theme's token-backed classes (`bg-blue-500`), and the project's
+    /// own `@utility` names — what an editor completes in a class string.
+    #[must_use]
+    pub fn class_names(&self) -> Vec<String> {
+        known_classes(self)
+    }
+
     /// Lowers a class string.
     ///
     /// # Errors
@@ -953,7 +962,10 @@ fn unknown_variant(variant: &str, vocabulary: &Vocabulary) -> String {
     )
 }
 
-fn unknown_class(utility: &str, vocabulary: &Vocabulary) -> String {
+/// Class names the vocabulary resolves, for suggestions and completion:
+/// the fixed utilities, one example of each spacing and sizing prefix, one
+/// per theme token a utility reads, and the project's own utilities.
+fn known_classes(vocabulary: &Vocabulary) -> Vec<String> {
     let mut known: Vec<String> = [
         "hidden",
         "block",
@@ -1007,6 +1019,11 @@ fn unknown_class(utility: &str, vocabulary: &Vocabulary) -> String {
         }
     }
     known.extend(vocabulary.utilities.keys().cloned());
+    known
+}
+
+fn unknown_class(utility: &str, vocabulary: &Vocabulary) -> String {
+    let known = known_classes(vocabulary);
     format!(
         "`{utility}` is not a class in the vocabulary{}",
         nearest(utility, known.iter().map(String::as_str))
