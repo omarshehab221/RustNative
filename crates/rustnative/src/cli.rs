@@ -80,6 +80,20 @@ enum Command {
         #[command(subcommand)]
         command: crate::db::DbCommand,
     },
+    /// Deploy the server: infrastructure descriptions, or a local
+    /// deployment with revisions, traffic splitting, and rollback
+    /// (`PLAN.md` Milestone 50).
+    Deploy {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::deploy::DeployCommand,
+    },
+    /// Sign desktop updates (`PLAN.md` Milestone 50).
+    Update {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::deploy::UpdateCommand,
+    },
     /// Design tokens (`PLAN.md` Milestone 48).
     Tokens {
         /// What to do.
@@ -177,6 +191,10 @@ enum Command {
         /// the profile (needs `rustup component add llvm-tools`).
         #[arg(long, requires = "release")]
         pgo: bool,
+        /// Build through `sccache`, sharing compiled crates between local
+        /// and CI builds (`C64`); without it installed, builds uncached.
+        #[arg(long)]
+        cache: bool,
     },
     /// Build and run the application.
     Run {
@@ -243,6 +261,11 @@ enum Command {
         /// The environment variable holding the certificate's password.
         #[arg(long, value_name = "VAR", requires = "sign")]
         password_env: Option<String>,
+        /// Also write an `.appinstaller` file for an MSIX published under
+        /// this URL (a folder URL: the package and the file go there), so
+        /// App Installer updates the installed copies.
+        #[arg(long, value_name = "URL")]
+        appinstaller: Option<String>,
     },
     /// Report what this machine can build.
     Doctor {
@@ -290,7 +313,7 @@ impl Cli {
                 println!("  rustnative run windows");
                 Ok(())
             }
-            Command::Build { platform, release, pgo } => {
+            Command::Build { platform, release, pgo, cache } => {
                 if pgo {
                     if platform.backend().is_none() {
                         return Err(Error::NoBackend {
@@ -300,7 +323,13 @@ impl Cli {
                     }
                     crate::pgo::build(&Project::find(&here)?)
                 } else {
-                    cargo_for(platform, &here, "build", release, &[])
+                    let cached = cache && sccache_installed();
+                    if cache && !cached {
+                        println!("build: sccache is not installed; building without the cache");
+                    }
+                    let wrapper: &[&str] =
+                        if cached { &["--config", "build.rustc-wrapper=\"sccache\""] } else { &[] };
+                    cargo_for(platform, &here, "build", release, wrapper)
                 }
             }
             Command::Run { platform, release } => cargo_for(platform, &here, "run", release, &[]),
@@ -353,6 +382,8 @@ impl Cli {
             Command::Generate { what } => crate::generate::run(&here, &what),
             Command::I18n { command } => crate::i18n::run(&here, &command),
             Command::Db { command } => crate::db::run(&here, &command),
+            Command::Deploy { command } => crate::deploy::run(&here, command),
+            Command::Update { command } => crate::deploy::run_update(&here, command),
             Command::Tokens { command: TokensCommand::Import { file, out } } => {
                 crate::tokens::import(&here, &file, out)
             }
@@ -437,7 +468,7 @@ impl Cli {
             }
             Command::Lsp { server } => crate::lsp::serve(&server),
             Command::EchoLsp => crate::lsp::echo_server(),
-            Command::Package { platform, format, sign, password_env } => {
+            Command::Package { platform, format, sign, password_env, appinstaller } => {
                 if platform.backend().is_none() {
                     return Err(Error::NoBackend {
                         platform,
@@ -453,6 +484,33 @@ impl Cli {
                     format,
                     signing.as_ref(),
                 )?;
+                if let Some(base) = appinstaller {
+                    let base = base.trim_end_matches('/');
+                    let msix = produced
+                        .iter()
+                        .find(|path| path.extension().is_some_and(|extension| extension == "msix"));
+                    let Some(msix) = msix else {
+                        return Err(Error::Usage(
+                            "--appinstaller needs an MSIX (--format msix or all)".to_owned(),
+                        ));
+                    };
+                    let name = msix
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let file =
+                        msix.with_file_name(format!("{}.appinstaller", project.config.app.name));
+                    let text = crate::package::msix::appinstaller(
+                        &project.config,
+                        &format!("{base}/{}.appinstaller", project.config.app.name),
+                        &format!("{base}/{name}"),
+                    );
+                    std::fs::write(&file, text).map_err(|cause| Error::Io {
+                        what: format!("write {}", file.display()),
+                        cause,
+                    })?;
+                    println!("Packaged {}", file.display());
+                }
                 for path in produced {
                     println!("Packaged {}", path.display());
                 }
@@ -488,6 +546,14 @@ impl Cli {
 
 /// Runs one Cargo subcommand for `platform`, refusing the platforms that
 /// have no backend.
+/// Whether `sccache` runs.
+fn sccache_installed() -> bool {
+    std::process::Command::new("sccache")
+        .arg("--version")
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
 fn cargo_for(
     platform: Platform,
     here: &std::path::Path,

@@ -30,6 +30,7 @@ mod bench;
 mod cli;
 mod config;
 mod db;
+mod deploy;
 mod dev;
 mod diagnostics;
 mod doctor;

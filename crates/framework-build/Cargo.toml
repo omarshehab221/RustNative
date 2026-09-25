@@ -20,5 +20,8 @@ framework-markup.workspace = true
 framework-i18n.workspace = true
 framework-style = { workspace = true, features = ["tokens"] }
 quote = "1"
+# Content hashes and subresource-integrity digests for embedded assets
+# (Milestone 50).
+sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 toml = "1"

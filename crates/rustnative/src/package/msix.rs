@@ -42,6 +42,22 @@ pub fn manifest(config: &Config) -> String {
         );
         protocols
     });
+    // Device capabilities are a separate element, after the others.
+    let (device, general): (Vec<&String>, Vec<&String>) = config
+        .package
+        .capabilities
+        .iter()
+        .partition(|name| DEVICE_CAPABILITIES.contains(&name.as_str()));
+    let capabilities = general
+        .into_iter()
+        .map(|name| ("Capability", name))
+        .chain(device.into_iter().map(|name| ("DeviceCapability", name)))
+        .fold(String::new(), |mut out, (element, name)| {
+            use std::fmt::Write as _;
+
+            let _ = writeln!(out, "    <{element} Name=\"{}\" />", escape(name));
+            out
+        });
     let extensions = if protocols.is_empty() {
         String::new()
     } else {
@@ -69,7 +85,7 @@ pub fn manifest(config: &Config) -> String {
   </Resources>
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
-  </Capabilities>
+{capabilities}  </Capabilities>
   <Applications>
     <Application Id="App" Executable="{executable}" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
@@ -93,6 +109,35 @@ pub fn manifest(config: &Config) -> String {
         executable = escape(&format!("{}.exe", app.name)),
         square150 = LOGOS[1].1,
         square44 = LOGOS[0].1,
+    )
+}
+
+/// Capabilities MSIX declares as `DeviceCapability` rather than
+/// `Capability`.
+const DEVICE_CAPABILITIES: [&str; 6] =
+    ["webcam", "microphone", "location", "bluetooth", "proximity", "serialcommunication"];
+
+/// The `.appinstaller` file for a package published at `package_url`:
+/// App Installer installs from it and checks `<its url>` on every launch.
+#[must_use]
+pub fn appinstaller(config: &Config, appinstaller_url: &str, package_url: &str) -> String {
+    let app = &config.app;
+    let publisher = app.publisher.clone().unwrap_or_else(|| format!("CN={}", app.name));
+    format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller xmlns="http://schemas.microsoft.com/appx/appinstaller/2018" Version="{version}" Uri="{uri}">
+  <MainPackage Name="{identity}" Publisher="{publisher}" Version="{version}" ProcessorArchitecture="{architecture}" Uri="{package}" />
+  <UpdateSettings>
+    <OnLaunch HoursBetweenUpdateChecks="0" />
+  </UpdateSettings>
+</AppInstaller>
+"#,
+        version = four_part(&app.version),
+        uri = escape(appinstaller_url),
+        identity = escape(&app.id),
+        publisher = escape(&publisher),
+        architecture = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" },
+        package = escape(package_url),
     )
 }
 
@@ -254,7 +299,38 @@ mod tests {
             resources: std::collections::BTreeMap::new(),
             i18n: crate::config::I18n::default(),
             style: None,
+            package: crate::config::Package::default(),
+            update: None,
         }
+    }
+
+    #[test]
+    fn declared_capabilities_are_in_the_manifest_devices_last() {
+        let mut declared = config(&[]);
+        declared.package.capabilities = vec!["webcam".into(), "internetClient".into()];
+        let manifest = manifest(&declared);
+        let general = manifest.find(r#"<Capability Name="internetClient" />"#).expect(&manifest);
+        let device = manifest.find(r#"<DeviceCapability Name="webcam" />"#).expect(&manifest);
+        assert!(general < device, "MSIX requires device capabilities after the others: {manifest}");
+    }
+
+    #[test]
+    fn the_appinstaller_points_at_itself_and_the_package() {
+        let text = appinstaller(
+            &config(&[]),
+            "https://example.com/demo.appinstaller",
+            "https://example.com/demo-1.2.3.msix",
+        );
+        assert!(text.contains(r#"Uri="https://example.com/demo.appinstaller""#), "{text}");
+        assert!(
+            text.contains(r#"Name="com.example.demo""#) && text.contains(r#"Version="1.2.3.0""#),
+            "{text}"
+        );
+        assert!(
+            text.contains(r#"Uri="https://example.com/demo-1.2.3.msix""#)
+                && text.contains("OnLaunch"),
+            "{text}"
+        );
     }
 
     #[test]

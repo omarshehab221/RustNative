@@ -91,6 +91,7 @@ pub struct MethodRouter<G = Unguarded> {
     pub(crate) gate: Option<Gate>,
     pub(crate) csrf_exempt: bool,
     pub(crate) access: &'static str,
+    pub(crate) cache: Option<(&'static [&'static str], std::time::Duration)>,
     guard: PhantomData<G>,
 }
 
@@ -101,6 +102,7 @@ impl<G> Clone for MethodRouter<G> {
             gate: self.gate.clone(),
             csrf_exempt: self.csrf_exempt,
             access: self.access,
+            cache: self.cache,
             guard: PhantomData,
         }
     }
@@ -135,6 +137,7 @@ impl Default for MethodRouter<Unguarded> {
             gate: None,
             csrf_exempt: false,
             access: "",
+            cache: None,
             guard: PhantomData,
         }
     }
@@ -161,6 +164,7 @@ impl MethodRouter<Unguarded> {
             gate,
             csrf_exempt: self.csrf_exempt,
             access,
+            cache: self.cache,
             guard: PhantomData,
         }
     }
@@ -170,6 +174,16 @@ impl MethodRouter<Unguarded> {
     #[must_use]
     pub const fn csrf_exempt(mut self) -> Self {
         self.csrf_exempt = true;
+        self
+    }
+}
+
+impl MethodRouter<Guarded> {
+    /// Caches this route's `GET` responses for `ttl` under `tags` (see
+    /// [`crate::cache`]); only a public route's responses are cached.
+    #[must_use]
+    pub const fn cached(mut self, tags: &'static [&'static str], ttl: std::time::Duration) -> Self {
+        self.cache = Some((tags, ttl));
         self
     }
 }

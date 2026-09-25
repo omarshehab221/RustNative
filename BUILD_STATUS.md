@@ -14,6 +14,101 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 50 — Deployment, updates, and fleet operations — complete for Windows and the long-lived server
+
+**Built.** Guides: `docs/deploy.md` and `docs/deploy/update-rules.md`.
+
+- **The adapter contract.** `framework_server::deploy::DeploymentAdapter`
+  covers `deploy`, `promote`, `rollback`, `status`, and `limits`, the
+  per-request host limits.
+- **A long-lived server.**
+  - `LocalAdapter` keeps immutable revisions behind `TrafficSplitter`, a
+    reverse proxy.
+  - Clients are assigned to revisions by weighted, stable client buckets.
+  - A request can preview a named revision with `x-revision`.
+  - Promotion is by percentage, and rollback takes one command.
+  - The splitter replaces `x-forwarded-for` with the client's real address.
+  - `rustnative deploy local start|add|promote|rollback|status` drives the
+    adapter through its loopback control API.
+- **Infrastructure export.** `rustnative deploy export
+  container|compose|kubernetes|systemd|all` writes each description:
+  - a distroless, non-root Dockerfile;
+  - Kubernetes manifests with probes on `/healthz` and `/readyz`, a
+    read-only root file system, and only the declared resources as secrets;
+  - a hardened systemd unit.
+  - `--build` builds the image when Docker is installed.
+- **Single artifact.** `framework_build::embed_assets` compiles a
+  directory into the binary, each file named by its content hash.
+  `ServerApp::assets` serves them as immutable. `assets::stylesheet` and
+  `assets::script` write links with subresource-integrity digests, and
+  scripts also carry the CSP nonce.
+- **Response caching.**
+  - `MethodRouter::cached(tags, ttl)` works on public `GET` routes.
+    Responses that set a cookie are never stored.
+  - `x-cache: hit|miss` reports each lookup.
+  - `ResponseCache::invalidate(tag)` supports incremental regeneration.
+  - `cache_inspection::<P, Policy>()` serves the queryable cache state.
+- **Desktop updates (`framework_windows::update`).**
+  - Ed25519-signed manifests, checked against the key pinned in
+    `[update] public-key`.
+  - Staged rollout by a stable installation bucket, and version pinning.
+  - SHA-256-verified packages unpacked side by side, with safe paths only.
+  - Atomic activation, and a `Launcher` that rolls back a version failing
+    twice before `interactive`.
+  - Model payloads (`C89`) are compatibility-checked before activation.
+- **Update CLI.**
+  - `rustnative update keygen` draws the key from the operating system's
+    random source.
+  - `rustnative update manifest` refuses a key that `rustnative.toml` does
+    not trust.
+- **MSIX.**
+  - `[package] capabilities` go into the generated manifest (`C63`), with
+    device capabilities last.
+  - `rustnative package windows --appinstaller <url>` writes the
+    `.appinstaller` file that App Installer updates from.
+- **Build cache.** `rustnative build windows --cache` builds through
+  `sccache` when it is installed (`C64`).
+- **Written update rules** for each host.
+
+**Verified.** Full gate.
+- **Traffic splitting** across two real revision servers:
+  - a preview is reachable only by `x-revision`;
+  - at 30% promotion, each of 200 clients stays on its revision;
+  - 100% promotion, then rollback;
+  - redeploying an existing revision name is refused;
+  - the control API drives the same adapter.
+- **The response cache:** a miss, then a hit, then regeneration after the
+  tag is invalidated, with the cache's state listed.
+- **Embedded assets:** served immutable, and linked with integrity.
+- **Container descriptions:** each asks only for what is declared.
+- **The Windows updater**, running real executables:
+  - it refuses a tampered manifest, a wrong package, a pinned
+    installation, and a rollout this installation is not in yet;
+  - a version that fails at start is rolled back on its second failure;
+  - a package cannot write outside its version, via `..`, `\`, or a drive
+    prefix;
+  - a model payload is taken only by compatible application versions.
+- **The CLI:** a manifest from `rustnative update manifest` is accepted by
+  the updater; an untrusted key is refused; `deploy export all` writes
+  every file.
+- **MSIX output:** capabilities and the `.appinstaller` content are
+  checked.
+
+**Not verified / owed.**
+- **Other targets.**
+  - Adapters for static hosts, per-request functions, and edge/WASM, with
+    their local emulators, and the web loading path (`C42`): Web
+    milestones J and K.
+  - Mobile over-the-air updates and store asset packs: Milestones 35–36.
+  - Firmware A/B updates and multi-image signing (`C81`): Milestone 37.
+  - Embedded-Linux images.
+- **Remote build and signing.**
+- **Resource bindings** beyond `[resources]` names.
+- **A per-client rate limit at the proxy.**
+- **Container builds and cache runs:** Docker and `sccache` are not
+  installed on this machine, so the image build and the cached build were
+  not run here.
+
 ### Milestone 56 — Durable and event-driven execution — complete (local implementation)
 
 **Built.** A new crate, `framework-durable`. Guide: `docs/durable.md`.

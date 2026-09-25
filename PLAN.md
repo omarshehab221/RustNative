@@ -3067,6 +3067,20 @@ names, and updated after deployment on every target whose host permits it.
 **Depends on** Web milestones J and K, Milestone 32's packaging, Milestone 42's
 budgets.
 
+**Status (2026-09-26): implemented for Windows and the long-lived server.**
+This covers:
+
+- immutable revisions with preview, percentage promotion, and rollback
+  (`rustnative deploy local`);
+- container, Kubernetes, and systemd export;
+- single-artifact embedded assets, and tag-invalidated response caching;
+- signed, staged desktop updates with automatic rollback;
+- MSIX capabilities, and `.appinstaller` updates.
+
+Static-host, per-request-function, and edge adapters are owed with Web
+milestones J and K. Mobile and firmware updates are owed with Milestones
+35–37. See `docs/deploy.md` and `BUILD_STATUS.md`.
+
 ## Milestone 51 — Observability, security, and compliance
 
 What makes a framework acceptable to the people who never read a benchmark:

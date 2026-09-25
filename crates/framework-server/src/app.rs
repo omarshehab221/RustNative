@@ -56,6 +56,7 @@ pub struct ServerApp {
     operations: Vec<crate::openapi::Operation>,
     openapi: Option<(String, String)>,
     extra: Vec<(String, Arc<dyn Fn() -> Response + Send + Sync>)>,
+    cache: crate::cache::ResponseCache,
 }
 
 impl Default for ServerApp {
@@ -80,7 +81,33 @@ impl ServerApp {
             operations: Vec::new(),
             openapi: None,
             extra: Vec::new(),
+            cache: crate::cache::ResponseCache::new(),
         }
+    }
+
+    /// The response cache (to invalidate tags when data changes).
+    #[must_use]
+    pub fn response_cache(&self) -> crate::cache::ResponseCache {
+        self.cache.clone()
+    }
+
+    /// Serves the cache's state at `GET /__cache` to principals `Pol`
+    /// allows.
+    #[must_use]
+    pub fn cache_inspection<P, Pol>(self) -> Self
+    where
+        P: Clone + Send + Sync + 'static,
+        Pol: crate::auth::Policy<P>,
+    {
+        let cache = self.cache.clone();
+        self.route(
+            "/__cache",
+            crate::get(move || {
+                let cache = cache.clone();
+                async move { crate::response::Json(cache.entries()) }
+            })
+            .authorized::<P, Pol>(),
+        )
     }
 
     /// Describes an operation for the API schema.
@@ -369,6 +396,11 @@ impl AppService {
         }
 
         let head = context.method == Method::HEAD;
+        // Cached public GETs: the handler's output is reused as it was.
+        let cache_key = (context.method == Method::GET && router.access == "public")
+            .then_some(router.cache)
+            .flatten()
+            .map(|(tags, ttl)| (format!("{}?{}", context.path, context.query), tags, ttl));
         let after_context = RequestContext {
             method: context.method.clone(),
             path: context.path.clone(),
@@ -383,8 +415,21 @@ impl AppService {
             client,
         };
         let guard = ScopeGuard(scope);
-        let mut response = handler(context).await;
+        let cached = cache_key.as_ref().and_then(|(key, _, _)| app.cache.get(key));
+        let hit = cached.is_some();
+        let mut response = match cached {
+            Some(response) => response,
+            None => handler(context).await,
+        };
         drop(guard);
+        if let Some((key, tags, ttl)) = cache_key {
+            if !hit {
+                app.cache.put(key, &response, tags, ttl);
+            }
+            response
+                .headers_mut()
+                .insert("x-cache", HeaderValue::from_static(if hit { "hit" } else { "miss" }));
+        }
 
         if let Some(error) = response.extensions().get::<ServerError>().cloned() {
             response = error.render(wants_json);

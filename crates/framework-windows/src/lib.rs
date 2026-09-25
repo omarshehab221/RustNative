@@ -82,6 +82,8 @@ mod platform;
 mod services;
 #[cfg(windows)]
 mod surface;
+#[cfg(windows)]
+pub mod update;
 
 pub use error::{Error, NativeContext, Win32Category};
 pub use handle::{native_handle, validate_native_handle};

@@ -72,6 +72,37 @@ pub struct Config {
     /// compiles into the application's theme.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<Style>,
+    /// What the native package declares (`[package]`, Milestone 50).
+    #[serde(default, skip_serializing_if = "Package::is_empty")]
+    pub package: Package,
+    /// The key desktop updates are signed with (`[update]`, Milestone 50).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<Update>,
+}
+
+/// The `[package]` table: what goes into the generated native project
+/// files, which are build outputs and never edited by hand (`C63`).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Package {
+    /// MSIX capabilities (`internetClient`, `webcam`, `microphone`).
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+impl Package {
+    fn is_empty(&self) -> bool {
+        self.capabilities.is_empty()
+    }
+}
+
+/// The `[update]` table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Update {
+    /// The publisher's Ed25519 public key, hex (`rustnative update keygen`
+    /// prints it); installed copies trust only updates it signed.
+    pub public_key: String,
 }
 
 /// The `[style]` table.
@@ -240,6 +271,8 @@ impl Config {
             resources: std::collections::BTreeMap::new(),
             i18n: I18n::default(),
             style: None,
+            package: Package::default(),
+            update: None,
         }
     }
 }

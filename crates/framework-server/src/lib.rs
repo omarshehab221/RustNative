@@ -31,10 +31,13 @@
 
 pub mod admin;
 pub mod app;
+pub mod assets;
 pub mod auth;
+pub mod cache;
 pub mod components;
 pub mod config;
 pub mod db;
+pub mod deploy;
 pub mod functions;
 pub mod handler;
 pub mod head;

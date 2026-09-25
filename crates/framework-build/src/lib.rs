@@ -27,6 +27,7 @@
 
 #![deny(missing_docs)]
 
+pub mod assets;
 pub mod icon;
 pub mod manifest;
 pub mod markup;
@@ -39,6 +40,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub use assets::embed_assets;
 pub use markup::{compile_rsx, try_compile_rsx};
 pub use messages::compile_messages;
 pub use styles::compile_styles;

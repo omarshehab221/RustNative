@@ -23,7 +23,7 @@ bytes = "1"
 http = "1"
 http-body = "1"
 http-body-util = "0.1"
-hyper = { version = "1", features = ["server", "http1"] }
+hyper = { version = "1", features = ["server", "client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 tower-service = "0.3"
 tokio = { workspace = true, features = ["net", "time", "sync", "rt", "macros"] }
