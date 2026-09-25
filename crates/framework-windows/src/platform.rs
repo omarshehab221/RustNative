@@ -105,38 +105,46 @@ impl Platform for WindowsPlatform {
     }
 
     fn capabilities(&self) -> PlatformCapabilities {
-        PlatformCapabilities::new([
-            Capability::Clipboard,
-            Capability::UrlLaunch,
-            Capability::MultipleWindows,
-            Capability::WindowManagement,
-            Capability::FileDialogs,
-            Capability::Notifications,
-            Capability::Menus,
-            Capability::DragAndDrop,
-            Capability::Touch,
-            Capability::Pen,
-            Capability::Gamepad,
-            Capability::Ime,
-            Capability::Animations,
-            Capability::ReducedMotionPreference,
-            Capability::CustomDrawing,
-            Capability::NativeSurfaces,
-            Capability::StatePersistence,
-            Capability::DeepLinks,
-            Capability::Lifecycle,
-            // Milestone 39: cursors per node, hover, command shortcuts,
-            // host-mirrored right-to-left, host traits in the environment
-            // (which includes following the system appearance), and the
-            // consent-store permission states.
-            Capability::Cursors,
-            Capability::Hover,
-            Capability::CommandShortcuts,
-            Capability::RightToLeft,
-            Capability::HostTraits,
-            Capability::SystemAppearance,
-            Capability::Permissions,
-        ])
+        PlatformCapabilities::new(
+            [
+                Capability::Clipboard,
+                Capability::UrlLaunch,
+                Capability::MultipleWindows,
+                Capability::WindowManagement,
+                Capability::FileDialogs,
+                Capability::Notifications,
+                Capability::Menus,
+                Capability::DragAndDrop,
+                Capability::Touch,
+                Capability::Pen,
+                Capability::Gamepad,
+                Capability::Ime,
+                Capability::Animations,
+                Capability::ReducedMotionPreference,
+                Capability::CustomDrawing,
+                Capability::NativeSurfaces,
+                Capability::StatePersistence,
+                Capability::DeepLinks,
+                Capability::Lifecycle,
+                // Milestone 39: cursors per node, hover, command shortcuts,
+                // host-mirrored right-to-left, host traits in the environment
+                // (which includes following the system appearance), and the
+                // consent-store permission states.
+                Capability::Cursors,
+                Capability::Hover,
+                Capability::CommandShortcuts,
+                Capability::RightToLeft,
+                Capability::HostTraits,
+                Capability::SystemAppearance,
+                Capability::Permissions,
+                // Milestone 48: host content. Media always (`MCIWnd`); the
+                // camera where a capture driver is installed; web content is
+                // not offered (see `native::host_content`).
+                Capability::MediaPlayback,
+            ]
+            .into_iter()
+            .chain(crate::native::host_content::camera_available().then_some(Capability::Camera)),
+        )
     }
 
     fn native_extension(&self) -> &dyn std::any::Any {
@@ -192,6 +200,9 @@ mod tests {
         // Milestone 30: the file state store, single-instance deep links,
         // and session/power lifecycle notifications.
         assert!(capabilities.supports(Capability::StatePersistence));
+        // Milestone 48: media playback; web content is not offered.
+        assert!(capabilities.supports(Capability::MediaPlayback));
+        assert!(!capabilities.supports(Capability::WebContent));
         assert!(capabilities.supports(Capability::DeepLinks));
         assert!(capabilities.supports(Capability::Lifecycle));
         // Milestone 39.

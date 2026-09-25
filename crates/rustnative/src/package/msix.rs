@@ -253,6 +253,7 @@ mod tests {
             },
             resources: std::collections::BTreeMap::new(),
             i18n: crate::config::I18n::default(),
+            style: None,
         }
     }
 

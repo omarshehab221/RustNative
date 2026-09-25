@@ -888,6 +888,117 @@ impl Component for ListView {
     }
 }
 
+/// How one section of a [`SectionedView`] lays its items out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SectionLayout {
+    /// One item per row.
+    List,
+    /// Items in this many equal columns.
+    Grid(u16),
+    /// Items in one row that scrolls sideways.
+    Carousel,
+}
+
+/// One section: a header and its items.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Section {
+    /// The header.
+    pub title: String,
+    /// How its items are laid out.
+    pub layout: SectionLayout,
+    /// The items.
+    pub items: Vec<String>,
+}
+
+/// A [`SectionedView`]'s sections.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SectionedViewProps {
+    /// The sections, in order.
+    pub sections: Vec<Section>,
+}
+
+/// A compositional list (`C26`): each section has a header and its own
+/// layout — a list, a grid, or a carousel — and the sections are the items
+/// of a virtual list, so only the sections on screen exist.
+#[derive(Debug)]
+pub struct SectionedView {
+    props: SectionedViewProps,
+    range: VirtualRange,
+}
+
+impl SectionedView {
+    fn section(index: usize, section: &Section) -> Node {
+        let item = |position: usize, text: &String| {
+            Node::button(format!("s{index}-{position}"), text.clone()).with_accessibility(
+                AccessibilityInfo::new(AccessibilityRole::ListItem)
+                    .name(text.clone())
+                    .focusable(true),
+            )
+        };
+        let items = section.items.iter().enumerate().map(|(position, text)| item(position, text));
+        let body = match section.layout {
+            SectionLayout::List => Node::column(format!("s{index}-body"), items),
+            SectionLayout::Grid(columns) => Node::grid(
+                format!("s{index}-body"),
+                framework_core::GridStyle::new(
+                    (0..columns.max(1)).map(|_| framework_core::Track::Fraction(1)),
+                )
+                .gap(8),
+                LayoutStyle::new().width(SizeMode::Fill),
+                items,
+            ),
+            SectionLayout::Carousel => Node::row_with_layout(
+                format!("s{index}-body"),
+                items,
+                LayoutStyle::new().width(SizeMode::Fill),
+                framework_core::RowStyle::new().gap(8).overflow(framework_core::Overflow::Scroll),
+            ),
+        };
+        Node::column(
+            format!("section-{index}"),
+            [
+                Node::label(format!("s{index}-title"), section.title.clone())
+                    .with_class(classes!("font-semibold text-muted"))
+                    .with_accessibility(AccessibilityInfo::new(AccessibilityRole::Heading {
+                        level: 3,
+                    })),
+                body.with_accessibility(AccessibilityInfo::new(AccessibilityRole::List)),
+            ],
+        )
+        .with_item_index(index)
+    }
+}
+
+impl Component for SectionedView {
+    type Props = SectionedViewProps;
+    type Message = ();
+    fn new(props: SectionedViewProps) -> Self {
+        Self { props, range: VirtualRange::EMPTY }
+    }
+    fn props(&self) -> &SectionedViewProps {
+        &self.props
+    }
+    fn set_props(&mut self, props: SectionedViewProps) {
+        self.props = props;
+    }
+    fn view(&self) -> Node {
+        let visible = self
+            .range
+            .indices()
+            .filter_map(|index| Some(Self::section(index, self.props.sections.get(index)?)));
+        Node::virtual_list(
+            "sections",
+            VirtualListStyle::new(self.props.sections.len(), ItemExtent::Estimated(160)),
+            visible,
+        )
+    }
+    fn update(&mut self, event: Event) {
+        if let Event::VisibleRangeChanged { range, .. } = event {
+            self.range = range;
+        }
+    }
+}
+
 /// How a table is sorted: a column and whether ascending.
 pub type Sort = Option<(usize, bool)>;
 

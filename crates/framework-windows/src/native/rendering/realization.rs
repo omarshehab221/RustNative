@@ -82,6 +82,9 @@ pub(crate) struct Renderer {
     /// Transitions the last render or layout pass found, waiting for
     /// `native::animation` to start them.
     pending_transitions: Vec<TransitionRequest>,
+    /// Nodes that arrived in place of one with the same shared identity,
+    /// waiting for layout to say where they move to (`C25`).
+    matched: Vec<framework_core::MatchedGeometry>,
     /// Nodes removed since the last time animation state was reconciled.
     removed_nodes: Vec<NodeId>,
     scroll: ScrollState,
@@ -140,6 +143,7 @@ impl Renderer {
             positioned: HashMap::new(),
             animated: AnimatedOverrides::default(),
             pending_transitions: Vec::new(),
+            matched: Vec::new(),
             removed_nodes: Vec::new(),
             scroll: ScrollState::default(),
             virtual_lists: VirtualLists::default(),
@@ -179,6 +183,8 @@ impl Renderer {
         if layout_invalidated {
             self.capture_anchors();
         }
+        // Before the operations: removing a node forgets its rectangle.
+        self.matched = framework_core::matched_geometry(&self.snapshot, &self.layout, &next);
         for operation in diff.operations() {
             self.apply_operation(operation, window)?;
         }
@@ -1007,6 +1013,27 @@ impl Renderer {
                     transition: declared.transition,
                 });
             }
+        }
+        // Matched geometry: Windows has no shared-element transition of its
+        // own, so the arriving node's position and size animate from the
+        // leaving node's rectangle like any other geometry transition.
+        for matched in std::mem::take(&mut self.matched) {
+            let Some(new) = next.get(&matched.node).copied() else { continue };
+            let from = matched.from;
+            geometry.push(TransitionRequest {
+                node: matched.node,
+                property: AnimatedProperty::Position,
+                from: AnimatedValue::Offset(Point::new(from.x, from.y)),
+                to: AnimatedValue::Offset(Point::new(new.x, new.y)),
+                transition: matched.transition,
+            });
+            geometry.push(TransitionRequest {
+                node: matched.node,
+                property: AnimatedProperty::Size,
+                from: AnimatedValue::Size(size_of(from)),
+                to: AnimatedValue::Size(size_of(new)),
+                transition: matched.transition,
+            });
         }
         for request in &geometry {
             self.pin_transition_start(request);

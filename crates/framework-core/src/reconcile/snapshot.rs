@@ -98,6 +98,8 @@ pub struct TreeNode {
     pub tabs: Option<Tabs>,
     /// This node's control, if it is one (see [`crate::Node::control`]).
     pub control: Option<crate::control::Control>,
+    /// This node's grid tracks, if it is a grid (see [`crate::Node::grid`]).
+    pub grid: Option<crate::layout::GridStyle>,
     /// Whether this node is hidden (see [`crate::Node::hidden`]). Only the
     /// node's own flag: a node inside a hidden container is hidden too,
     /// which [`TreeSnapshot::is_effectively_hidden`] answers.
@@ -106,6 +108,8 @@ pub struct TreeNode {
     /// [`crate::Node::with_cursor`]); a backend shows the nearest declared
     /// cursor walking up from the node under the pointer.
     pub cursor: Option<crate::input::Cursor>,
+    /// This node's shared identity (see [`crate::Node::with_shared_id`]).
+    pub shared_id: Option<NodeId>,
     /// The factory kind of a foreign object this node adopts (see
     /// [`crate::Node::foreign`]).
     pub foreign: Option<String>,
@@ -149,8 +153,10 @@ impl TreeNode {
             draw_list: node.draw_list().cloned(),
             tabs: node.tabs().cloned(),
             control: node.control_state().cloned(),
+            grid: node.grid_style().cloned(),
             hidden: node.is_hidden(),
             cursor: node.cursor(),
+            shared_id: node.shared_id(),
         }
     }
 }

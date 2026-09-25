@@ -9,6 +9,8 @@ mod app;
 #[cfg(test)]
 mod capture;
 mod commands;
+#[cfg(test)]
+mod components_integration;
 mod container;
 pub(crate) mod context;
 #[cfg(test)]
@@ -25,6 +27,7 @@ mod graphics_integration;
 mod guarantees_integration;
 #[cfg(test)]
 mod harness;
+pub(crate) mod host_content;
 mod host_traits;
 #[cfg(test)]
 mod i18n_integration;

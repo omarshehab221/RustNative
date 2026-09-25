@@ -1635,7 +1635,11 @@ fn scope_component_node_ids(
     errors: &mut Vec<RenderError>,
 ) {
     let local = node.id();
-    if child_node_ids.contains(&local) {
+    // A node another component already scoped — a child's view, or one
+    // handed to this component in its props (a card's body holding the
+    // parent's badges) — keeps its identity: scoping it again would keep
+    // only its local key and make two such nodes collide.
+    if child_node_ids.contains(&local) || local.owner().is_some() {
         return;
     }
 

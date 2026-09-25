@@ -234,6 +234,10 @@ fn lower_element(element: &Element, context: Option<&Expr>) -> syn::Result<Token
                 ::framework_core::Node::virtual_list_with_layout(#key, #list, __layout, #children_tokens)
             )
         }
+        Constructor::Grid => {
+            let tracks = arg("tracks");
+            quote_spanned!(span=> ::framework_core::Node::grid(#key, #tracks, __layout, #children_tokens))
+        }
     };
     let container_binding = if style_type.is_some() {
         quote!(let __container = #container;)

@@ -10,8 +10,14 @@ pub enum Capability {
     Clipboard,
     /// Posting system notifications.
     Notifications,
-    /// Capturing photos/video from a camera.
+    /// Capturing photos/video from a camera, and showing its preview
+    /// ([`crate::HostContent::Camera`]).
     Camera,
+    /// Embedded web content ([`crate::HostContent::Web`]).
+    WebContent,
+    /// Audio and video playback with the host's controls
+    /// ([`crate::HostContent::Media`]).
+    MediaPlayback,
     /// Bluetooth device access.
     Bluetooth,
     /// Persistent key-value storage.

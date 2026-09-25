@@ -222,3 +222,55 @@ struct Observed {
     due: CalendarDate,
     notes: String,
 }
+
+/// Host content (`C28`): media is the system's `MCIWnd` player, and web
+/// content — which this backend does not offer — is the application's
+/// fallback, never an empty rectangle.
+struct Player;
+
+impl Component for Player {
+    type Props = ();
+    type Message = ();
+    fn new((): ()) -> Self {
+        Self
+    }
+    fn props(&self) -> &() {
+        &()
+    }
+    fn set_props(&mut self, (): ()) {}
+    fn view(&self) -> Node {
+        let capabilities = framework_core::Platform::capabilities(&crate::WindowsPlatform::new());
+        let layout = framework_core::LayoutStyle::new();
+        Node::column(
+            "player",
+            [
+                framework_core::host_content(
+                    "clip",
+                    &framework_core::HostContent::Media { source: "missing-clip.wav".into() },
+                    layout,
+                    &capabilities,
+                    || Node::label("clip-fallback", "No media"),
+                ),
+                framework_core::host_content(
+                    "page",
+                    &framework_core::HostContent::Web { url: "https://example.com".into() },
+                    layout,
+                    &capabilities,
+                    || Node::label("page-fallback", "Open example.com in the browser"),
+                ),
+            ],
+        )
+    }
+    fn update(&mut self, _: Event) {}
+}
+
+#[test]
+fn native_host_content_is_the_hosts_player_or_the_stated_fallback() {
+    let mut application =
+        Application::new(Player::new(()), Window::new("player", Size::new(640, 600)));
+    // SAFETY: `application` is declared first, so it outlives the harness.
+    let harness = unsafe { NativeHarness::attach(&mut application) };
+    assert_eq!(class(harness.expect_control(WindowId::PRIMARY, "clip")), "MCIWndClass");
+    assert!(harness.control(WindowId::PRIMARY, "page").is_none());
+    assert!(harness.control(WindowId::PRIMARY, "page-fallback").is_some());
+}

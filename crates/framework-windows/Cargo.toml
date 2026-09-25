@@ -102,3 +102,5 @@ windows-core = { version = "0.62", default-features = false }
 # The shared guarantee suites (Milestone 41), run here over the native
 # harness.
 framework-conformance.workspace = true
+# Milestone 48: the component library, realized natively.
+framework-components.workspace = true

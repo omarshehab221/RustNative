@@ -31,6 +31,8 @@ pub enum Constructor {
     Row,
     /// `Node::virtual_list_with_layout(key, list, layout, children)`.
     VirtualList,
+    /// `Node::grid(key, tracks, layout, children)`.
+    Grid,
     /// `Node::control_with_layout(key, Control::Checkbox{…}, layout)`.
     Checkbox,
     /// `Node::control_with_layout(key, Control::Radio{…}, layout)`.
@@ -125,6 +127,7 @@ fn universal() -> Vec<AttrSpec> {
         attr("align_self", AttrKind::Layout, "LayoutStyle::align_self"),
         attr("constraints", AttrKind::Layout, "LayoutStyle::constraints"),
         attr("direction", AttrKind::Layout, "LayoutStyle::direction"),
+        attr("grid", AttrKind::Layout, "LayoutStyle::grid"),
         attr("accessibility", AttrKind::Modifier, "Node::with_accessibility"),
         attr("class", AttrKind::Modifier, "Node::with_class(classes!(\"…\"))"),
         attr(
@@ -138,6 +141,7 @@ fn universal() -> Vec<AttrSpec> {
         attr("item_index", AttrKind::Modifier, "Node::with_item_index"),
         attr("command", AttrKind::Modifier, "Node::with_command"),
         attr("cursor", AttrKind::Modifier, "Node::with_cursor"),
+        attr("shared_id", AttrKind::Modifier, "Node::with_shared_id"),
         flag("disabled", "Node::disabled"),
         flag("hidden", "Node::hidden"),
     ]
@@ -223,6 +227,12 @@ pub fn element_table() -> Vec<ElementSpec> {
             "VirtualList",
             Constructor::VirtualList,
             vec![required("list", AttrKind::Argument, "Node::virtual_list_with_layout")],
+            true,
+        ),
+        element(
+            "Grid",
+            Constructor::Grid,
+            vec![required("tracks", AttrKind::Argument, "Node::grid")],
             true,
         ),
         element(

@@ -12,9 +12,11 @@
 mod constraints;
 mod engine;
 mod geometry;
+mod grid;
 mod measure;
 
 pub use constraints::{ColumnStyle, Constraints, LayoutStyle, RowStyle};
 pub use engine::{LayoutEngine, LayoutInvalidation, LayoutResult, MeasuredItem};
 pub use geometry::{Alignment, EdgeInsets, LayoutDirection, Overflow, Point, Rect, Size, SizeMode};
+pub use grid::{GridPlacement, GridStyle, Track};
 pub use measure::{DefaultIntrinsicMeasurer, IntrinsicMeasurer};

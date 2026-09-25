@@ -70,6 +70,9 @@ pub fn register_foreign(
 
 /// The natural size of a registered kind.
 pub(crate) fn preferred_size(kind: &str) -> Option<Size> {
+    if let Some(content) = framework_core::HostContent::from_kind(kind) {
+        return Some(super::host_content::preferred_size(&content));
+    }
     FACTORIES.with(|factories| factories.borrow().get(kind).map(|factory| factory.preferred))
 }
 
@@ -80,6 +83,13 @@ pub(crate) fn create(kind: &str, parent: HWND, node: NodeId) -> Result<ForeignCo
     let create = FACTORIES
         .with(|factories| factories.borrow().get(kind).map(|factory| Rc::clone(&factory.create)));
     let context = NativeContext::none().with_node(node);
+    // Host content (`C28`) is the backend's own; an application factory
+    // registered for the exact kind still wins.
+    let create = create.or_else(|| {
+        let host = framework_core::HostContent::from_kind(kind)?;
+        let create: Create = Rc::new(move |parent| super::host_content::create(&host, parent));
+        Some(create)
+    });
     let Some(create) = create else {
         return Err(Error::ForeignUnavailable {
             kind: kind.to_owned(),

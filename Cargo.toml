@@ -44,6 +44,7 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_Graphics_Dwm",
     "Win32_Globalization",
     "Win32_Graphics_Gdi",
+    "Win32_Media_Multimedia",
     "Win32_Networking_WinHttp",
     "Win32_Networking_WinInet",
     "Win32_Security",

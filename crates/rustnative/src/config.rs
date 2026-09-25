@@ -68,6 +68,18 @@ pub struct Config {
     /// Localization (`[i18n]`, Milestone 46).
     #[serde(default, skip_serializing_if = "I18n::is_default")]
     pub i18n: I18n,
+    /// The style file (`[style] file = "…"`, Milestone 58), which the build
+    /// compiles into the application's theme.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<Style>,
+}
+
+/// The `[style]` table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Style {
+    /// The style file, relative to the project.
+    pub file: String,
 }
 
 /// The `[i18n]` table.
@@ -227,6 +239,7 @@ impl Config {
             },
             resources: std::collections::BTreeMap::new(),
             i18n: I18n::default(),
+            style: None,
         }
     }
 }

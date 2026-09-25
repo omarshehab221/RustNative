@@ -39,6 +39,7 @@ struct Mover {
     props: Props,
     expanded: bool,
     faded: bool,
+    swapped: bool,
     animations: Option<AnimationRequests>,
 }
 
@@ -56,7 +57,7 @@ impl Component for Mover {
     type Message = ();
 
     fn new(props: Props) -> Self {
-        Self { props, expanded: false, faded: false, animations: None }
+        Self { props, expanded: false, faded: false, swapped: false, animations: None }
     }
     fn props(&self) -> &Props {
         &self.props
@@ -80,7 +81,18 @@ impl Component for Mover {
                     .with_transition(AnimatedProperty::Position, linear())
                     .with_transition(AnimatedProperty::Opacity, linear())
                     .with_opacity(if self.faded { 0.5 } else { 1.0 }),
+                // One photo, shown small or large: the two nodes share an
+                // identity, so the large one grows out of the small one.
+                if self.swapped {
+                    Node::column_with_layout("hero", [], fixed(200, 120), ColumnStyle::new())
+                        .with_shared_id("photo")
+                        .with_transition(AnimatedProperty::Position, linear())
+                } else {
+                    Node::column_with_layout("thumb", [], fixed(40, 40), ColumnStyle::new())
+                        .with_shared_id("photo")
+                },
                 Node::button("go", "Go"),
+                Node::button("swap", "Swap"),
                 Node::button("fade", "Fade"),
                 Node::button("slide", "Slide"),
             ],
@@ -97,6 +109,9 @@ impl Component for Mover {
         match &event {
             Event::Click { target } if *target == NodeId::from_key("go") => {
                 self.expanded = !self.expanded;
+            }
+            Event::Click { target } if *target == NodeId::from_key("swap") => {
+                self.swapped = !self.swapped;
             }
             Event::Click { target } if *target == NodeId::from_key("fade") => {
                 self.faded = !self.faded;
@@ -230,6 +245,31 @@ fn native_transition_moves_the_control_without_rerendering() {
         renders_after_click,
         "not one frame caused a component render"
     );
+}
+
+/// Matched geometry (`C25`): a node arriving with the shared identity of
+/// one that left starts at the leaving node's size and grows to its own.
+///
+/// Catches the arriving node simply appearing at its final size, which is
+/// what happens when the two nodes are treated as unrelated.
+#[test]
+fn native_matched_geometry_grows_the_arriving_node_from_the_leaving_one() {
+    let fixture = Fixture::new();
+    let mut application = fixture.application();
+    let mut harness = fixture.attach(&mut application);
+    let width = |harness: &NativeHarness, key: &str| {
+        let bounds = rect(harness.expect_control(WindowId::PRIMARY, key));
+        bounds.right - bounds.left
+    };
+    assert_eq!(width(&harness, "thumb"), 40);
+
+    harness.click(WindowId::PRIMARY, "swap");
+    assert_eq!(width(&harness, "hero"), 40, "it starts where the thumbnail was");
+    fixture.frame(&mut harness, Duration::from_millis(50));
+    let midway = width(&harness, "hero");
+    assert!(40 < midway && midway < 200, "halfway, it is between the two: {midway}");
+    fixture.frame(&mut harness, Duration::from_millis(50));
+    assert_eq!(width(&harness, "hero"), 200, "and lands at its own size");
 }
 
 /// When nothing is animating, no frames are requested; the driver's thread

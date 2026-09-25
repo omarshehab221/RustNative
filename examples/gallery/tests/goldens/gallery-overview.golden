@@ -1,0 +1,19 @@
+window "Gallery" 900x1400
+Column #gallery [0,0 900x1400]
+  Row #navigation [24,24 852x1352]
+    Column #destinations [24,24 160x1304] role=TabList
+      Button #destination-0 "Overview" [24,24 112x32] role=Tab
+      Button #destination-1 "Data" [24,68 112x32] role=Tab
+      Button #destination-2 "Settings" [24,112 112x32] role=Tab
+    Column #content [196,24 632x1304]
+      Column #overview [24,24 584x384]
+        Column #card [24,24 536x188] name="Status"
+          Label #title "Status" [12,12 512x32] role=Heading { level: 3 }
+          Label #badge "New" [12,56 512x32]
+          Label #badge "Beta" [12,100 512x32]
+          Label #badge "Overdue" [12,144 512x32]
+        Column #chart [24,224 536x136]
+          Label #title "Revenue" [24,24 488x32]
+          Canvas #plot [24,68 320x180] role=Table name="Revenue"
+          Label #point "Focus the chart and use the arrow keys to read its points." [24,260 488x32] role=Status
+  Column #toast [0,0 0x0] hidden

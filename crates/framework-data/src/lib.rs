@@ -24,10 +24,12 @@
 //! The guide is `docs/data.md`.
 
 pub mod batch;
+pub mod document;
 pub mod forms;
 pub mod history;
 pub mod http;
 pub mod image;
+pub mod list;
 pub mod machine;
 pub mod migrate;
 pub mod mutation;

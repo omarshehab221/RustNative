@@ -557,6 +557,7 @@ name = "framework-windows"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "framework-components",
  "framework-conformance",
  "framework-core",
  "framework-data",
@@ -593,6 +594,17 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "gallery"
+version = "0.1.0"
+dependencies = [
+ "framework-build",
+ "framework-components",
+ "framework-core",
+ "framework-headless",
+ "framework-windows",
 ]
 
 [[package]]

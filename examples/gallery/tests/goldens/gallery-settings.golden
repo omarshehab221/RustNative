@@ -1,0 +1,18 @@
+window "Gallery" 900x1400
+Column #gallery [0,0 900x1400]
+  Row #navigation [24,24 852x1352]
+    Column #destinations [24,24 344x1304] role=TabList
+      Button #destination-0 "Overview" [24,24 296x32] role=Tab
+      Button #destination-1 "Data" [24,68 296x32] role=Tab
+      Button #destination-2 "Settings" [24,112 296x32] role=Tab focused
+    Column #content [380,24 448x1304]
+      Column #settings [24,24 400x396]
+        Column #field [24,24 352x124]
+          Label #label "Display name" [24,24 304x32]
+          TextInput #input "Ada" [24,68 304x32] name="Display name"
+        Column #group [24,160 352x168] name="Text size"
+          Label #label "Text size" [24,24 304x32]
+          Control #option-0 "Small" [24,68 304x32] role=RadioButton control=Radio { label: "Small", selected: true }
+          Control #option-1 "Large" [24,112 304x32] role=RadioButton control=Radio { label: "Large", selected: false }
+        Button #button "Save" [24,340 352x32]
+  Column #toast [0,0 0x0] hidden

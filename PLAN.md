@@ -2838,6 +2838,13 @@ backend.
 **Depends on** Milestone 41 (fidelity and accessibility conformance) and
 Milestone 46 (mirroring and text growth).
 
+**Status (2026-09-25): implemented** on Windows and the headless backend.
+`examples/gallery` is built only from `framework-components` and one token
+set. It renders on Windows as the host's controls, in the host's accent.
+Web content (WebView2), the system media controls, and picture-in-picture
+are owed, as is rendering on the other backends. See `docs/components.md`
+and `BUILD_STATUS.md`.
+
 ---
 
 ## Milestone 54 — Responsiveness under load

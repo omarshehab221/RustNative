@@ -63,6 +63,7 @@ fn framework_markup_names() -> Vec<String> {
         ("Column", "column"),
         ("Row", "row"),
         ("VirtualList", "virtual_list"),
+        ("Grid", "grid"),
     ];
     let table = framework_markup::element_table();
     for spec in &table {

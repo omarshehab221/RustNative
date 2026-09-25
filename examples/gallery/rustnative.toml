@@ -1,0 +1,11 @@
+# The component gallery (Milestone 48).
+[app]
+name = "gallery"
+id = "dev.rustnative.gallery"
+display-name = "Rust Native gallery"
+version = "0.1.0"
+publisher = "CN=Rust Native"
+description = "Every component of the library, styled by one token set"
+
+[style]
+file = "gallery.css"

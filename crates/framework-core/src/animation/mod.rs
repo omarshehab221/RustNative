@@ -44,7 +44,10 @@
 
 mod easing;
 mod interpolate;
+mod matched;
 mod timeline;
+
+pub use matched::{MatchedGeometry, matched_geometry};
 
 pub use easing::Easing;
 pub use timeline::{Finished, Frame, TickOutput, Timeline};

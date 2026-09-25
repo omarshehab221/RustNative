@@ -327,6 +327,7 @@ pub mod event;
 pub mod grant;
 pub mod graphics;
 pub mod handle;
+mod host_content;
 pub mod i18n;
 pub mod identity;
 pub mod input;
@@ -349,6 +350,7 @@ pub mod services;
 pub mod state;
 pub mod style;
 pub mod teardown;
+mod text_profile;
 pub mod virtualization;
 pub mod window;
 
@@ -359,8 +361,8 @@ pub use accessibility::{
 pub use affinity::{ThreadAffinity, UiThread};
 pub use animation::{
     AnimatedProperty, AnimatedValue, Animation, AnimationId, AnimationOwner, Easing, Fill,
-    Finished, Frame, FrameClock, ManualFrameClock, MotionPreference, ReducedMotion, Repeat,
-    TickOutput, Timeline, Transition,
+    Finished, Frame, FrameClock, ManualFrameClock, MatchedGeometry, MotionPreference,
+    ReducedMotion, Repeat, TickOutput, Timeline, Transition, matched_geometry,
 };
 pub use application::Application;
 pub use capability::{Capability, PlatformCapabilities, SurfaceKind};
@@ -383,6 +385,7 @@ pub use graphics::{
     Transform2D, Vec2,
 };
 pub use handle::{Live, NativeHandle, StaleHandle, Unchecked};
+pub use host_content::{HostContent, host_content};
 pub use identity::{ComponentId, NodeId, WindowId};
 pub use input::{
     ClipboardAction, Composition, Cursor, DragData, DropEffect, GamepadAxis, GamepadButton,
@@ -391,9 +394,9 @@ pub use input::{
     PointerButtons, PointerEvent, PointerKind, PointerPhase, Scalar, WheelDelta, Winner, arbitrate,
 };
 pub use layout::{
-    Alignment, ColumnStyle, Constraints, DefaultIntrinsicMeasurer, EdgeInsets, IntrinsicMeasurer,
-    LayoutDirection, LayoutEngine, LayoutInvalidation, LayoutResult, LayoutStyle, MeasuredItem,
-    Overflow, Point, Rect, RowStyle, Size, SizeMode,
+    Alignment, ColumnStyle, Constraints, DefaultIntrinsicMeasurer, EdgeInsets, GridPlacement,
+    GridStyle, IntrinsicMeasurer, LayoutDirection, LayoutEngine, LayoutInvalidation, LayoutResult,
+    LayoutStyle, MeasuredItem, Overflow, Point, Rect, RowStyle, Size, SizeMode, Track,
 };
 pub use lifecycle::Lifecycle;
 pub use menu::{MenuBar, MenuItem};
@@ -427,6 +430,7 @@ pub use style::{
     StyleValue, Theme, TokenTable, Typography, UnitMapping, VisualStyle,
 };
 pub use teardown::{Restoration, TeardownPolicy};
+pub use text_profile::{Script, TextProfile, UnsupportedText};
 pub use virtualization::{
     Axis, ExtentCache, ItemExtent, ScrollAnchor, VirtualListStyle, VirtualRange,
 };

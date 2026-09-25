@@ -80,8 +80,17 @@ pub fn cases() -> Vec<(&'static str, Node)> {
         ("item_index", <Label key="item" text="Item" item_index=7 />),
         ("command", <Button key="save" text="Save" command={syntax::SAVE} />),
         ("cursor", <Label key="link" text="Link" cursor={Cursor::Pointer} />),
+        ("shared_id", <Label key="thumb" text="Photo" shared_id="photo" />),
         ("disabled", <Button key="off" text="Off" disabled />),
         ("hidden", <Label key="gone" text="Gone" hidden={true} />),
+        (
+            "grid",
+            <Grid key="form" tracks={values::grid_tracks()}>
+                <Label key="name-label" text="Name" />
+                <TextInput key="name" value="" />
+                <Label key="note" text="Required" grid={framework_core::GridPlacement::at(1, 0).span(1, 2)} />
+            </Grid>
+        ),
         ("spread", <Label key="loud" text="Loud" ..{syntax::emphasized} />),
         ("control_flow", control_flow(true, 2, &["x", "y"], Some("extra"))),
         ("control_flow_else", control_flow(false, 0, &[], None)),

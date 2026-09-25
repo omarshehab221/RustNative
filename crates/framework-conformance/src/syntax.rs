@@ -74,6 +74,16 @@ pub fn emphasized(node: Node) -> Node {
 pub mod values {
     use super::{Alignment, EdgeInsets, LayoutDirection, Overflow, SizeMode};
 
+    /// A grid's tracks: a fixed label column and a filling field column.
+    #[must_use]
+    pub fn grid_tracks() -> framework_core::GridStyle {
+        framework_core::GridStyle::new([
+            framework_core::Track::Fixed(120),
+            framework_core::Track::Fraction(1),
+        ])
+        .gap(8)
+    }
+
     /// A fixed width.
     pub const WIDTH: SizeMode = SizeMode::Fixed(120);
     /// A fill height.

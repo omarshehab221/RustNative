@@ -418,6 +418,60 @@ impl Node {
         Self::control(key, Control::Image { image })
     }
 
+    /// Creates a grid: children placed in `grid`'s rows and columns, each
+    /// where its [`LayoutStyle::grid`] says, or in the next free cell (see
+    /// [`crate::layout::GridStyle`]).
+    ///
+    /// ```
+    /// use framework_core::{GridPlacement, GridStyle, LayoutStyle, Node, Track};
+    ///
+    /// let tracks = GridStyle::new([Track::Fixed(120), Track::Fraction(1)]).gap(8);
+    /// let form = Node::grid(
+    ///     "form",
+    ///     tracks.clone(),
+    ///     LayoutStyle::new(),
+    ///     [
+    ///         Node::label("name-label", "Name"),
+    ///         Node::text_input("name", ""),
+    ///         Node::label_with_layout("note", "Required", LayoutStyle::new().grid(GridPlacement::at(1, 1))),
+    ///     ],
+    /// );
+    ///
+    /// // The same grid in markup:
+    /// let markup = framework_core::rsx! {
+    ///     <Grid key="form" tracks={tracks}>
+    ///         <Label key="name-label" text="Name" />
+    ///         <TextInput key="name" value="" />
+    ///         <Label key="note" text="Required" grid={GridPlacement::at(1, 1)} />
+    ///     </Grid>
+    /// };
+    /// assert_eq!(markup, form);
+    /// ```
+    pub fn grid(
+        key: impl AsRef<str>,
+        grid: crate::layout::GridStyle,
+        layout: LayoutStyle,
+        children: impl IntoIterator<Item = Self>,
+    ) -> Self {
+        let mut column = Column::new(
+            NodeId::from_key(key.as_ref()),
+            children.into_iter().collect(),
+            ColumnStyle::new().padding(EdgeInsets::all(0)).gap(0),
+            layout,
+        );
+        column.grid = Some(grid);
+        Self::Column(column)
+    }
+
+    /// Returns this node's grid tracks, if it is a grid.
+    #[must_use]
+    pub fn grid_style(&self) -> Option<&crate::layout::GridStyle> {
+        match self {
+            Self::Column(column) => column.grid(),
+            _ => None,
+        }
+    }
+
     /// Returns this node's control, if it is one.
     #[must_use]
     pub fn control_state(&self) -> Option<&Control> {
@@ -1071,6 +1125,59 @@ impl Node {
         }
     }
 
+    /// Declares this node's shared identity for matched-geometry
+    /// transitions (`C25`): when a render removes a node with this
+    /// identity and adds another with it, the new node moves and resizes
+    /// from where the old one was — a thumbnail growing into a detail view.
+    ///
+    /// The motion is the node's [`AnimatedProperty::Position`] transition if
+    /// it declares one, otherwise a short ease; with reduced motion it is
+    /// instant. See [`crate::animation::matched_geometry`].
+    ///
+    /// ```
+    /// use framework_core::Node;
+    ///
+    /// let thumbnail = Node::label("thumb-7", "Photo 7").with_shared_id("photo-7");
+    /// assert_eq!(thumbnail.shared_id(), Some(framework_core::NodeId::from_key("photo-7")));
+    ///
+    /// // The same node in markup:
+    /// let markup = framework_core::rsx! { <Label key="thumb-7" text="Photo 7" shared_id="photo-7" /> };
+    /// assert_eq!(markup, thumbnail);
+    /// ```
+    #[must_use]
+    pub fn with_shared_id(mut self, shared: impl AsRef<str>) -> Self {
+        let shared = NodeId::from_key(shared.as_ref());
+        match &mut self {
+            Self::Label(node) => node.shared_id = Some(shared),
+            Self::Button(node) => node.shared_id = Some(shared),
+            Self::TextInput(node) => node.shared_id = Some(shared),
+            Self::TabBar(node) => node.shared_id = Some(shared),
+            Self::Control(node) => node.shared_id = Some(shared),
+            Self::Canvas(node) => node.shared_id = Some(shared),
+            Self::Surface(node) => node.shared_id = Some(shared),
+            Self::Column(node) => node.shared_id = Some(shared),
+            Self::Row(node) => node.shared_id = Some(shared),
+        }
+        self
+    }
+
+    /// This node's shared identity, if it declares one (see
+    /// [`Node::with_shared_id`]).
+    #[must_use]
+    pub fn shared_id(&self) -> Option<NodeId> {
+        match self {
+            Self::Label(node) => node.shared_id,
+            Self::Button(node) => node.shared_id,
+            Self::TextInput(node) => node.shared_id,
+            Self::TabBar(node) => node.shared_id,
+            Self::Control(node) => node.shared_id,
+            Self::Canvas(node) => node.shared_id,
+            Self::Surface(node) => node.shared_id,
+            Self::Column(node) => node.shared_id,
+            Self::Row(node) => node.shared_id,
+        }
+    }
+
     /// Sets the pointer cursor shown over this node (see [`Cursor`]).
     #[must_use]
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
@@ -1504,6 +1611,7 @@ macro_rules! leaf_node {
             hidden: bool,
             command: Option<CommandId>,
             cursor: Option<Cursor>,
+            shared_id: Option<NodeId>,
             declarations: Vec<DeclarationSet>,
             state_styles: StateStyles,
         }
@@ -1545,6 +1653,7 @@ macro_rules! leaf_node {
                     hidden: false,
                     command: None,
                     cursor: None,
+                    shared_id: None,
                     declarations: Vec::new(),
                     state_styles: StateStyles::new(),
                 }
@@ -1695,9 +1804,11 @@ macro_rules! container_node {
             transitions: Vec<NodeTransition>,
             item_index: Option<usize>,
             virtualization: Option<VirtualListStyle>,
+            grid: Option<crate::layout::GridStyle>,
             hidden: bool,
             command: Option<CommandId>,
             cursor: Option<Cursor>,
+            shared_id: Option<NodeId>,
             declarations: Vec<DeclarationSet>,
             state_styles: StateStyles,
         }
@@ -1717,9 +1828,11 @@ macro_rules! container_node {
                     transitions: Vec::new(),
                     item_index: None,
                     virtualization: None,
+                    grid: None,
                     hidden: false,
                     command: None,
                     cursor: None,
+                    shared_id: None,
                     declarations: Vec::new(),
                     state_styles: StateStyles::new(),
                 }
@@ -1734,6 +1847,12 @@ macro_rules! container_node {
             /// one (see [`Node::virtual_list`]).
             pub fn virtualization(&self) -> Option<VirtualListStyle> {
                 self.virtualization
+            }
+
+            /// Returns this container's grid tracks, if it is a grid (see
+            /// [`Node::grid`]).
+            pub fn grid(&self) -> Option<&crate::layout::GridStyle> {
+                self.grid.as_ref()
             }
 
             /// Returns this container's children.

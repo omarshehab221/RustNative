@@ -106,8 +106,26 @@ pub fn cases() -> Vec<(&'static str, Node)> {
         ("item_index", Node::label("item", "Item").with_item_index(7)),
         ("command", Node::button("save", "Save").with_command(syntax::SAVE)),
         ("cursor", Node::label("link", "Link").with_cursor(framework_core::Cursor::Pointer)),
+        ("shared_id", Node::label("thumb", "Photo").with_shared_id("photo")),
         ("disabled", Node::button("off", "Off").disabled(true)),
         ("hidden", Node::label("gone", "Gone").hidden(true)),
+        (
+            "grid",
+            Node::grid(
+                "form",
+                values::grid_tracks(),
+                LayoutStyle::new(),
+                [
+                    Node::label("name-label", "Name"),
+                    Node::text_input("name", ""),
+                    Node::label_with_layout(
+                        "note",
+                        "Required",
+                        LayoutStyle::new().grid(framework_core::GridPlacement::at(1, 0).span(1, 2)),
+                    ),
+                ],
+            ),
+        ),
         ("spread", syntax::emphasized(Node::label("loud", "Loud"))),
         ("control_flow", control_flow(true, 2, &["x", "y"], Some("extra"))),
         ("control_flow_else", control_flow(false, 0, &[], None)),

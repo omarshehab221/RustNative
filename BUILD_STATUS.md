@@ -14,6 +14,88 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 48 — Components, tokens, and visualization — complete (Windows scope)
+
+**Built.** Guides: `docs/components.md`, `docs/tokens.md`,
+`docs/idioms/windows.md`, `docs/guides/hybrid-rendering.md`, and
+`docs/guides/host-content-controls.md`.
+
+- **Native controls**: checkbox, radio, toggle, slider, progress, select,
+  list box, date picker, spinner, separator, link, multiline text, and
+  image. Each has an `rsx!` element. On Windows each is the system control,
+  and its changes arrive as `Toggled`, `ValueChanged`, `SelectionChanged`,
+  or `DateChanged`.
+- **`framework-components`**: 18 composite components. Each has builder and
+  markup forms, uses stores for binding and commands for actions, and has
+  its accessibility role asserted.
+  - The headless behaviour layer (`C19`) covers list selection, tabs,
+    menus, trees, grid navigation, combobox, and date entry.
+  - The per-host idiom table is `C23`.
+  - `AdaptiveNavigation` (bottom bar, rail, or sidebar) and
+    `CommandPalette` are `C22-3` and `C20-3`.
+  - Charts are drawn on the draw-list path. Each has a data table as its
+    accessible form, readable by keyboard (`X-VIZ-1`).
+- **Token pipeline**: `rustnative tokens import` turns a W3C Design Tokens
+  file into the Milestone 58 `@theme` block.
+  - A role marked with `rustnative.host` follows `HostPalette`. On Windows
+    that is `DwmGetColorizationColor` and `GetSysColor`, re-read on
+    settings and colorization changes.
+  - Brand values apply as given.
+- **Grid** (`C18-1`): `Node::grid` with fixed, auto, and fraction tracks,
+  gaps, and spans. `LayoutStyle::grid` places a child. It has a markup
+  `<Grid tracks=…>` element and a `grid` attribute.
+- **Matched geometry** (`C25`): `Node::with_shared_id`. A node arriving in
+  place of one with the same identity moves and resizes from the old one's
+  rectangle (`matched_geometry`). Windows animates it with the timeline, and
+  it respects reduced motion.
+- **Lists** (`C26`): `framework_data::list::Projection` gives non-copying
+  filter, sort, and group views. `diff_keys` reports removals, insertions,
+  and minimal moves. `SectionedView` has list, grid, or carousel sections
+  on a virtual list.
+- **Documents** (`C27`): `DocumentController` handles open, save, save as
+  (atomic), revert, autosave, dirty state, undo, and redo. It is bound to
+  the standard commands, reports external changes, and follows the Windows
+  title convention. `RecentDocuments` keeps the recent list.
+- **Host content** (`C28`): `HostContent` and `host_content` build a
+  capability-guarded foreign node, or the application's fallback. On
+  Windows, media is `MCIWnd`, the camera preview is `avicap32`, and web
+  content is not offered.
+- **Text profiles**: `TextProfile` and `Script` declare which scripts a
+  target renders, and check strings against them.
+- **Example**: `examples/gallery` is built only from the library and
+  `tokens.json`.
+
+**Found and fixed.**
+- **Node identity.** Nodes a parent passed to a child component in its
+  props (a card's body of badges) were scoped a second time. Only their
+  local keys survived, so two badges collided. The duplicate identity then
+  made the headless window render nothing. Already-scoped nodes now keep
+  their identity. Regression test: `framework-core/tests/composition.rs`.
+- **CLI manifest.** `rustnative.toml` refused a `[style]` table in the CLI,
+  although the build reads it. `rustnative tokens import` could not run in
+  a project that declared its style file.
+- **Markup props.** A component element's omitted props are now defaulted.
+
+**Verified.** Full gate.
+- Conformance cases for every new element and attribute in all three
+  spellings: builder, `rsx!`, and `.rsx`.
+- Grid layout test, plus matched-geometry, list, document, text-profile,
+  and host-content unit and doc tests.
+- The library's headless tests, including sectioned layouts.
+- Gallery headless goldens for three pages, plus the token-set theme.
+- Windows tests:
+  - native controls;
+  - library components realized as host controls in the host accent;
+  - a shared-identity node growing from 40 to 200 px over its transition;
+  - media as `MCIWndClass`, and web content as the fallback.
+
+**Not verified / owed.**
+- Web content needs WebView2 (`Capability::WebContent` is not offered).
+- System media transport controls and picture-in-picture are WinRT APIs.
+- `SysLink` falls back to clickable text without a Common Controls 6
+  manifest.
+- Rendering on the other backends is owed with those backends.
+
 ### Milestone 54 — Responsiveness under load — complete (Windows scope)
 
 **Built.** `docs/responsiveness.md`.

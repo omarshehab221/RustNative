@@ -15,8 +15,9 @@ use framework_components::behaviour::TreeItem;
 use framework_components::{
     ActionButton, ActionButtonProps, ButtonVariant, Chart, ChartKind, ChartProps, CommandPalette,
     CommandPaletteProps, DataTable, DataTableProps, Dialog, DialogProps, IDIOMS, Idioms, ListView,
-    ListViewProps, RadioGroup, RadioGroupProps, Series, TextField, Toast, ToastProps, TreeView,
-    TreeViewProps, sorted_order, with_roles,
+    ListViewProps, RadioGroup, RadioGroupProps, Section, SectionLayout, SectionedView,
+    SectionedViewProps, Series, TextField, Toast, ToastProps, TreeView, TreeViewProps,
+    sorted_order, with_roles,
 };
 use framework_core::{
     AccessibilityRole, Command, CommandId, Component, ComponentContext, Event, KeyCode,
@@ -310,4 +311,38 @@ fn table_sorting_is_a_view_over_the_rows() {
     assert_eq!(sorted_order(&rows, Some((1, true))), vec![1, 0], "numbers compare as numbers");
     assert_eq!(sorted_order(&rows, Some((0, true))), vec![1, 0]);
     assert_eq!(sorted_order(&rows, None), vec![0, 1]);
+}
+
+#[test]
+fn sections_lay_out_as_list_grid_and_carousel() {
+    let section = |title: &str, layout, count: usize| Section {
+        title: title.into(),
+        layout,
+        items: (0..count).map(|index| format!("{title} {index}")).collect(),
+    };
+    let props = SectionedViewProps {
+        sections: vec![
+            section("Recent", SectionLayout::List, 2),
+            section("Photos", SectionLayout::Grid(3), 5),
+            section("Albums", SectionLayout::Carousel, 4),
+        ],
+    };
+    let app = HeadlessApp::launch_with(
+        Window::new("Sections", Size::new(600, 900)),
+        Services::default(),
+        with_roles(framework_core::Theme::default()),
+        move || SectionedView::new(props.clone()),
+    );
+    let rect = |key: &str| app.find(&Query::key(key)).expect(key).window_rect;
+    assert_eq!(text(&app, "s1-title"), "Photos");
+    // A list stacks.
+    assert!(rect("s0-1").y > rect("s0-0").y);
+    // A grid of three fills a row, then wraps.
+    assert_eq!(rect("s1-0").y, rect("s1-2").y);
+    assert!(rect("s1-1").x > rect("s1-0").x);
+    assert!(rect("s1-3").y > rect("s1-0").y);
+    assert_eq!(rect("s1-3").x, rect("s1-0").x);
+    // A carousel is one row.
+    assert_eq!(rect("s2-0").y, rect("s2-3").y);
+    assert!(rect("s2-3").x > rect("s2-0").x);
 }

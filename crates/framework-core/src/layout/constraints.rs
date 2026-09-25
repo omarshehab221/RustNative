@@ -142,6 +142,9 @@ pub struct LayoutStyle {
     /// inherits from the parent, and the window root from the
     /// environment's [`crate::keys::LAYOUT_DIRECTION`].
     pub direction: Option<super::LayoutDirection>,
+    /// Where this node goes in a parent grid (see [`crate::Node::grid`]);
+    /// ignored by every other container.
+    pub grid: Option<super::GridPlacement>,
 }
 
 impl Default for LayoutStyle {
@@ -153,6 +156,7 @@ impl Default for LayoutStyle {
             align_self: None,
             constraints: Constraints::default(),
             direction: None,
+            grid: None,
         }
     }
 }
@@ -169,6 +173,7 @@ impl LayoutStyle {
             align_self: None,
             constraints: Constraints::new(),
             direction: None,
+            grid: None,
         }
     }
 
@@ -204,6 +209,13 @@ impl LayoutStyle {
     #[must_use]
     pub const fn constraints(mut self, constraints: Constraints) -> Self {
         self.constraints = constraints;
+        self
+    }
+
+    /// Places this node in its parent grid (see [`crate::Node::grid`]).
+    #[must_use]
+    pub const fn grid(mut self, placement: super::GridPlacement) -> Self {
+        self.grid = Some(placement);
         self
     }
 

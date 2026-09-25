@@ -1,0 +1,41 @@
+window "Gallery" 900x1400
+Column #gallery [0,0 900x1400]
+  Row #navigation [24,24 852x1352]
+    Column #destinations [24,24 306x1304] role=TabList
+      Button #destination-0 "Overview" [24,24 258x32] role=Tab
+      Button #destination-1 "Data" [24,68 258x32] role=Tab focused
+      Button #destination-2 "Settings" [24,112 258x32] role=Tab
+    Column #content [342,24 486x1304]
+      Column #data [24,24 438x292]
+        Column #table [24,24 390x140] role=Table
+          Row #headers [24,24 342x80]
+            Button #header-0 "Name" [24,24 120x32]
+            Button #header-1 "Born" [156,24 120x32]
+          Column #rows [24,116 342x0]
+            Row #row-0 [0,0 342x26]
+              Label #cell-0-0 "Ada Lovelace" [24,24 120x0] role=Cell
+              Label #cell-0-1 "1815" [156,24 120x0] role=Cell
+            Row #row-1 [0,26 342x26]
+              Label #cell-1-0 "Grace Hopper" [24,24 120x0] role=Cell
+              Label #cell-1-1 "1906" [156,24 120x0] role=Cell
+            Row #row-2 [0,52 342x26]
+              Label #cell-2-0 "Alan Turing" [24,24 120x0] role=Cell
+              Label #cell-2-1 "1912" [156,24 120x0] role=Cell
+        Column #tree [24,176 390x80] role=Tree
+          Button #node-src "▸ src" [24,24 342x32] role=TreeItem name="src"
+        Column #sections [24,268 390x0]
+          Column #section-0 [0,0 390x216]
+            Label #s0-title "Recent" [24,24 342x32] role=Heading { level: 3 }
+            Column #s0-body [24,68 342x124] role=List
+              Button #s0-0 "Notes" [24,24 294x32] role=ListItem
+              Button #s0-1 "Plan" [24,68 294x32] role=ListItem
+          Column #section-1 [0,160 390x164]
+            Label #s1-title "Photos" [24,24 342x32] role=Heading { level: 3 }
+            Column #s1-body [24,68 342x72] role=List
+              Button #s1-0 "Photo 1" [0,0 108x32] role=ListItem
+              Button #s1-1 "Photo 2" [116,0 108x32] role=ListItem
+              Button #s1-2 "Photo 3" [232,0 108x32] role=ListItem
+              Button #s1-3 "Photo 4" [0,40 108x32] role=ListItem
+              Button #s1-4 "Photo 5" [116,40 108x32] role=ListItem
+              Button #s1-5 "Photo 6" [232,40 108x32] role=ListItem
+  Column #toast [0,0 0x0] hidden

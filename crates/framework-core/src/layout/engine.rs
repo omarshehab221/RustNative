@@ -354,7 +354,17 @@ impl LayoutEngine {
                 if !matches!(style.overflow, Overflow::Visible) {
                     result.clips.insert(node.id, Rect::new(0, 0, rect.width, rect.height));
                 }
-                let content_size = if let Some(virtualization) = node.virtualization {
+                let content_size = if let Some(grid) = &node.grid {
+                    self.layout_grid(
+                        snapshot,
+                        content_rect,
+                        &children,
+                        grid,
+                        result,
+                        measurer,
+                        extents,
+                    )
+                } else if let Some(virtualization) = node.virtualization {
                     self.layout_virtual(
                         snapshot,
                         node,
@@ -431,6 +441,176 @@ impl LayoutEngine {
             | NodeKind::Canvas
             | NodeKind::Surface => {}
         }
+    }
+
+    /// Where each visible child of a grid goes, and how many rows there
+    /// are.
+    fn grid_cells(
+        grid: &super::GridStyle,
+        children: &[&TreeNode],
+    ) -> (Vec<super::GridPlacement>, usize) {
+        let columns = grid.columns.len().max(1);
+        let placements = super::grid::place(
+            columns,
+            &children.iter().map(|child| child.layout.grid).collect::<Vec<_>>(),
+        );
+        let rows = placements
+            .iter()
+            .map(|placement| placement.row + placement.row_span)
+            .max()
+            .unwrap_or(0)
+            .max(grid.rows.len());
+        (placements, rows)
+    }
+
+    /// The tracks' sizes: columns from the children's natural widths within
+    /// `width` (none when measuring), then rows from their heights at those
+    /// widths within `height`.
+    #[allow(clippy::too_many_arguments, reason = "one grid pass's inputs")]
+    fn grid_tracks<M: IntrinsicMeasurer>(
+        &self,
+        snapshot: &TreeSnapshot,
+        grid: &super::GridStyle,
+        children: &[&TreeNode],
+        placements: &[super::GridPlacement],
+        rows: usize,
+        width: Option<i32>,
+        height: Option<i32>,
+        measurer: &M,
+    ) -> (Vec<i32>, Vec<i32>) {
+        let columns = grid.columns.len().max(1);
+        let mut natural_widths = vec![0; columns];
+        for (child, placement) in children.iter().zip(placements) {
+            if placement.column_span == 1 {
+                let wanted = self.preferred_width(snapshot, child, measurer);
+                natural_widths[placement.column] = natural_widths[placement.column].max(wanted);
+            }
+        }
+        let widths =
+            super::grid::size_tracks(&grid.columns, columns, &natural_widths, grid.gap, width);
+        let span = |sizes: &[i32], start: usize, count: usize| {
+            let end = (start + count).min(sizes.len());
+            sizes[start.min(end)..end].iter().copied().fold(0, i32::saturating_add)
+                + grid.gap.max(0) * i32::try_from(count.saturating_sub(1)).unwrap_or(0)
+        };
+        let mut natural_heights = vec![0; rows];
+        for (child, placement) in children.iter().zip(placements) {
+            if placement.row_span == 1 {
+                let available = span(&widths, placement.column, placement.column_span)
+                    .saturating_sub(child.layout.margin.horizontal());
+                let wanted =
+                    self.preferred_height(snapshot, child, measurer, Some(available.max(0)));
+                natural_heights[placement.row] = natural_heights[placement.row].max(wanted);
+            }
+        }
+        let heights =
+            super::grid::size_tracks(&grid.rows, rows, &natural_heights, grid.gap, height);
+        (widths, heights)
+    }
+
+    /// A grid's natural `(width, height)`.
+    fn grid_natural<M: IntrinsicMeasurer>(
+        &self,
+        snapshot: &TreeSnapshot,
+        node: &TreeNode,
+        measurer: &M,
+    ) -> (i32, i32) {
+        let Some(grid) = &node.grid else { return (0, 0) };
+        let children = ordered_children(snapshot, node.id)
+            .into_iter()
+            .filter(|child| !child.hidden)
+            .collect::<Vec<_>>();
+        let (placements, rows) = Self::grid_cells(grid, &children);
+        let (widths, heights) =
+            self.grid_tracks(snapshot, grid, &children, &placements, rows, None, None, measurer);
+        let total = |sizes: &[i32]| {
+            sizes.iter().copied().fold(0, i32::saturating_add)
+                + grid.gap.max(0) * i32::try_from(sizes.len().saturating_sub(1)).unwrap_or(0)
+        };
+        (
+            total(&widths).saturating_add(grid.padding.horizontal()),
+            total(&heights).saturating_add(grid.padding.vertical()),
+        )
+    }
+
+    /// Lays a grid's visible children out in its cells (`C18-1`).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one layout pass's inputs, not a decomposable set"
+    )]
+    fn layout_grid<M: IntrinsicMeasurer>(
+        &self,
+        snapshot: &TreeSnapshot,
+        rect: Rect,
+        children: &[&TreeNode],
+        grid: &super::GridStyle,
+        result: &mut LayoutResult,
+        measurer: &M,
+        extents: &HashMap<NodeId, ExtentCache>,
+    ) -> Size {
+        let content = inner_rect(rect, grid.padding);
+        let (placements, rows) = Self::grid_cells(grid, children);
+        let (widths, heights) = self.grid_tracks(
+            snapshot,
+            grid,
+            children,
+            &placements,
+            rows,
+            Some(content.width),
+            Some(content.height),
+            measurer,
+        );
+        let gap = grid.gap.max(0);
+        let starts = |sizes: &[i32], origin: i32| {
+            let mut at = origin;
+            sizes
+                .iter()
+                .map(|size| {
+                    let start = at;
+                    at = at.saturating_add(*size).saturating_add(gap);
+                    start
+                })
+                .collect::<Vec<_>>()
+        };
+        let (xs, ys) = (starts(&widths, content.x), starts(&heights, content.y));
+        let extent = |sizes: &[i32], start: usize, count: usize| {
+            let end = (start + count).min(sizes.len());
+            sizes[start.min(end)..end].iter().copied().fold(0, i32::saturating_add)
+                + gap * i32::try_from(count.saturating_sub(1)).unwrap_or(0)
+        };
+        for (child, placement) in children.iter().zip(&placements) {
+            let cell = Rect::new(
+                xs.get(placement.column).copied().unwrap_or(content.x),
+                ys.get(placement.row).copied().unwrap_or(content.y),
+                extent(&widths, placement.column, placement.column_span),
+                extent(&heights, placement.row, placement.row_span),
+            );
+            let margin = child.layout.margin;
+            let inner = inner_rect(cell, margin);
+            let width = match child.layout.width {
+                SizeMode::Fixed(value) => value.max(0).min(inner.width),
+                _ => inner.width,
+            };
+            let height = match child.layout.height {
+                SizeMode::Fixed(value) => value.max(0).min(inner.height),
+                _ => inner.height,
+            };
+            let child_rect = Rect::new(
+                inner.x,
+                inner.y,
+                child.layout.constraints.clamp_width(width),
+                child.layout.constraints.clamp_height(height),
+            );
+            self.layout_node(snapshot, child, child_rect, result, measurer, extents);
+        }
+        let total = |sizes: &[i32]| {
+            sizes.iter().copied().fold(0, i32::saturating_add)
+                + gap * i32::try_from(sizes.len().saturating_sub(1)).unwrap_or(0)
+        };
+        Size::new(
+            u32::try_from(total(&widths).saturating_add(grid.padding.horizontal())).unwrap_or(0),
+            u32::try_from(total(&heights).saturating_add(grid.padding.vertical())).unwrap_or(0),
+        )
     }
 
     #[allow(
@@ -925,6 +1105,9 @@ impl LayoutEngine {
                 measurer.measure_foreign(node.foreign.as_deref().unwrap_or_default()).height as i32
             }
             NodeKind::Canvas | NodeKind::Surface => 0,
+            NodeKind::Column if node.grid.is_some() => {
+                self.grid_natural(snapshot, node, measurer).1
+            }
             NodeKind::Column => {
                 let style = node.column_style.unwrap_or_default();
                 let children = ordered_children(snapshot, node.id);
@@ -977,6 +1160,9 @@ impl LayoutEngine {
         }
         let children = ordered_children(snapshot, node.id);
         match node.kind {
+            NodeKind::Column if node.grid.is_some() => {
+                self.grid_natural(snapshot, node, measurer).0
+            }
             NodeKind::Column => {
                 let style = node.column_style.unwrap_or_default();
                 style.padding.horizontal().saturating_add(
