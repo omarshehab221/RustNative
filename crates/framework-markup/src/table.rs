@@ -31,6 +31,32 @@ pub enum Constructor {
     Row,
     /// `Node::virtual_list_with_layout(key, list, layout, children)`.
     VirtualList,
+    /// `Node::control_with_layout(key, Control::Checkbox{…}, layout)`.
+    Checkbox,
+    /// `Node::control_with_layout(key, Control::Radio{…}, layout)`.
+    Radio,
+    /// `Node::control_with_layout(key, Control::Toggle{…}, layout)`.
+    Toggle,
+    /// `Node::control_with_layout(key, Control::Slider{…}, layout)`.
+    Slider,
+    /// `Node::control_with_layout(key, Control::Progress{…}, layout)`.
+    Progress,
+    /// `Node::control_with_layout(key, Control::Select{…}, layout)`.
+    Select,
+    /// `Node::control_with_layout(key, Control::ListBox{…}, layout)`.
+    ListBox,
+    /// `Node::control_with_layout(key, Control::DatePicker{…}, layout)`.
+    DatePicker,
+    /// `Node::control_with_layout(key, Control::Spinner{…}, layout)`.
+    Spinner,
+    /// `Node::control_with_layout(key, Control::Separator{…}, layout)`.
+    Separator,
+    /// `Node::control_with_layout(key, Control::Link{…}, layout)`.
+    Link,
+    /// `Node::control_with_layout(key, Control::MultilineText{…}, layout)`.
+    MultilineText,
+    /// `Node::control_with_layout(key, Control::Image{…}, layout)`.
+    Image,
 }
 
 /// What kind of attribute an attribute is, which decides how it lowers.
@@ -198,6 +224,102 @@ pub fn element_table() -> Vec<ElementSpec> {
             Constructor::VirtualList,
             vec![required("list", AttrKind::Argument, "Node::virtual_list_with_layout")],
             true,
+        ),
+        element(
+            "Checkbox",
+            Constructor::Checkbox,
+            vec![
+                required("label", AttrKind::Argument, "Control::Checkbox"),
+                required("checked", AttrKind::Argument, "Control::Checkbox"),
+            ],
+            false,
+        ),
+        element(
+            "Radio",
+            Constructor::Radio,
+            vec![
+                required("label", AttrKind::Argument, "Control::Radio"),
+                required("selected", AttrKind::Argument, "Control::Radio"),
+            ],
+            false,
+        ),
+        element(
+            "Toggle",
+            Constructor::Toggle,
+            vec![
+                required("label", AttrKind::Argument, "Control::Toggle"),
+                required("on", AttrKind::Argument, "Control::Toggle"),
+            ],
+            false,
+        ),
+        element(
+            "Slider",
+            Constructor::Slider,
+            vec![
+                required("value", AttrKind::Argument, "Control::Slider"),
+                required("min", AttrKind::Argument, "Control::Slider"),
+                required("max", AttrKind::Argument, "Control::Slider"),
+            ],
+            false,
+        ),
+        element(
+            "Progress",
+            Constructor::Progress,
+            vec![required("percent", AttrKind::Argument, "Control::Progress")],
+            false,
+        ),
+        element(
+            "Select",
+            Constructor::Select,
+            vec![
+                required("options", AttrKind::Argument, "Control::Select"),
+                required("selected", AttrKind::Argument, "Control::Select"),
+            ],
+            false,
+        ),
+        element(
+            "ListBox",
+            Constructor::ListBox,
+            vec![
+                required("items", AttrKind::Argument, "Control::ListBox"),
+                required("selected", AttrKind::Argument, "Control::ListBox"),
+            ],
+            false,
+        ),
+        element(
+            "DatePicker",
+            Constructor::DatePicker,
+            vec![required("date", AttrKind::Argument, "Control::DatePicker")],
+            false,
+        ),
+        element(
+            "Spinner",
+            Constructor::Spinner,
+            vec![
+                required("value", AttrKind::Argument, "Control::Spinner"),
+                required("min", AttrKind::Argument, "Control::Spinner"),
+                required("max", AttrKind::Argument, "Control::Spinner"),
+            ],
+            false,
+        ),
+        element("Separator", Constructor::Separator, vec![], false),
+        element(
+            "Link",
+            Constructor::Link,
+            vec![required("text", AttrKind::Argument, "Control::Link")],
+            false,
+        ),
+        element(
+            "MultilineText",
+            Constructor::MultilineText,
+            vec![required("value", AttrKind::Argument, "Control::MultilineText")],
+            false,
+        ),
+        element(
+            "Image",
+            Constructor::Image,
+            vec![required("image", AttrKind::Argument, "Control::Image")],
+            false,
         ),
     ]
 }

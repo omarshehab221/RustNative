@@ -6,7 +6,7 @@ use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{FillRect, HDC};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetClientRect, SendMessageW, WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
-    WM_CTLCOLORSTATIC, WM_ERASEBKGND, WM_GETOBJECT, WM_NCDESTROY, WM_NOTIFY, WM_SIZE,
+    WM_CTLCOLORSTATIC, WM_ERASEBKGND, WM_GETOBJECT, WM_HSCROLL, WM_NCDESTROY, WM_NOTIFY, WM_SIZE,
 };
 
 use super::context::{root_window, with_runtime};
@@ -53,7 +53,8 @@ fn container_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM)
     let default = || unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
 
     match message {
-        WM_COMMAND | WM_NOTIFY | WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
+        WM_COMMAND | WM_NOTIFY | WM_HSCROLL | WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT
+        | WM_CTLCOLORBTN => {
             // These are all sent to a control's *immediate* parent. A
             // container is frequently just one link in a chain of nested
             // containers, so forward up to the top-level window, whose

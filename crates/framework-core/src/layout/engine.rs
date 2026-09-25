@@ -427,6 +427,7 @@ impl LayoutEngine {
             | NodeKind::Button
             | NodeKind::TextInput
             | NodeKind::TabBar
+            | NodeKind::Control
             | NodeKind::Canvas
             | NodeKind::Surface => {}
         }
@@ -858,6 +859,10 @@ impl LayoutEngine {
                     )
                     .width as i32
             }
+            NodeKind::Control => node
+                .control
+                .as_ref()
+                .map_or(0, |control| measurer.measure_control(control).width as i32),
             // A foreign object has the size its factory reports.
             NodeKind::Surface if node.foreign.is_some() => {
                 measurer.measure_foreign(node.foreign.as_deref().unwrap_or_default()).width as i32
@@ -912,6 +917,10 @@ impl LayoutEngine {
                     )
                     .height as i32
             }
+            NodeKind::Control => node
+                .control
+                .as_ref()
+                .map_or(0, |control| measurer.measure_control(control).height as i32),
             NodeKind::Surface if node.foreign.is_some() => {
                 measurer.measure_foreign(node.foreign.as_deref().unwrap_or_default()).height as i32
             }

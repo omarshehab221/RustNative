@@ -407,6 +407,98 @@ impl HeadlessApp {
         Ok(())
     }
 
+    fn control_node(
+        &mut self,
+        query: &Query,
+    ) -> Result<(framework_core::Control, NodeId), QueryError> {
+        let node = self.find(query)?.clone();
+        let Some(control) = node.control.clone() else {
+            return Err(not_interactable(&node, "it is not a native control"));
+        };
+        if !node.is_interactable() {
+            return Err(not_interactable(&node, "it is disabled"));
+        }
+        self.move_focus(Some(node.id));
+        Ok((control, node.id))
+    }
+
+    /// Clicks the check box, switch, or radio button matching `query`, as
+    /// the person would (Milestone 48).
+    ///
+    /// # Errors
+    ///
+    /// The query failed, or the node is not an enabled toggle.
+    pub fn toggle(&mut self, query: &Query) -> Result<(), QueryError> {
+        use framework_core::Control;
+        let (control, id) = self.control_node(query)?;
+        let on = match control {
+            Control::Checkbox { checked, .. } => !checked,
+            Control::Toggle { on, .. } => !on,
+            Control::Radio { .. } => true,
+            _ => return Err(not_interactable(self.find(query)?, "it is not a toggle")),
+        };
+        self.dispatch(Event::Toggled { target: id, on });
+        Ok(())
+    }
+
+    /// Moves the slider or spinner matching `query` to `value`, clamped to
+    /// its range.
+    ///
+    /// # Errors
+    ///
+    /// The query failed, or the node is not an enabled slider or spinner.
+    pub fn set_value(&mut self, query: &Query, value: i64) -> Result<(), QueryError> {
+        use framework_core::Control;
+        let (control, id) = self.control_node(query)?;
+        let value = match control {
+            Control::Slider { min, max, .. } | Control::Spinner { min, max, .. } => {
+                value.clamp(min, max)
+            }
+            _ => return Err(not_interactable(self.find(query)?, "it has no range")),
+        };
+        self.dispatch(Event::ValueChanged { target: id, value });
+        Ok(())
+    }
+
+    /// Chooses item `index` of the select or list box matching `query`.
+    ///
+    /// # Errors
+    ///
+    /// The query failed, the node is not an enabled select or list box, or
+    /// it has no such item.
+    pub fn choose(&mut self, query: &Query, index: usize) -> Result<(), QueryError> {
+        use framework_core::Control;
+        let (control, id) = self.control_node(query)?;
+        let count = match &control {
+            Control::Select { options, .. } => options.len(),
+            Control::ListBox { items, .. } => items.len(),
+            _ => 0,
+        };
+        if index >= count {
+            return Err(not_interactable(self.find(query)?, "no such item"));
+        }
+        self.dispatch(Event::SelectionChanged { target: id, index: Some(index) });
+        Ok(())
+    }
+
+    /// Picks `date` in the date picker matching `query`.
+    ///
+    /// # Errors
+    ///
+    /// The query failed, or the node is not an enabled date picker.
+    pub fn pick_date(
+        &mut self,
+        query: &Query,
+        date: framework_core::CalendarDate,
+    ) -> Result<(), QueryError> {
+        let (control, id) = self.control_node(query)?;
+        if !matches!(control, framework_core::Control::DatePicker { .. }) {
+            return Err(not_interactable(self.find(query)?, "it is not a date picker"));
+        }
+        self.dispatch(Event::DateChanged { target: id, date });
+        Ok(())
+    }
+
     /// Types `text` into the field matching `query`, one character at a
     /// time, as a keyboard would — focusing it first.
     ///

@@ -96,6 +96,8 @@ pub struct TreeNode {
     pub draw_list: Option<DrawList>,
     /// This node's tabs, if it is a tab bar (see [`crate::Node::tab_bar`]).
     pub tabs: Option<Tabs>,
+    /// This node's control, if it is one (see [`crate::Node::control`]).
+    pub control: Option<crate::control::Control>,
     /// Whether this node is hidden (see [`crate::Node::hidden`]). Only the
     /// node's own flag: a node inside a hidden container is hidden too,
     /// which [`TreeSnapshot::is_effectively_hidden`] answers.
@@ -117,6 +119,7 @@ impl TreeNode {
             Node::TextInput(input) => Some(input.value().to_owned()),
             // A tab strip measures like the text of its labels side by side.
             Node::TabBar(bar) => Some(bar.tabs().labels().join("     ")),
+            Node::Control(control) => control.control().text(),
             Node::Column(_) | Node::Row(_) | Node::Canvas(_) | Node::Surface(_) => None,
         };
 
@@ -145,6 +148,7 @@ impl TreeNode {
             virtualization: node.virtualization(),
             draw_list: node.draw_list().cloned(),
             tabs: node.tabs().cloned(),
+            control: node.control_state().cloned(),
             hidden: node.is_hidden(),
             cursor: node.cursor(),
         }

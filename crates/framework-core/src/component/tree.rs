@@ -1667,6 +1667,7 @@ fn scope_component_node_ids(
         Node::Label(_)
         | Node::Button(_)
         | Node::TextInput(_)
+        | Node::Control(_)
         | Node::Canvas(_)
         | Node::Surface(_)
         | Node::TabBar(_) => {}

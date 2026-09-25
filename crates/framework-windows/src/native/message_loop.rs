@@ -6,22 +6,24 @@ use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPA
 use windows_sys::Win32::Graphics::Gdi::{
     COLOR_WINDOW, GetSysColorBrush, HDC, SetBkColor, SetBkMode, SetTextColor, TRANSPARENT,
 };
-use windows_sys::Win32::UI::Controls::{NMHDR, TCN_SELCHANGE};
+use windows_sys::Win32::UI::Controls::{
+    DTN_DATETIMECHANGE, NM_CLICK, NM_RETURN, NMHDR, TCN_SELCHANGE,
+};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    BN_CLICKED, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW, DestroyWindow,
-    DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, MSG, PM_NOREMOVE, PeekMessageW,
-    PostMessageW, PostQuitMessage, RegisterClassW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
-    TranslateMessage, WM_CAPTURECHANGED, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLORBTN,
-    WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_ENDSESSION, WM_KEYDOWN,
-    WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOVE, WM_NCCREATE, WM_NOTIFY,
-    WM_PAINT, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE, WM_POWERBROADCAST,
-    WM_QUERYENDSESSION, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETTINGCHANGE,
-    WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK, WM_XBUTTONDOWN, WM_XBUTTONUP,
-    WNDCLASSW,
+    BN_CLICKED, CBN_SELCHANGE, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, DefWindowProcW,
+    DestroyWindow, DispatchMessageW, EN_CHANGE, GetMessageW, KillTimer, LBN_SELCHANGE, MSG,
+    PM_NOREMOVE, PeekMessageW, PostMessageW, PostQuitMessage, RegisterClassW, SWP_NOACTIVATE,
+    SWP_NOZORDER, SetWindowPos, TranslateMessage, WM_CAPTURECHANGED, WM_CHAR, WM_CLOSE, WM_COMMAND,
+    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_ENDSESSION,
+    WM_HSCROLL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_MOVE, WM_NCCREATE, WM_NOTIFY, WM_PAINT, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE,
+    WM_POWERBROADCAST, WM_QUERYENDSESSION, WM_QUIT, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_SETTINGCHANGE, WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_XBUTTONDBLCLK,
+    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
 };
 
 use super::container::container_proc;
@@ -758,8 +760,15 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
             let header = unsafe { &*(lparam as *const NMHDR) };
             if header.code == TCN_SELCHANGE {
                 with_runtime(hwnd, |runtime| tab_selected(runtime, header.hwndFrom));
+            } else if matches!(header.code, DTN_DATETIMECHANGE | NM_CLICK | NM_RETURN) {
+                let (code, from) = (header.code, header.hwndFrom);
+                with_runtime(hwnd, |runtime| control_notify(runtime, code, from));
             }
             default()
+        }
+        WM_HSCROLL => {
+            slider_moved(hwnd, lparam as HWND);
+            0
         }
         WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
             with_runtime(hwnd, |runtime| control_color(runtime, wparam, lparam))
@@ -1103,12 +1112,132 @@ fn tab_selected(runtime: &mut Runtime, control: HWND) {
     }
 }
 
+/// A person's change to a native control (`rendering::native_controls`):
+/// report it, then put the control back to whatever the component decided.
+fn control_changed(runtime: &mut Runtime, id: framework_core::NodeId, event: Event) {
+    if !runtime.dispatch_or_quit(event) {
+        return;
+    }
+    resync_control(runtime, id);
+}
+
+fn resync_control(runtime: &mut Runtime, id: framework_core::NodeId) {
+    let Some(NativeObject::Control { hwnd, companion, .. }) = runtime.renderer.registry.get(id)
+    else {
+        return;
+    };
+    let (hwnd, companion) = (*hwnd, *companion);
+    if let Some(control) = runtime.renderer.snapshot.get(id).and_then(|node| node.control.clone()) {
+        // Forget what was shown: the person changed the control since.
+        super::rendering::native_controls::forget(hwnd);
+        let edited = matches!(
+            control,
+            framework_core::Control::Spinner { .. } | framework_core::Control::MultilineText { .. }
+        );
+        let before = window_text(hwnd);
+        super::rendering::native_controls::sync(hwnd, companion, &control);
+        if edited && window_text(hwnd) != before {
+            runtime.renderer.suppress_text_change.insert(id);
+        }
+    }
+}
+
+/// A trackbar moved (a scroll bar sends no control handle).
+fn slider_moved(hwnd: HWND, control: HWND) {
+    if control.is_null() {
+        return;
+    }
+    with_runtime(hwnd, |runtime| {
+        if let Some(id) = runtime.renderer.registry.id_for_hwnd(control) {
+            let value = super::rendering::native_controls::slider_position(control);
+            control_changed(runtime, id, Event::ValueChanged { target: id, value });
+        }
+    });
+}
+
+/// A `WM_NOTIFY` from a native control: a date picked, a link followed.
+fn control_notify(runtime: &mut Runtime, code: u32, control: HWND) {
+    let Some(id) = runtime.renderer.registry.id_for_hwnd(control) else { return };
+    if code == DTN_DATETIMECHANGE {
+        if let Some(date) = super::rendering::native_controls::date(control) {
+            control_changed(runtime, id, Event::DateChanged { target: id, date });
+        }
+    } else {
+        runtime.dispatch_or_quit(Event::Click { target: id });
+    }
+}
+
+/// A `WM_COMMAND` from a native control; `true` when it was one.
+fn native_control_command(
+    runtime: &mut Runtime,
+    id: framework_core::NodeId,
+    notification_code: u32,
+    control: HWND,
+) -> bool {
+    let Some(NativeObject::Control { tag, .. }) = runtime.renderer.registry.get(id) else {
+        return false;
+    };
+    let tag = *tag;
+    let event = match (tag, notification_code) {
+        ("check", BN_CLICKED) => {
+            // A manual check box does not change itself: the new state is
+            // the opposite of what it shows.
+            Some(Event::Toggled {
+                target: id,
+                on: !super::rendering::native_controls::is_checked(control),
+            })
+        }
+        ("radio", BN_CLICKED) => Some(Event::Toggled { target: id, on: true }),
+        // A link realized as clickable text (no Common Controls 6).
+        ("link", BN_CLICKED) => {
+            runtime.dispatch_or_quit(Event::Click { target: id });
+            return true;
+        }
+        ("combobox", CBN_SELCHANGE) => Some(Event::SelectionChanged {
+            target: id,
+            index: super::rendering::native_controls::selection(control, false),
+        }),
+        ("listbox", LBN_SELCHANGE) => Some(Event::SelectionChanged {
+            target: id,
+            index: super::rendering::native_controls::selection(control, true),
+        }),
+        ("spinner", EN_CHANGE) => {
+            if runtime.renderer.suppress_text_change.remove(&id) {
+                return true;
+            }
+            window_text(control)
+                .trim()
+                .parse::<i64>()
+                .ok()
+                .map(|value| Event::ValueChanged { target: id, value })
+        }
+        ("multiline", EN_CHANGE) => {
+            if runtime.renderer.suppress_text_change.remove(&id) {
+                return true;
+            }
+            // The text is the person's own: not written back, which would
+            // move the caret.
+            runtime
+                .dispatch_or_quit(Event::TextChanged { target: id, value: window_text(control) });
+            return true;
+        }
+        _ => None,
+    };
+    if let Some(event) = event {
+        control_changed(runtime, id, event);
+    }
+    true
+}
+
 fn control_notification(
     runtime: &mut Runtime,
     id: framework_core::NodeId,
     notification_code: u32,
     control: HWND,
 ) {
+    if native_control_command(runtime, id, notification_code, control) {
+        return;
+    }
     if notification_code == BN_CLICKED {
         runtime.dispatch_or_quit(Event::Click { target: id });
         return;

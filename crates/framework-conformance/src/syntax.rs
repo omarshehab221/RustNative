@@ -17,6 +17,17 @@ pub fn drawing() -> DrawList {
     DrawList::new().fill_rect(RectF::new(0.0, 0.0, 10.0, 10.0), Paint::color(Color::rgb(1, 2, 3)))
 }
 
+/// A two-by-one picture for the image case.
+///
+/// # Panics
+///
+/// Never: the pixel buffer matches the size.
+#[must_use]
+pub fn picture() -> framework_core::ImageData {
+    framework_core::ImageData::rgba(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255], false)
+        .unwrap_or_else(|error| panic!("{error}"))
+}
+
 /// The accessibility value of the modifier case.
 #[must_use]
 pub fn accessibility() -> AccessibilityInfo {

@@ -49,6 +49,7 @@ pub(crate) mod accessibility;
 pub(crate) mod animated;
 pub(crate) mod controls;
 pub(crate) mod direction;
+pub(crate) mod native_controls;
 pub(crate) mod pool;
 pub(crate) mod realization;
 pub(crate) mod scrolling;

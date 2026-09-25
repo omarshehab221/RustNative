@@ -34,6 +34,43 @@ pub trait IntrinsicMeasurer {
         self.measure(kind, text, max_width)
     }
 
+    /// The natural size of a native control (Milestone 48): its text's
+    /// size plus the control's own chrome, or a fixed size for controls
+    /// without text. A backend with real metrics measures the text; the
+    /// chrome here is the conventional desktop size of each control.
+    fn measure_control(&self, control: &crate::control::Control) -> Size {
+        use crate::control::Control;
+        let text = |text: &str, chrome: u32, height: u32| {
+            let measured = self.measure(NodeKind::Label, Some(text), None);
+            Size::new(measured.width.saturating_add(chrome), measured.height.max(height))
+        };
+        match control {
+            Control::Checkbox { label, .. }
+            | Control::Radio { label, .. }
+            | Control::Toggle { label, .. } => text(label, 24, 20),
+            Control::Slider { .. } => Size::new(160, 28),
+            Control::Progress { .. } => Size::new(160, 16),
+            Control::Select { options, .. } => {
+                let widest = options
+                    .iter()
+                    .map(|option| self.measure(NodeKind::Label, Some(option), None).width);
+                Size::new(widest.max().unwrap_or(0).saturating_add(32).max(80), 26)
+            }
+            Control::ListBox { items, .. } => {
+                let widest =
+                    items.iter().map(|item| self.measure(NodeKind::Label, Some(item), None).width);
+                let rows = u32::try_from(items.len().clamp(3, 8)).unwrap_or(8);
+                Size::new(widest.max().unwrap_or(0).saturating_add(24).max(120), rows * 18 + 4)
+            }
+            Control::DatePicker { .. } => Size::new(140, 26),
+            Control::Spinner { .. } => Size::new(96, 26),
+            Control::Separator => Size::new(0, 2),
+            Control::Link { text: link } => text(link, 0, 18),
+            Control::MultilineText { .. } => Size::new(240, 80),
+            Control::Image { image } => Size::new(image.width(), image.height()),
+        }
+    }
+
     /// The natural size of a foreign object of the given factory `kind`
     /// ([`crate::Node::foreign`]): what the backend's factory reports, or
     /// nothing (the layout must size it) when this measurer knows none.
@@ -64,6 +101,7 @@ impl IntrinsicMeasurer for DefaultIntrinsicMeasurer {
                 NodeKind::Button | NodeKind::TextInput => 24,
                 NodeKind::TabBar => 48,
                 NodeKind::Label
+                | NodeKind::Control
                 | NodeKind::Column
                 | NodeKind::Row
                 | NodeKind::Canvas

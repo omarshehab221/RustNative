@@ -10,8 +10,9 @@ use std::collections::HashMap;
 
 use crate::animation::{AnimatedProperty, Transition};
 use crate::command::CommandId;
+use crate::control::{CalendarDate, Control};
 use crate::event::AccessibilityInfo;
-use crate::graphics::DrawList;
+use crate::graphics::{DrawList, ImageData};
 use crate::identity::NodeId;
 use crate::input::Scalar;
 use crate::input::{Cursor, InputInterest};
@@ -27,6 +28,7 @@ macro_rules! node_field {
             Node::Button(node) => &node.$field,
             Node::TextInput(node) => &node.$field,
             Node::TabBar(node) => &node.$field,
+            Node::Control(node) => &node.$field,
             Node::Canvas(node) => &node.$field,
             Node::Surface(node) => &node.$field,
             Node::Column(node) => &node.$field,
@@ -39,6 +41,7 @@ macro_rules! node_field {
             Node::Button(node) => &mut node.$field,
             Node::TextInput(node) => &mut node.$field,
             Node::TabBar(node) => &mut node.$field,
+            Node::Control(node) => &mut node.$field,
             Node::Canvas(node) => &mut node.$field,
             Node::Surface(node) => &mut node.$field,
             Node::Column(node) => &mut node.$field,
@@ -64,6 +67,9 @@ pub enum Node {
     Surface(Surface),
     /// A strip of tabs, one selected (see [`Node::tab_bar`]).
     TabBar(TabBar),
+    /// A native control: a check box, slider, select, date picker, and the
+    /// rest of [`Control`] (see [`Node::control`]).
+    Control(ControlNode),
     /// A container that lays its children out vertically.
     Column(Column),
     /// A container that lays its children out horizontally.
@@ -297,6 +303,130 @@ impl Node {
         }
     }
 
+    /// Creates a native control (see [`crate::control`]), sized by its
+    /// natural size.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use framework_core::{Control, Node};
+    ///
+    /// let remember = Node::checkbox("remember", "Remember me", true);
+    /// assert_eq!(
+    ///     remember.control_state(),
+    ///     Some(&Control::Checkbox { label: "Remember me".into(), checked: true })
+    /// );
+    ///
+    /// // The same control in markup:
+    /// let markup = framework_core::rsx! { <Checkbox key="remember" label="Remember me" checked=true /> };
+    /// assert_eq!(markup, remember);
+    /// ```
+    pub fn control(key: impl AsRef<str>, control: Control) -> Self {
+        Self::control_with_layout(key, control, LayoutStyle::new())
+    }
+
+    /// Creates a native control with an explicit layout.
+    pub fn control_with_layout(
+        key: impl AsRef<str>,
+        control: Control,
+        layout: LayoutStyle,
+    ) -> Self {
+        let accessibility = control.accessibility();
+        Self::Control(ControlNode::new(NodeId::from_key(key.as_ref()), control, layout))
+            .with_accessibility(accessibility)
+    }
+
+    /// A check box (see [`Control::Checkbox`]).
+    pub fn checkbox(key: impl AsRef<str>, label: impl Into<String>, checked: bool) -> Self {
+        Self::control(key, Control::Checkbox { label: label.into(), checked })
+    }
+
+    /// A radio button (see [`Control::Radio`]).
+    pub fn radio(key: impl AsRef<str>, label: impl Into<String>, selected: bool) -> Self {
+        Self::control(key, Control::Radio { label: label.into(), selected })
+    }
+
+    /// An on/off switch (see [`Control::Toggle`]).
+    pub fn toggle(key: impl AsRef<str>, label: impl Into<String>, on: bool) -> Self {
+        Self::control(key, Control::Toggle { label: label.into(), on })
+    }
+
+    /// A slider over `min..=max` (see [`Control::Slider`]).
+    pub fn slider(key: impl AsRef<str>, value: i64, min: i64, max: i64) -> Self {
+        Self::control(key, Control::Slider { value, min, max })
+    }
+
+    /// A progress bar; `None` while how far is unknown (see
+    /// [`Control::Progress`]).
+    pub fn progress(key: impl AsRef<str>, percent: Option<u8>) -> Self {
+        Self::control(key, Control::Progress { percent: percent.map(|p| p.min(100)) })
+    }
+
+    /// A drop-down choice among `options` (see [`Control::Select`]).
+    pub fn select(
+        key: impl AsRef<str>,
+        options: impl IntoIterator<Item = impl Into<String>>,
+        selected: Option<usize>,
+    ) -> Self {
+        Self::control(
+            key,
+            Control::Select { options: options.into_iter().map(Into::into).collect(), selected },
+        )
+    }
+
+    /// A visible list to choose from (see [`Control::ListBox`]).
+    pub fn list_box(
+        key: impl AsRef<str>,
+        items: impl IntoIterator<Item = impl Into<String>>,
+        selected: Option<usize>,
+    ) -> Self {
+        Self::control(
+            key,
+            Control::ListBox { items: items.into_iter().map(Into::into).collect(), selected },
+        )
+    }
+
+    /// A date picker (see [`Control::DatePicker`]).
+    pub fn date_picker(key: impl AsRef<str>, date: CalendarDate) -> Self {
+        Self::control(key, Control::DatePicker { date })
+    }
+
+    /// A number stepped over `min..=max` (see [`Control::Spinner`]).
+    pub fn spinner(key: impl AsRef<str>, value: i64, min: i64, max: i64) -> Self {
+        Self::control(key, Control::Spinner { value, min, max })
+    }
+
+    /// A horizontal rule (see [`Control::Separator`]). It has no natural
+    /// width: give it `SizeMode::Fill`, or place it where the cross axis
+    /// stretches.
+    pub fn separator(key: impl AsRef<str>) -> Self {
+        Self::control(key, Control::Separator)
+    }
+
+    /// A link (see [`Control::Link`]).
+    pub fn link(key: impl AsRef<str>, text: impl Into<String>) -> Self {
+        Self::control(key, Control::Link { text: text.into() })
+    }
+
+    /// Several lines of editable text (see [`Control::MultilineText`]).
+    pub fn multiline_text(key: impl AsRef<str>, value: impl Into<String>) -> Self {
+        Self::control(key, Control::MultilineText { value: value.into() })
+    }
+
+    /// A picture (see [`Control::Image`]).
+    pub fn image(key: impl AsRef<str>, image: ImageData) -> Self {
+        Self::control(key, Control::Image { image })
+    }
+
+    /// Returns this node's control, if it is one.
+    #[must_use]
+    pub fn control_state(&self) -> Option<&Control> {
+        match self {
+            Self::Control(node) => Some(node.control()),
+            _ => None,
+        }
+    }
+
     /// Returns this node's draw list, if it is a canvas.
     #[must_use]
     pub fn draw_list(&self) -> Option<&DrawList> {
@@ -394,6 +524,10 @@ impl Node {
                 node.accessibility = accessibility;
                 Self::TabBar(node)
             }
+            Self::Control(mut node) => {
+                node.accessibility = accessibility;
+                Self::Control(node)
+            }
             Self::Canvas(mut node) => {
                 node.accessibility = accessibility;
                 Self::Canvas(node)
@@ -434,6 +568,10 @@ impl Node {
                 node.visual_style = style;
                 Self::TabBar(node)
             }
+            Self::Control(mut node) => {
+                node.visual_style = style;
+                Self::Control(node)
+            }
             Self::Canvas(mut node) => {
                 node.visual_style = style;
                 Self::Canvas(node)
@@ -461,6 +599,7 @@ impl Node {
             Self::Button(node) => &node.visual_style,
             Self::TextInput(node) => &node.visual_style,
             Self::TabBar(node) => &node.visual_style,
+            Self::Control(node) => &node.visual_style,
             Self::Canvas(node) => &node.visual_style,
             Self::Surface(node) => &node.visual_style,
             Self::Column(node) => &node.visual_style,
@@ -491,6 +630,10 @@ impl Node {
                 node.disabled = disabled;
                 Self::TabBar(node)
             }
+            Self::Control(mut node) => {
+                node.disabled = disabled;
+                Self::Control(node)
+            }
             Self::Canvas(mut node) => {
                 node.disabled = disabled;
                 Self::Canvas(node)
@@ -520,6 +663,7 @@ impl Node {
             Self::Button(node) => node.input = input,
             Self::TextInput(node) => node.input = input,
             Self::TabBar(node) => node.input = input,
+            Self::Control(node) => node.input = input,
             Self::Canvas(node) => node.input = input,
             Self::Surface(node) => node.input = input,
             Self::Column(node) => node.input = input,
@@ -536,6 +680,7 @@ impl Node {
             Self::Button(node) => node.input,
             Self::TextInput(node) => node.input,
             Self::TabBar(node) => node.input,
+            Self::Control(node) => node.input,
             Self::Canvas(node) => node.input,
             Self::Surface(node) => node.input,
             Self::Column(node) => node.input,
@@ -585,6 +730,7 @@ impl Node {
             Self::Button(node) => &node.transitions,
             Self::TextInput(node) => &node.transitions,
             Self::TabBar(node) => &node.transitions,
+            Self::Control(node) => &node.transitions,
             Self::Canvas(node) => &node.transitions,
             Self::Surface(node) => &node.transitions,
             Self::Column(node) => &node.transitions,
@@ -598,6 +744,7 @@ impl Node {
             Self::Button(node) => &mut node.transitions,
             Self::TextInput(node) => &mut node.transitions,
             Self::TabBar(node) => &mut node.transitions,
+            Self::Control(node) => &mut node.transitions,
             Self::Canvas(node) => &mut node.transitions,
             Self::Surface(node) => &mut node.transitions,
             Self::Column(node) => &mut node.transitions,
@@ -630,6 +777,10 @@ impl Node {
                 node.opacity = opacity;
                 Self::TabBar(node)
             }
+            Self::Control(mut node) => {
+                node.opacity = opacity;
+                Self::Control(node)
+            }
             Self::Canvas(mut node) => {
                 node.opacity = opacity;
                 Self::Canvas(node)
@@ -657,6 +808,7 @@ impl Node {
             Self::Button(node) => node.opacity.get(),
             Self::TextInput(node) => node.opacity.get(),
             Self::TabBar(node) => node.opacity.get(),
+            Self::Control(node) => node.opacity.get(),
             Self::Canvas(node) => node.opacity.get(),
             Self::Surface(node) => node.opacity.get(),
             Self::Column(node) => node.opacity.get(),
@@ -672,6 +824,7 @@ impl Node {
             Self::Button(node) => node.disabled,
             Self::TextInput(node) => node.disabled,
             Self::TabBar(node) => node.disabled,
+            Self::Control(node) => node.disabled,
             Self::Canvas(node) => node.disabled,
             Self::Surface(node) => node.disabled,
             Self::Column(node) => node.disabled,
@@ -687,6 +840,7 @@ impl Node {
             Self::Button(node) => node.accessibility(),
             Self::TextInput(node) => node.accessibility(),
             Self::TabBar(node) => node.accessibility(),
+            Self::Control(node) => node.accessibility(),
             Self::Canvas(node) => node.accessibility(),
             Self::Surface(node) => node.accessibility(),
             Self::Column(node) => node.accessibility(),
@@ -702,6 +856,7 @@ impl Node {
             Self::Button(node) => &mut node.accessibility,
             Self::TextInput(node) => &mut node.accessibility,
             Self::TabBar(node) => &mut node.accessibility,
+            Self::Control(node) => &mut node.accessibility,
             Self::Canvas(node) => &mut node.accessibility,
             Self::Surface(node) => &mut node.accessibility,
             Self::Column(node) => &mut node.accessibility,
@@ -717,6 +872,7 @@ impl Node {
             Self::Button(button) => button.id(),
             Self::TextInput(input) => input.id(),
             Self::TabBar(input) => input.id(),
+            Self::Control(input) => input.id(),
             Self::Canvas(input) => input.id(),
             Self::Surface(input) => input.id(),
             Self::Column(column) => column.id(),
@@ -732,6 +888,7 @@ impl Node {
             Self::Button(_) => NodeKind::Button,
             Self::TextInput(_) => NodeKind::TextInput,
             Self::TabBar(_) => NodeKind::TabBar,
+            Self::Control(_) => NodeKind::Control,
             Self::Canvas(_) => NodeKind::Canvas,
             Self::Surface(_) => NodeKind::Surface,
             Self::Column(_) => NodeKind::Column,
@@ -747,6 +904,7 @@ impl Node {
             Self::Button(button) => button.layout(),
             Self::TextInput(input) => input.layout(),
             Self::TabBar(input) => input.layout(),
+            Self::Control(input) => input.layout(),
             Self::Canvas(input) => input.layout(),
             Self::Surface(input) => input.layout(),
             Self::Column(column) => column.layout(),
@@ -891,6 +1049,7 @@ impl Node {
             Self::Button(node) => node.hidden,
             Self::TextInput(node) => node.hidden,
             Self::TabBar(node) => node.hidden,
+            Self::Control(node) => node.hidden,
             Self::Canvas(node) => node.hidden,
             Self::Surface(node) => node.hidden,
             Self::Column(node) => node.hidden,
@@ -904,6 +1063,7 @@ impl Node {
             Self::Button(node) => &mut node.hidden,
             Self::TextInput(node) => &mut node.hidden,
             Self::TabBar(node) => &mut node.hidden,
+            Self::Control(node) => &mut node.hidden,
             Self::Canvas(node) => &mut node.hidden,
             Self::Surface(node) => &mut node.hidden,
             Self::Column(node) => &mut node.hidden,
@@ -919,6 +1079,7 @@ impl Node {
             Self::Button(node) => node.cursor = Some(cursor),
             Self::TextInput(node) => node.cursor = Some(cursor),
             Self::TabBar(node) => node.cursor = Some(cursor),
+            Self::Control(node) => node.cursor = Some(cursor),
             Self::Canvas(node) => node.cursor = Some(cursor),
             Self::Surface(node) => node.cursor = Some(cursor),
             Self::Column(node) => node.cursor = Some(cursor),
@@ -935,6 +1096,7 @@ impl Node {
             Self::Button(node) => node.cursor,
             Self::TextInput(node) => node.cursor,
             Self::TabBar(node) => node.cursor,
+            Self::Control(node) => node.cursor,
             Self::Canvas(node) => node.cursor,
             Self::Surface(node) => node.cursor,
             Self::Column(node) => node.cursor,
@@ -958,6 +1120,7 @@ impl Node {
             Self::Button(node) => node.command,
             Self::TextInput(node) => node.command,
             Self::TabBar(node) => node.command,
+            Self::Control(node) => node.command,
             Self::Canvas(node) => node.command,
             Self::Surface(node) => node.command,
             Self::Column(node) => node.command,
@@ -971,6 +1134,7 @@ impl Node {
             Self::Button(node) => &mut node.command,
             Self::TextInput(node) => &mut node.command,
             Self::TabBar(node) => &mut node.command,
+            Self::Control(node) => &mut node.command,
             Self::Canvas(node) => &mut node.command,
             Self::Surface(node) => &mut node.command,
             Self::Column(node) => &mut node.command,
@@ -1021,6 +1185,7 @@ impl Node {
             Self::Button(node) => node.item_index = Some(index),
             Self::TextInput(node) => node.item_index = Some(index),
             Self::TabBar(node) => node.item_index = Some(index),
+            Self::Control(node) => node.item_index = Some(index),
             Self::Canvas(node) => node.item_index = Some(index),
             Self::Surface(node) => node.item_index = Some(index),
             Self::Column(node) => node.item_index = Some(index),
@@ -1037,6 +1202,7 @@ impl Node {
             Self::Button(node) => node.item_index,
             Self::TextInput(node) => node.item_index,
             Self::TabBar(node) => node.item_index,
+            Self::Control(node) => node.item_index,
             Self::Canvas(node) => node.item_index,
             Self::Surface(node) => node.item_index,
             Self::Column(node) => node.item_index,
@@ -1110,6 +1276,7 @@ impl Node {
             Self::Button(node) => node.id = id,
             Self::TextInput(node) => node.id = id,
             Self::TabBar(node) => node.id = id,
+            Self::Control(node) => node.id = id,
             Self::Canvas(node) => node.id = id,
             Self::Surface(node) => node.id = id,
             Self::Column(node) => node.id = id,
@@ -1298,6 +1465,8 @@ pub enum NodeKind {
     Surface,
     /// See [`Node::TabBar`].
     TabBar,
+    /// See [`Node::Control`].
+    Control,
     /// See [`Node::Column`].
     Column,
     /// See [`Node::Row`].
@@ -1405,6 +1574,15 @@ leaf_node!(TextInput, value: String, value, role = TextInput, focusable = true);
 leaf_node!(Canvas, draw_list: DrawList, draw_list, role = Canvas, focusable = false);
 leaf_node!(Surface, content: SurfaceContent, content, role = Group, focusable = false);
 leaf_node!(TabBar, tabs: Tabs, tabs, role = TabList, focusable = true);
+leaf_node!(ControlNode, control: Control, control, role = Group, focusable = false);
+
+impl ControlNode {
+    /// Returns the control.
+    #[must_use]
+    pub fn control(&self) -> &Control {
+        &self.control
+    }
+}
 
 /// The labels of a [`TabBar`] and which one is selected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]

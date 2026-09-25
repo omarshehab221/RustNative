@@ -159,6 +159,7 @@ impl WindowsIntrinsicMeasurer {
             // the strip's own frame.
             NodeKind::TabBar => 32,
             NodeKind::Label
+            | NodeKind::Control
             | NodeKind::Column
             | NodeKind::Row
             | NodeKind::Canvas

@@ -245,6 +245,36 @@ pub enum Event {
         /// The chosen tab.
         index: usize,
     },
+    /// A check box, switch, or radio button was turned on or off by the
+    /// person (see [`crate::control`]). The component answers by rendering
+    /// the new state.
+    Toggled {
+        /// The control.
+        target: NodeId,
+        /// Its new state.
+        on: bool,
+    },
+    /// A slider or spinner was moved to `value`.
+    ValueChanged {
+        /// The control.
+        target: NodeId,
+        /// The new value.
+        value: i64,
+    },
+    /// A select or list box's choice changed.
+    SelectionChanged {
+        /// The control.
+        target: NodeId,
+        /// The chosen item, if any.
+        index: Option<usize>,
+    },
+    /// A date picker's date changed.
+    DateChanged {
+        /// The control.
+        target: NodeId,
+        /// The new date.
+        date: crate::control::CalendarDate,
+    },
     /// A command this component declared was invoked — from a menu, a
     /// button bound to it, its shortcut, or a host surface (see
     /// [`crate::command`]). Delivered to the declaring component the focus
@@ -349,7 +379,11 @@ impl Event {
             | Self::AnimationFinished { target, .. }
             | Self::VisibleRangeChanged { target, .. }
             | Self::SurfaceResized { target, .. }
-            | Self::TabSelected { target, .. } => Some(*target),
+            | Self::TabSelected { target, .. }
+            | Self::Toggled { target, .. }
+            | Self::ValueChanged { target, .. }
+            | Self::SelectionChanged { target, .. }
+            | Self::DateChanged { target, .. } => Some(*target),
             Self::KeyDown { target, .. }
             | Self::KeyUp { target, .. }
             | Self::TextInput { target, .. }
@@ -392,7 +426,11 @@ impl Event {
             | Self::AnimationFinished { target: current, .. }
             | Self::VisibleRangeChanged { target: current, .. }
             | Self::SurfaceResized { target: current, .. }
-            | Self::TabSelected { target: current, .. } => {
+            | Self::TabSelected { target: current, .. }
+            | Self::Toggled { target: current, .. }
+            | Self::ValueChanged { target: current, .. }
+            | Self::SelectionChanged { target: current, .. }
+            | Self::DateChanged { target: current, .. } => {
                 if let Some(target) = target {
                     *current = target;
                 }

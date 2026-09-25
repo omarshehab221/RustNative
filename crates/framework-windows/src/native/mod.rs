@@ -11,6 +11,8 @@ mod capture;
 mod commands;
 mod container;
 pub(crate) mod context;
+#[cfg(test)]
+mod controls_integration;
 mod cursor;
 #[cfg(test)]
 mod data_integration;

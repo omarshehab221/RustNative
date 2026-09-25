@@ -489,6 +489,7 @@ impl Renderer {
             | NodeKind::Button
             | NodeKind::TextInput
             | NodeKind::TabBar
+            | NodeKind::Control
             | NodeKind::Canvas
             | NodeKind::Surface => None,
         }
@@ -734,6 +735,7 @@ impl Renderer {
             | NodeKind::Button
             | NodeKind::TextInput
             | NodeKind::TabBar
+            | NodeKind::Control
             | NodeKind::Surface => {}
         }
 
@@ -789,6 +791,14 @@ impl Renderer {
         // next layout pass, and there is no caller that could act on a
         // single control failing to move.
         best_effort(moved, "SetWindowPos(layout)", "the control keeps its previous geometry");
+        if let super::super::registry::NativeObject::Control {
+            hwnd,
+            companion: Some(companion),
+            ..
+        } = object
+        {
+            super::native_controls::realign(*hwnd, *companion);
+        }
 
         if object.content_hwnd().is_some() {
             self.scroll.apply(id, &self.registry, rect);

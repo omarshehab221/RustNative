@@ -53,6 +53,8 @@ pub struct RealizedNode {
     pub opacity: f32,
     /// Its tabs, for a tab bar.
     pub tabs: Option<Tabs>,
+    /// Its control and state, for a native control (Milestone 48).
+    pub control: Option<framework_core::Control>,
     /// Its scroll offset, for a scrolling container.
     pub scroll: Point,
     /// How far it can scroll on each axis, for a scrolling container.
@@ -267,6 +269,7 @@ impl HeadlessTree {
                 style: node.visual_style.clone(),
                 opacity: node.opacity.get(),
                 tabs: node.tabs.clone(),
+                control: node.control.clone(),
                 scroll,
                 scroll_range,
                 item_index: node.item_index,
@@ -419,6 +422,9 @@ impl HeadlessTree {
             if let Some(tabs) = &node.tabs {
                 let _ = write!(out, " tabs={:?} selected={}", tabs.labels(), tabs.selected());
             }
+            if let Some(control) = &node.control {
+                let _ = write!(out, " control={}", control_summary(control));
+            }
             for (flag, set) in
                 [("disabled", node.disabled), ("hidden", node.hidden), ("focused", node.focused)]
             {
@@ -432,6 +438,16 @@ impl HeadlessTree {
             out.push('\n');
         }
         out
+    }
+}
+
+/// A control's state in a golden: its kind and what it shows, not its
+/// pixels.
+fn control_summary(control: &framework_core::Control) -> String {
+    use framework_core::Control;
+    match control {
+        Control::Image { image } => format!("Image {}x{}", image.width(), image.height()),
+        other => format!("{other:?}"),
     }
 }
 

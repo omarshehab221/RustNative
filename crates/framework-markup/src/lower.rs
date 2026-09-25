@@ -162,6 +162,66 @@ fn lower_element(element: &Element, context: Option<&Expr>) -> syn::Result<Token
             let selected = arg("selected");
             quote_spanned!(span=> ::framework_core::Node::tab_bar(#key, #labels, #selected, __layout))
         }
+        Constructor::Checkbox => {
+            let label = arg("label");
+            let checked = arg("checked");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Checkbox { label: ::core::convert::Into::into(#label), checked: #checked }, __layout))
+        }
+        Constructor::Radio => {
+            let label = arg("label");
+            let selected = arg("selected");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Radio { label: ::core::convert::Into::into(#label), selected: #selected }, __layout))
+        }
+        Constructor::Toggle => {
+            let label = arg("label");
+            let on = arg("on");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Toggle { label: ::core::convert::Into::into(#label), on: #on }, __layout))
+        }
+        Constructor::Slider => {
+            let value = arg("value");
+            let min = arg("min");
+            let max = arg("max");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Slider { value: #value, min: #min, max: #max }, __layout))
+        }
+        Constructor::Progress => {
+            let percent = arg("percent");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Progress { percent: #percent }, __layout))
+        }
+        Constructor::Select => {
+            let options = arg("options");
+            let selected = arg("selected");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Select { options: ::core::iter::IntoIterator::into_iter(#options).map(::core::convert::Into::into).collect(), selected: #selected }, __layout))
+        }
+        Constructor::ListBox => {
+            let items = arg("items");
+            let selected = arg("selected");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::ListBox { items: ::core::iter::IntoIterator::into_iter(#items).map(::core::convert::Into::into).collect(), selected: #selected }, __layout))
+        }
+        Constructor::DatePicker => {
+            let date = arg("date");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::DatePicker { date: #date }, __layout))
+        }
+        Constructor::Spinner => {
+            let value = arg("value");
+            let min = arg("min");
+            let max = arg("max");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Spinner { value: #value, min: #min, max: #max }, __layout))
+        }
+        Constructor::Separator => {
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Separator, __layout))
+        }
+        Constructor::Link => {
+            let text = arg("text");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Link { text: ::core::convert::Into::into(#text) }, __layout))
+        }
+        Constructor::MultilineText => {
+            let value = arg("value");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::MultilineText { value: ::core::convert::Into::into(#value) }, __layout))
+        }
+        Constructor::Image => {
+            let image = arg("image");
+            quote_spanned!(span=> ::framework_core::Node::control_with_layout(#key, ::framework_core::Control::Image { image: #image }, __layout))
+        }
         Constructor::Column => quote_spanned!(span=>
             ::framework_core::Node::column_with_layout(#key, #children_tokens, __layout, __container)
         ),

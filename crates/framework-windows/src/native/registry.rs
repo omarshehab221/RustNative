@@ -37,6 +37,13 @@ pub(crate) enum NativeObject {
     Canvas(HWND),
     /// A system tab control (see `rendering::tabs`).
     TabBar(HWND),
+    /// A native control (see `rendering::native_controls`): its window, a
+    /// spinner's up-down companion, and which control realizes it.
+    Control {
+        hwnd: HWND,
+        companion: Option<HWND>,
+        tag: &'static str,
+    },
     /// A native surface window, and the id the application knows it by.
     Surface {
         hwnd: HWND,
@@ -60,6 +67,7 @@ impl NativeObject {
             Self::TextInput(_) => "EDIT".to_owned(),
             Self::Canvas(_) => super::graphics::canvas::CANVAS_CLASS_NAME.to_owned(),
             Self::TabBar(_) => "SysTabControl32".to_owned(),
+            Self::Control { tag, .. } => format!("control `{tag}`"),
             Self::Surface { .. } => "surface".to_owned(),
             Self::Foreign { kind, .. } => format!("foreign `{kind}`"),
         }
@@ -73,6 +81,7 @@ impl NativeObject {
             | Self::TextInput(hwnd)
             | Self::Canvas(hwnd)
             | Self::TabBar(hwnd)
+            | Self::Control { hwnd, .. }
             | Self::Surface { hwnd, .. }
             | Self::Foreign { hwnd, .. } => *hwnd,
         }
@@ -89,6 +98,13 @@ impl NativeObject {
         if let Self::Foreign { hwnd, ownership, .. } = self {
             super::foreign::release(hwnd, ownership);
             return;
+        }
+        if let Self::Control { hwnd, companion, .. } = &self {
+            super::rendering::native_controls::forget(*hwnd);
+            if let Some(companion) = companion {
+                // SAFETY: the registry exclusively owns the companion too.
+                unsafe { DestroyWindow(*companion) };
+            }
         }
         // SAFETY: the registry exclusively owns every HWND stored here.
         unsafe {

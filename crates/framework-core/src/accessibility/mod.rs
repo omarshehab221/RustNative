@@ -114,6 +114,12 @@ pub enum AccessibilityRole {
     Cell,
     /// Status information (a status bar, a toast).
     Status,
+    /// A drop-down choice of one option (Milestone 48).
+    ComboBox,
+    /// A number stepped up and down.
+    SpinButton,
+    /// A rule between groups of content.
+    Separator,
     /// An important, time-sensitive message.
     Alert,
 }

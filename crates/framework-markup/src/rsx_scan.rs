@@ -131,6 +131,11 @@ fn element(tokens: &[TokenTree], state: &mut State) -> Result<(usize, Span)> {
                             index += 1;
                         }
                         Some(TokenTree::Literal(_)) => index += 1,
+                        // `checked=true`: a Boolean literal is an identifier
+                        // to the tokenizer.
+                        Some(TokenTree::Ident(word)) if word == "true" || word == "false" => {
+                            index += 1;
+                        }
                         Some(TokenTree::Punct(p)) if p.as_char() == '-' => index += 2,
                         other => {
                             return Err(MatchError {

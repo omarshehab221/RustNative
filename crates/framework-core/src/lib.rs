@@ -320,6 +320,7 @@ pub mod capability;
 pub mod clock;
 pub mod command;
 pub mod component;
+pub mod control;
 pub mod dev;
 pub mod environment;
 pub mod event;
@@ -370,6 +371,7 @@ pub use component::{
     ComponentTree, Deferred, EffectCleanup, EffectContext, Failure, InputRequest, InputRequests,
     Pure, PureComponent, RenderCause, RenderError, RenderRecord, WindowRequests,
 };
+pub use control::{CalendarDate, Control};
 pub use environment::{
     Breakpoint, ColorScheme, Contrast, EnvKey, EnvValue, Environment, Locale, PointerPrecision,
     Posture, Preference, PreferenceKey, SizeClass, SizeClasses, WindowMode, keys,
@@ -400,8 +402,8 @@ pub use navigation::{
     RouteParams, Router, url_path,
 };
 pub use node::{
-    Button, Canvas, Column, IntoChildren, Label, Node, NodeKind, NodeTransition, Row, Surface,
-    SurfaceContent, TabBar, Tabs, TextInput, TreeError,
+    Button, Canvas, Column, ControlNode, IntoChildren, Label, Node, NodeKind, NodeTransition, Row,
+    Surface, SurfaceContent, TabBar, Tabs, TextInput, TreeError,
 };
 pub use panic::{PanicAction, PanicPolicy, PanicReport};
 pub use permission::{FixedPermissions, Permission, PermissionService, PermissionState};

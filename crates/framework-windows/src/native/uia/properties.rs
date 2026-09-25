@@ -26,17 +26,18 @@ use windows::Win32::UI::Accessibility::{
     Assertive, ExpandCollapseState, ExpandCollapseState_Collapsed, ExpandCollapseState_Expanded,
     HeadingLevel1, LiveSetting, Off, Polite, ToggleState, ToggleState_Indeterminate,
     ToggleState_Off, ToggleState_On, UIA_AutomationIdPropertyId, UIA_ButtonControlTypeId,
-    UIA_CONTROLTYPE_ID, UIA_CheckBoxControlTypeId, UIA_ControlTypePropertyId,
-    UIA_ControllerForPropertyId, UIA_CustomControlTypeId, UIA_DataItemControlTypeId,
-    UIA_DescribedByPropertyId, UIA_EditControlTypeId, UIA_GroupControlTypeId,
-    UIA_HeadingLevelPropertyId, UIA_HelpTextPropertyId, UIA_HyperlinkControlTypeId,
-    UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
-    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_IsRequiredForFormPropertyId,
-    UIA_ItemStatusPropertyId, UIA_LabeledByPropertyId, UIA_ListControlTypeId,
-    UIA_ListItemControlTypeId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId,
-    UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
-    UIA_PositionInSetPropertyId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId,
-    UIA_SizeOfSetPropertyId, UIA_SliderControlTypeId, UIA_StatusBarControlTypeId,
+    UIA_CONTROLTYPE_ID, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId,
+    UIA_ControlTypePropertyId, UIA_ControllerForPropertyId, UIA_CustomControlTypeId,
+    UIA_DataItemControlTypeId, UIA_DescribedByPropertyId, UIA_EditControlTypeId,
+    UIA_GroupControlTypeId, UIA_HeadingLevelPropertyId, UIA_HelpTextPropertyId,
+    UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId,
+    UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId,
+    UIA_IsRequiredForFormPropertyId, UIA_ItemStatusPropertyId, UIA_LabeledByPropertyId,
+    UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveSettingPropertyId,
+    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_PROPERTY_ID,
+    UIA_PaneControlTypeId, UIA_PositionInSetPropertyId, UIA_ProgressBarControlTypeId,
+    UIA_RadioButtonControlTypeId, UIA_SeparatorControlTypeId, UIA_SizeOfSetPropertyId,
+    UIA_SliderControlTypeId, UIA_SpinnerControlTypeId, UIA_StatusBarControlTypeId,
     UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TableControlTypeId, UIA_TextControlTypeId,
     UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId,
     UIA_WindowControlTypeId,
@@ -78,6 +79,9 @@ pub(crate) fn control_type(role: AccessibilityRole) -> Option<UIA_CONTROLTYPE_ID
         AccessibilityRole::Table => UIA_TableControlTypeId,
         AccessibilityRole::Cell => UIA_DataItemControlTypeId,
         AccessibilityRole::Status => UIA_StatusBarControlTypeId,
+        AccessibilityRole::ComboBox => UIA_ComboBoxControlTypeId,
+        AccessibilityRole::SpinButton => UIA_SpinnerControlTypeId,
+        AccessibilityRole::Separator => UIA_SeparatorControlTypeId,
         // `AccessibilityRole::None`, and roles this backend has not mapped.
         _ => return None,
     })
@@ -87,7 +91,10 @@ pub(crate) fn control_type(role: AccessibilityRole) -> Option<UIA_CONTROLTYPE_ID
 /// answers the basics (see the module documentation).
 pub(crate) fn has_native_proxy(target: &Target, resolved: &Resolved) -> bool {
     target.is_native()
-        && matches!(resolved.kind, NodeKind::Label | NodeKind::Button | NodeKind::TextInput)
+        && matches!(
+            resolved.kind,
+            NodeKind::Label | NodeKind::Button | NodeKind::TextInput | NodeKind::Control
+        )
 }
 
 pub(crate) fn toggle_state(state: CheckedState) -> ToggleState {

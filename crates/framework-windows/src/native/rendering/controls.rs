@@ -36,6 +36,7 @@ use super::super::graphics::surface::{self, SURFACE_CLASS_NAME};
 use super::super::registry::{NativeObject, NativeObjectRegistry};
 use super::super::util::{module_instance, wide, window_text};
 use super::super::win32::{best_effort, must_succeed};
+use super::native_controls;
 use super::tabs::{self, TAB_CLASS_NAME};
 use crate::Error;
 use crate::error::NativeContext;
@@ -99,6 +100,7 @@ pub(crate) fn create(
             }
             Ok(())
         }
+        NodeKind::Control => create_control(registry, node, parent),
         NodeKind::Canvas => {
             let hwnd = create_own(node, parent, CANVAS_CLASS_NAME)?;
             canvas::attach(hwnd, node.draw_list.clone().unwrap_or_default());
@@ -126,6 +128,38 @@ pub(crate) fn create(
             Ok(())
         }
     }
+}
+
+/// Creates the native control a `Control` node asks for (see
+/// `native_controls`); an image is one of this crate's canvases.
+fn create_control(
+    registry: &mut NativeObjectRegistry,
+    node: &TreeNode,
+    parent: HWND,
+) -> Result<(), Error> {
+    let Some(control) = &node.control else { return Ok(()) };
+    let tag = native_controls::tag(control);
+    let (hwnd, companion) = if let framework_core::Control::Image { .. } = control {
+        let hwnd = create_own(node, parent, CANVAS_CLASS_NAME)?;
+        canvas::attach(hwnd, native_controls::image_draw_list(control));
+        (hwnd, None)
+    } else {
+        native_controls::create(control, parent).ok_or_else(|| {
+            Error::windows_api_in(
+                "CreateWindowExW(control)",
+                NativeContext::none().with_node(node.id),
+            )
+        })?
+    };
+    let object = NativeObject::Control { hwnd, companion, tag };
+    if let Err(error) = registry.insert(node.id, object) {
+        destroy_orphan(hwnd, "control");
+        if let Some(companion) = companion {
+            destroy_orphan(companion, "control");
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Creates a window of one of this crate's own graphics classes, which
@@ -181,6 +215,9 @@ pub(crate) fn needs_replacement(registry: &NativeObjectRegistry, node: &TreeNode
         | (NodeKind::Canvas, Some(NativeObject::Canvas(_)))
         | (NodeKind::TabBar, Some(NativeObject::TabBar(_))) => true,
         (NodeKind::Surface, Some(NativeObject::Surface { .. })) => node.foreign.is_none(),
+        (NodeKind::Control, Some(NativeObject::Control { tag, .. })) => {
+            node.control.as_ref().map(native_controls::tag) == Some(*tag)
+        }
         // A different factory kind is a different object.
         (NodeKind::Surface, Some(NativeObject::Foreign { kind, .. })) => {
             node.foreign.as_deref() == Some(kind.as_str())
@@ -207,6 +244,28 @@ pub(crate) fn update_text(registry: &NativeObjectRegistry, node: &TreeNode) -> R
 
     match node.kind {
         NodeKind::Column | NodeKind::Row | NodeKind::Surface => Ok(false),
+        NodeKind::Control => {
+            let Some(control) = &node.control else { return Ok(false) };
+            if let framework_core::Control::Image { .. } = control {
+                canvas::set_draw_list(hwnd, &native_controls::image_draw_list(control));
+                return Ok(false);
+            }
+            let companion = match object {
+                NativeObject::Control { companion, .. } => *companion,
+                _ => None,
+            };
+            // An `EDIT`-backed control raises `EN_CHANGE` for text written
+            // here; the caller suppresses that one notification.
+            let edited = match control {
+                framework_core::Control::Spinner { value, .. } => {
+                    window_text(hwnd) != value.to_string()
+                }
+                framework_core::Control::MultilineText { value } => window_text(hwnd) != *value,
+                _ => false,
+            };
+            native_controls::sync(hwnd, companion, control);
+            Ok(edited)
+        }
         // A tab bar's content is its labels and selection; an update is
         // only emitted when one of them changed.
         NodeKind::TabBar => {
