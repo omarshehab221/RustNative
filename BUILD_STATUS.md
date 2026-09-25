@@ -14,6 +14,89 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 55 — Reconciliation beyond the screen — complete (Windows scope)
+
+**Built.** A new crate, `framework-sync`. Guide: `docs/sync.md`.
+
+- **The sync service**
+  - `SyncedCollection` reads and writes locally first. Writes made offline
+    stay pending until they are accepted.
+  - `SyncServer` declares a conflict policy per collection:
+    `ServerAuthority`, `LastWriterWins` (by hybrid logical clock), or
+    `Merge(fn)`.
+  - A `Filter` limits what a replica pulls. `subscribe` and the HTTP long
+    poll push changes from the server.
+  - Schema versioning: the server upgrades an older client's writes, and
+    tells a client below the minimum `NeedsUpgrade`.
+  - Transports: `InMemory` and `HttpSync` (over `HttpService`, so through
+    `WinHttp`). The `server` feature adds `framework-server` endpoints.
+- **Replicated types**
+  - `GCounter`, `PnCounter`, `LwwRegister`, `OrSet`, `LwwMap`, and `Rga`
+    (text and lists).
+  - Proptest checks that each merge is commutative, associative, and
+    idempotent.
+  - Each type round-trips through JSON.
+- **Server-interactive mode**
+  - `LiveServer` runs a `ComponentTree` per session on its own thread.
+    Trees travel as `WireNode`s over WebSocket. `LiveClient` and
+    `RemoteView` reconcile them on the client.
+  - Events are numbered and acknowledged. After a reconnect they are
+    resent, and each is applied once.
+  - Typing is echoed locally at once.
+  - A session survives a reconnect within the grace period. After that,
+    the client falls back to its state snapshot.
+  - `drain` moves clients to a new instance with their state.
+  - Wire keys now carry the owning component (`owner~key`), so events find
+    child components' nodes (`wire::node_id`).
+- **Render mode per subtree.** `Subtree` has four modes: `Static`,
+  `ServerInteractive`, `ClientInteractive`, and `Auto`. `Auto` hands over
+  to a registered client module and carries the server session's state.
+- **Channels and presence.** `Channel` and `Presence` are contracts.
+  `LocalHub` implements both, including expiry when heartbeats stop.
+- **Device desired state**
+  - `Twin`, `DeviceAgent`, and `Actuate`. Catching up applies only the
+    newest desired state, not every one that was missed.
+  - `DevicePolicy` settles changes made on the device itself.
+  - `DeviceModel` maps state to LwM2M/IPSO resource paths.
+- **Messaging**
+  - `Broker` supports QoS 0, 1, and 2, retained values, a last will, and
+    persistent sessions. `LocalBus` connects to it in process.
+  - MQTT 3.1.1: a codec, a TCP broker, and a client. The client
+    acknowledges messages and redelivers unacknowledged ones.
+- **Examples**
+  - `collab-notes`: offline edits on two devices converge.
+  - `live-counter`: the count survives a reconnect and a deploy.
+  - `device-desired`: over MQTT, the device converges after being offline.
+
+**Found and fixed.**
+- **`Rga` did not survive JSON.** It used non-string map keys, so it could
+  not be serialized. `SyncedCollection::put` then treated the failure as a
+  deletion, and the data was lost. `Rga` now serializes as a list of
+  elements. `put` returns an error instead of writing.
+- **Events were lost on a dying connection.** They are now resent until
+  acknowledged and deduplicated by sequence number.
+- **Session ids could collide.** Two server instances in one process could
+  issue the same session id. Ids now include a random part per instance.
+
+**Verified.** Full gate.
+- 23 `framework-sync` tests:
+  - CRDT properties;
+  - sync policies, filters, schema versions, push, and presence;
+  - device convergence;
+  - bus and MQTT guarantees over TCP;
+  - live mode: reconnect, deploy, typing echo, and the server-to-client
+    switch.
+- Each example's own tests.
+- The live tests passed four times in a row without flakiness.
+
+**Not verified / owed.**
+- **Browser client.** The browser client for server-interactive mode and
+  the browser render modes are owed with Web milestone H.
+- **Windows smoke test.** The examples' `main` programs have no Windows
+  smoke test. They use the same components the headless tests drive.
+- **Device commissioning** is delegated to existing stacks.
+- **MQTT 5 and TLS** for MQTT.
+
 ### Milestone 49 — The server application model — complete (Windows scope)
 
 **Built.** The new `framework-server` crate, with `framework-server-macros`

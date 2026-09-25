@@ -3261,6 +3261,15 @@ configuration after a period offline.
 **Depends on** Milestone 47 (data layer), Milestone 49 (server model), and Web
 milestone H.
 
+**Status (2026-09-26): implemented** for Windows and the headless backend.
+- `examples/collab-notes` converges after offline edits on two devices.
+- `examples/live-counter` survives a reconnect and a deploy without losing
+  state.
+- `examples/device-desired` converges over MQTT after being offline.
+
+The browser client is owed with Web milestone H. See `docs/sync.md` and
+`BUILD_STATUS.md`.
+
 ## Milestone 56 — Durable and event-driven execution
 
 Web milestone K is request-shaped, yet most per-invocation workloads are events,
