@@ -438,6 +438,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-components"
+version = "0.1.0"
+dependencies = [
+ "framework-build",
+ "framework-core",
+ "framework-headless",
+]
+
+[[package]]
 name = "framework-conformance"
 version = "0.1.0"
 dependencies = [

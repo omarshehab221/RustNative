@@ -508,14 +508,16 @@ impl ComponentTree {
             };
             for child in children {
                 if self.dirty.contains_key(&child) || self.on_path.contains(&child) {
+                    // The child's own previous output: what it set on its
+                    // root itself, as opposed to what this parent added.
                     let previous_root = self
                         .components
                         .get(&child)
                         .and_then(|entry| entry.view.as_ref())
-                        .map(Node::id);
+                        .map(|own| (own.id(), own.is_hidden(), own.item_index()));
                     let fresh = self.render_or_reuse(child, generation);
-                    if let Some(previous_root) = previous_root {
-                        replace_subtree(&mut view, previous_root, fresh);
+                    if let Some((previous_root, hidden, index)) = previous_root {
+                        replace_subtree(&mut view, previous_root, fresh, (hidden, index));
                     }
                 } else {
                     self.mark_used(child, generation);
@@ -1698,25 +1700,33 @@ fn escape_key(key: &str) -> String {
     escaped
 }
 
-/// Replaces the subtree rooted at `target` inside `root` with `fresh`,
-/// returning whether it was found. How a reused component's output takes a
-/// re-rendered child's new output without the parent rendering again.
 /// A child's fresh output, keeping what its parent set on the node it
-/// composed: whether it is hidden (a screen under another on a navigation
-/// stack) and its place in a virtual list. Without this, a child that
-/// re-renders alone would reappear, or lose its index, in a parent that was
-/// not rendered again.
-fn keep_placement(previous: &Node, fresh: Node) -> Node {
-    let fresh = fresh.hidden(previous.is_hidden());
-    match previous.item_index() {
-        Some(index) => fresh.with_item_index(index),
-        None => fresh,
+/// composed — whether it is hidden (a screen under another on a navigation
+/// stack) and its place in a virtual list — but not what the child itself
+/// had set, which its fresh output decides again. `own` is what the child's
+/// previous output set itself. Without this, a child that re-renders alone
+/// would reappear, or lose its index, in a parent that was not rendered
+/// again.
+fn keep_placement(previous: &Node, fresh: Node, own: (bool, Option<usize>)) -> Node {
+    let (own_hidden, own_index) = own;
+    let fresh = if previous.is_hidden() && !own_hidden { fresh.hidden(true) } else { fresh };
+    match (previous.item_index(), own_index) {
+        (Some(index), None) => fresh.with_item_index(index),
+        _ => fresh,
     }
 }
 
-fn replace_subtree(root: &mut Node, target: NodeId, fresh: Node) -> bool {
+/// Replaces the subtree rooted at `target` inside `root` with `fresh`,
+/// returning whether it was found. How a reused component's output takes a
+/// re-rendered child's new output without the parent rendering again.
+fn replace_subtree(
+    root: &mut Node,
+    target: NodeId,
+    fresh: Node,
+    own: (bool, Option<usize>),
+) -> bool {
     if root.id() == target {
-        *root = keep_placement(root, fresh);
+        *root = keep_placement(root, fresh, own);
         return true;
     }
     let children = match root {
@@ -1728,14 +1738,14 @@ fn replace_subtree(root: &mut Node, target: NodeId, fresh: Node) -> bool {
     for child in children.iter_mut() {
         if child.id() == target {
             if let Some(fresh) = fresh.take() {
-                *child = keep_placement(child, fresh);
+                *child = keep_placement(child, fresh, own);
             }
             return true;
         }
     }
     for child in children.iter_mut() {
         if let Some(value) = fresh.take() {
-            if replace_subtree(child, target, value.clone()) {
+            if replace_subtree(child, target, value.clone(), own) {
                 return true;
             }
             fresh = Some(value);

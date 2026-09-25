@@ -413,9 +413,14 @@ fn lower_component(element: &Element, context: Option<&Expr>) -> syn::Result<Tok
             };
             quote!(#field: #value)
         });
+        // Props not written take their default, so an element names only
+        // what it changes — which requires the props type to be `Default`,
+        // as an element with no props already does.
         quote_spanned!(span=> {
             type __Props = <#name as ::framework_core::Component>::Props;
-            __Props { #(#fields),* }
+            #[allow(clippy::needless_update, reason = "every prop may be written")]
+            let __props = __Props { #(#fields,)* ..::core::default::Default::default() };
+            __props
         })
     };
     let spreads = element.spreads.iter().map(|spread| {

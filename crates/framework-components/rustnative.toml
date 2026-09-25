@@ -1,0 +1,4 @@
+# The component library's own style file: the semantic role tokens its
+# classes are written against (`PLAN.md` Milestone 48).
+[style]
+file = "components.css"

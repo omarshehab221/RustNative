@@ -81,10 +81,14 @@ fn control(app: &HeadlessApp, key: &str) -> Control {
 
 #[test]
 fn every_control_reports_its_change_and_shows_what_the_component_decided() {
-    let mut app = HeadlessApp::launch(Window::new("Settings", Size::new(480, 900)), || Settings::new(()));
+    let mut app =
+        HeadlessApp::launch(Window::new("Settings", Size::new(480, 900)), || Settings::new(()));
 
     app.toggle(&Query::key("remember")).unwrap();
-    assert_eq!(control(&app, "remember"), Control::Checkbox { label: "Remember me".into(), checked: true });
+    assert_eq!(
+        control(&app, "remember"),
+        Control::Checkbox { label: "Remember me".into(), checked: true }
+    );
     app.toggle(&Query::key("wifi")).unwrap();
     assert!(matches!(control(&app, "wifi"), Control::Toggle { on: true, .. }));
 
@@ -111,7 +115,8 @@ fn every_control_reports_its_change_and_shows_what_the_component_decided() {
 
 #[test]
 fn every_control_describes_itself_to_assistive_technology() {
-    let app = HeadlessApp::launch(Window::new("Settings", Size::new(480, 900)), || Settings::new(()));
+    let app =
+        HeadlessApp::launch(Window::new("Settings", Size::new(480, 900)), || Settings::new(()));
     let node = |key| app.find(&Query::key(key)).unwrap().accessibility.clone();
     assert_eq!(node("remember").role(), AccessibilityRole::CheckBox);
     assert_eq!(node("remember").checked_state(), Some(CheckedState::Unchecked));

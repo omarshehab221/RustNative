@@ -36,7 +36,13 @@ pub fn cases() -> Vec<(&'static str, Node)> {
         ("progress", Node::progress("upload", Some(40))),
         ("select", Node::select("size", ["S", "M"], Some(1))),
         ("list_box", Node::list_box("fruit", ["Apple", "Pear"], None)),
-        ("date_picker", Node::date_picker("due", framework_core::CalendarDate { year: 2026, month: 9, day: 25 })),
+        (
+            "date_picker",
+            Node::date_picker(
+                "due",
+                framework_core::CalendarDate { year: 2026, month: 9, day: 25 },
+            ),
+        ),
         ("spinner", Node::spinner("copies", 2, 1, 9)),
         ("separator", Node::separator("rule")),
         ("link", Node::link("help", "Help")),

@@ -38,7 +38,10 @@ pub fn cases() -> Vec<(&'static str, Node)> {
         ("progress", rsx! { <Progress key="upload" percent={Some(40)} /> }),
         ("select", rsx! { <Select key="size" options={["S", "M"]} selected={Some(1)} /> }),
         ("list_box", rsx! { <ListBox key="fruit" items={["Apple", "Pear"]} selected={None} /> }),
-        ("date_picker", rsx! { <DatePicker key="due" date={framework_core::CalendarDate { year: 2026, month: 9, day: 25 }} /> }),
+        (
+            "date_picker",
+            rsx! { <DatePicker key="due" date={framework_core::CalendarDate { year: 2026, month: 9, day: 25 }} /> },
+        ),
         ("spinner", rsx! { <Spinner key="copies" value=2 min=1 max=9 /> }),
         ("separator", rsx! { <Separator key="rule" /> }),
         ("link", rsx! { <Link key="help" text="Help" /> }),
