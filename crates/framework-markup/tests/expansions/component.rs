@@ -8,9 +8,15 @@ fn expansion() -> ::framework_core::Node {
                 "card",
                 {
                     type __Props = <Card as ::framework_core::Component>::Props;
-                    __Props {
+                    #[allow(
+                        clippy::needless_update,
+                        reason = "every prop may be written"
+                    )]
+                    let __props = __Props {
                         title: ::core::convert::Into::into("Hi"),
-                    }
+                        ..::core::default::Default::default()
+                    };
+                    __props
                 },
                 <Card as ::framework_core::Component>::new,
             );
