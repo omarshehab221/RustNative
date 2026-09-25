@@ -10,6 +10,7 @@
 mod executor;
 mod local;
 pub mod supervise;
+pub mod suspend;
 
 pub use executor::{
     BoxedSleep as SleepFuture, BoxedTask, Executor, ExecutorHandle, ManualExecutor, TokioExecutor,
@@ -18,6 +19,7 @@ pub use local::{LocalBoxedTask, LocalExecutor, LocalPool};
 pub use supervise::{
     Background, Offloaded, Supervised, SupervisionPolicy, TaskFailure, panic_message,
 };
+pub use suspend::{Priority, SuspendRule};
 
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
@@ -134,6 +136,9 @@ struct TaskScopeInner {
     /// Live tasks, plus — transiently — a `None` tombstone for a task that
     /// settled before `spawn` got to register it (see [`TaskScope::spawn`]).
     tasks: Arc<Mutex<HashMap<TaskId, Option<TaskHandle>>>>,
+    /// Whether the owning component is hidden (`suspend`), shared with the
+    /// scopes of its effects.
+    suspension: Arc<suspend::Suspension>,
 }
 
 impl fmt::Debug for TaskScope {
@@ -151,12 +156,24 @@ impl TaskScope {
         local: Rc<dyn LocalExecutor>,
         target: ComponentId,
     ) -> Self {
+        Self::with_suspension(scheduler, local, target, Arc::default())
+    }
+
+    /// A scope suspended and resumed together with others sharing
+    /// `suspension` — an effect's, with its component's.
+    pub(crate) fn with_suspension(
+        scheduler: Scheduler,
+        local: Rc<dyn LocalExecutor>,
+        target: ComponentId,
+        suspension: Arc<suspend::Suspension>,
+    ) -> Self {
         Self {
             inner: Rc::new(TaskScopeInner {
                 scheduler,
                 local,
                 target,
                 tasks: Arc::new(Mutex::new(HashMap::new())),
+                suspension,
             }),
         }
     }
@@ -247,7 +264,10 @@ impl TaskScope {
     /// through the same [`Executor`] this scope's tasks run on (see
     /// `EffectContext::sleep`/`ComponentContext::sleep`) rather than a
     /// hard-coded global timer — the standards audit's P1.18 finding.
-    pub(crate) fn scheduler(&self) -> &Scheduler {
+    ///
+    /// A `Send` handle: a task that sleeps in a loop clones it in.
+    #[must_use]
+    pub fn scheduler(&self) -> &Scheduler {
         &self.inner.scheduler
     }
 }

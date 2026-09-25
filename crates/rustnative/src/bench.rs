@@ -46,9 +46,14 @@ impl BenchTarget {
     /// The bench-app scenarios this target runs, with how many times each.
     const fn scenarios(self) -> &'static [(&'static str, usize)] {
         match self {
-            Self::Windows => {
-                &[("startup", 5), ("interaction", 3), ("animation", 1), ("core", 1), ("compile", 1)]
-            }
+            Self::Windows => &[
+                ("startup", 5),
+                ("interaction", 3),
+                ("filter", 3),
+                ("animation", 1),
+                ("core", 1),
+                ("compile", 1),
+            ],
             Self::Headless => &[("headless", 3), ("core", 1), ("compile", 1)],
         }
     }

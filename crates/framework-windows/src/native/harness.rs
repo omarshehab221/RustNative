@@ -174,6 +174,28 @@ impl NativeHarness {
         self.try_pump().expect("pumping the native message loop must not fail");
     }
 
+    /// Pumps like [`Self::pump`], returning how many messages it handled —
+    /// the probe for "no wakes while idle" (`PLAN.md` Milestone 54).
+    pub(crate) fn pump_counting(&mut self) -> Vec<u32> {
+        let mut seen = Vec::new();
+        let mut message = MSG::default();
+        for _ in 0..MAX_MESSAGES_PER_PUMP {
+            // SAFETY: as in `try_pump`.
+            let available =
+                unsafe { PeekMessageW(&raw mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) }
+                    != 0;
+            if !available {
+                break;
+            }
+            seen.push(message.message);
+            if handle_message(&message).expect("pumping must not fail") == LoopStep::Quit {
+                self.quit = true;
+                break;
+            }
+        }
+        seen
+    }
+
     /// [`Self::pump`], surfacing a backend error instead of panicking on
     /// it — used by the tests that deliberately drive a failure path.
     pub(crate) fn try_pump(&mut self) -> Result<(), Error> {

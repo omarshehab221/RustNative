@@ -241,6 +241,15 @@ impl Application {
         if event_window_id(&event).is_some_and(|event_window| event_window != id) {
             return false;
         }
+        // A minimized window's components keep their state and stop their
+        // deferrable work (`PLAN.md` Milestone 54).
+        if let Event::WindowStateChanged { state, .. } = &event {
+            if let Some(entry) = self.windows.get_mut(&id) {
+                entry
+                    .components
+                    .set_backgrounded(*state == crate::window::WindowPresentation::Minimized);
+            }
+        }
 
         // A menu item bound to a command invokes it.
         if let Event::MenuAction { item, .. } = &event {
@@ -631,6 +640,24 @@ impl Application {
     pub fn handle_component_panic(&self, report: &PanicReport) -> PanicAction {
         let other_windows_remain = self.windows.keys().any(|id| *id != report.window);
         self.panic_policy.resolve(report, other_windows_remain)
+    }
+
+    /// Delivers a slice of window `id`'s deferrable messages (see
+    /// [`ComponentTree::pump_deferred`]). Returns whether anything changed.
+    pub fn pump_deferred_for(&mut self, id: WindowId) -> bool {
+        self.windows.get_mut(&id).is_some_and(|entry| entry.components.pump_deferred())
+    }
+
+    /// [`Self::pump_deferred_for`] every window.
+    pub fn pump_deferred(&mut self) -> bool {
+        let ids = self.window_ids();
+        ids.into_iter().fold(false, |changed, id| self.pump_deferred_for(id) | changed)
+    }
+
+    /// Whether window `id` has deferrable messages waiting.
+    #[must_use]
+    pub fn has_deferred_work(&self, id: WindowId) -> bool {
+        self.windows.get(&id).is_some_and(|entry| entry.components.has_deferred_work())
     }
 
     /// The failures window `id`'s error boundaries contained since the last

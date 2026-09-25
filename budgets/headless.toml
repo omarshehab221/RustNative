@@ -8,6 +8,9 @@ target = "headless"
 launch_ms = { max = 6, tolerance = 1.0 }                  # 2.5–4
 # A click through hit-testing and the input path, to the settled change.
 input_latency_ms = { max = 4, tolerance = 1.0 }           # 1.6–2.5
+# A keystroke into the filter over 200 000 rows (Milestone 54): the event
+# and the render it causes, the filter not waited for.
+filter_input_latency_ms = { max = 4, tolerance = 1.0 }    # 0.08
 
 tree_diff_us_1k_nodes = { max = 600, tolerance = 1.0 }
 layout_us_1k_nodes = { max = 900, tolerance = 1.0 }

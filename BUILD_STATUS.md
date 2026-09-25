@@ -14,6 +14,73 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 54 — Responsiveness under load — complete (Windows scope)
+
+**Built.** `docs/responsiveness.md`.
+
+- **Priorities**: `Priority` is Immediate, Normal, or Deferrable, set with
+  `Callback::send_with`. Deferrable messages wait for
+  `ComponentTree::pump_deferred`, which delivers a budgeted slice
+  (`set_render_budget`, 4 ms) and commits it whole. Windows runs it only
+  while `GetQueueStatus(QS_INPUT)` reports no input, and asks again after
+  input; headless runs it when nothing more urgent is left.
+- **Deferred values**: `ComponentContext::deferred(key, input, compute)`
+  computes off the UI thread. A superseded computation is cancelled, and
+  never started if superseded before it runs. `Deferred { current,
+  pending }` keeps the previous result on screen while the new one is
+  prepared (`C02`).
+- **Pure components**: `PureComponent` renders from `&Props` only, so a
+  mutating render does not compile (`C03`). It is composed with
+  `context.pure` and skipped on equal props.
+- **Suspendable scopes**: `SuspendRule` is Complete, Cancel, or Defer, used
+  through `TaskScope::spawn_with`, `suspend`, and `resume`. Effects share
+  their component's suspension. Components whose output is hidden (a
+  `hidden` node, such as navigation or tabs) or whose window is minimized
+  are suspended and resumed automatically (`suspended_components`). Stream
+  collection pauses with its scope (`C75`, `C76`).
+- **Skipping**: `unskippable_components` reports props types that are
+  unequal to their own clone (`C04-1`).
+- **Reference application**: `examples/filter-demo`, 200 000 rows with a
+  virtual list, a deferred filter, and a clock that stops while its screen
+  is hidden.
+- **Bench**: a `filter` scenario (Windows, keystrokes posted to the real
+  edit control) and a headless keystroke key, with budgets in
+  `budgets/*.toml`.
+
+**Found and fixed.**
+- A hidden child that re-rendered alone lost its parent's `hidden` flag,
+  and its item index, when spliced into the reused parent output. It
+  reappeared, which also affected navigation stacks. The splice now keeps
+  both, and a regression test covers it.
+- Filter rows keyed by data were recreated on every result, costing a
+  keystroke that landed just after up to 55 ms. They are now keyed by
+  position and re-texted.
+
+**Verified.** Full gate.
+- `rustnative bench --check` passes for both targets.
+  - Windows: `filter_input_latency_ms` 0.69 (budget 16),
+    `filter_input_latency_max_ms` 30.5 (budget 30, limit 60),
+    `filter_results_ms` 3.6.
+  - Headless: `filter_input_latency_ms` 0.12 (budget 4).
+- Core tests cover slices and ordering, supersession (one computation for
+  three keystrokes), a hidden screen with no ticks and resuming,
+  Cancel-rule cancellation, minimized suspension, pure skipping, the
+  unskippable report, and the splice regression.
+- The example's headless tests cover keystrokes within budget, the stale
+  view shown while updating, a screenful of rows realized, and the clock
+  stopped while hidden.
+- `native::responsiveness_integration` shows the Windows ticker stopping
+  when hidden and resuming when shown, and zero messages of any kind over
+  two seconds of idle.
+
+**Not verified / owed.**
+- The worst keystroke waits for a filter result's realization, which
+  takes about 30 ms and sits at the budget line.
+- A query's interval revalidation still runs while its only observers are
+  hidden.
+- The embedded static-priority executor and idle-current measurement are
+  owed with Milestone 37.
+
 ### Milestone 47 — State, resilience, and data — complete (Windows scope)
 
 **Built.** `docs/data.md`.

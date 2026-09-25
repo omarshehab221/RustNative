@@ -24,6 +24,7 @@ use crate::window::Window;
 pub(crate) struct QueuedMessage {
     pub(crate) target: ComponentId,
     pub(crate) message: Box<dyn Any>,
+    pub(crate) priority: crate::scheduler::Priority,
 }
 
 /// A deferred request to open or close a sibling window, queued by a
@@ -358,9 +359,19 @@ impl<M: 'static> Callback<M> {
     /// Queues `message` for delivery to the target component's
     /// [`Component::message`](crate::Component::message).
     pub fn send(&self, message: M) {
-        self.sink
-            .borrow_mut()
-            .push_back(QueuedMessage { target: self.target, message: Box::new(message) });
+        self.send_with(crate::scheduler::Priority::Normal, message);
+    }
+
+    /// Queues `message` at `priority`: a [`crate::Priority::Deferrable`]
+    /// message waits until nothing more urgent is pending, and is then
+    /// delivered in slices that leave the host free for input (see
+    /// [`crate::scheduler::suspend`]).
+    pub fn send_with(&self, priority: crate::scheduler::Priority, message: M) {
+        self.sink.borrow_mut().push_back(QueuedMessage {
+            target: self.target,
+            message: Box::new(message),
+            priority,
+        });
     }
 }
 

@@ -60,6 +60,7 @@ labelled text fields, 125 native controls in all.
 |---|---|
 | `frame_time_p50_ms`, `frame_time_p99_ms`, `frame_time_max_ms` | intervals between animation frames while a 900 ms size transition runs repeatedly, over 3.2 s |
 | `input_latency_ms`, `input_latency_max_ms` | a `BM_CLICK` posted to the real button window, timed until the change it causes is realized on the native controls (median and worst of 31) |
+| `filter_input_latency_ms`, `filter_input_latency_max_ms`, `filter_results_ms` | keystrokes posted to the edit control of `examples/filter-demo` (200 000 rows), each timed until its echo is realized while the filter runs behind it (median and worst of 12), and the time from the last keystroke until its result is shown |
 
 ### Headless
 
@@ -67,6 +68,7 @@ labelled text fields, 125 native controls in all.
 |---|---|
 | `launch_ms` | launching the bench screen on the headless backend and settling it |
 | `input_latency_ms` | a click through hit-testing and the input path, to the settled change |
+| `filter_input_latency_ms` | a keystroke into `examples/filter-demo`'s filter over 200 000 rows: the event and the render it causes (median of 12) |
 
 ### Shared core and compile steps (both targets)
 

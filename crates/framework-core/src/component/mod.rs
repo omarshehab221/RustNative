@@ -16,6 +16,7 @@ mod context;
 mod effects;
 mod error;
 mod invalidation;
+pub mod pure;
 mod tree;
 
 pub use boundary::Failure;
@@ -26,7 +27,8 @@ pub use context::{
 pub use effects::{EffectCleanup, EffectContext};
 pub use error::RenderError;
 pub use invalidation::{RenderCause, RenderRecord};
-pub use tree::ComponentTree;
+pub use pure::{Pure, PureComponent};
+pub use tree::{ComponentTree, Deferred};
 
 pub(crate) use context::WindowCommand;
 

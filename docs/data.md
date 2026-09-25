@@ -256,8 +256,8 @@ any query.
 
 ## Owed
 
-- Suspending a hidden subtree's collection and queries arrives with
-  Milestone 54.
+- A hidden subtree's stream collection pauses (Milestone 54). A query's
+  interval revalidation still runs while its only observers are hidden.
 - Request-scoped services and server-side validation with the shared
   schema arrive with Milestone 49.
 - The progress component that shows an `Operation` arrives with

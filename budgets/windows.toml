@@ -29,6 +29,16 @@ frame_time_max_ms = { max = 60, tolerance = 1.0 }         # 32–104
 input_latency_ms = { max = 16, tolerance = 0.5 }          # 7–13
 input_latency_max_ms = { max = 30, tolerance = 1.0 }      # 10–20
 
+# Keystrokes posted to the edit control of the filter over 200 000 rows
+# (`examples/filter-demo`, Milestone 54), each timed until its echo is
+# realized while the filtered view updates behind it (median and worst of
+# 12, median of 3 runs). The worst case is a keystroke that lands while a
+# filter result is being realized; the filter itself never delays one.
+filter_input_latency_ms = { max = 16, tolerance = 0.5 }   # 0.6–0.8
+filter_input_latency_max_ms = { max = 30, tolerance = 1.0 }  # 26–34
+# From the last keystroke until its result is shown.
+filter_results_ms = { max = 250, tolerance = 1.0 }        # 0.3–72
+
 # The shared core, on a tree of a thousand nodes.
 tree_diff_us_1k_nodes = { max = 600, tolerance = 1.0 }    # 270–800
 layout_us_1k_nodes = { max = 900, tolerance = 1.0 }       # 530–1280

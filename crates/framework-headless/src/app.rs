@@ -706,7 +706,9 @@ impl HeadlessApp {
             self.executor.run_until_stalled();
             let changed = self.app.pump_tasks();
             self.executor.run_until_stalled();
-            if !changed && !self.app.pump_tasks() {
+            // Deferrable work only once nothing more urgent is left, as a
+            // native host runs it when no input is waiting.
+            if !changed && !self.app.pump_tasks() && !self.app.pump_deferred() {
                 break;
             }
         }

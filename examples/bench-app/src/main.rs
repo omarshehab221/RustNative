@@ -8,13 +8,17 @@
 //!   creation time, and the resident memory once interactive;
 //! - `interaction` (Windows): synthetic clicks posted to the real button
 //!   window, each timed until the change it causes is realized;
+//! - `filter` (Windows): keystrokes posted to the filter over 200 000 rows
+//!   (`examples/filter-demo`), each timed until its echo is realized while
+//!   the filtered view updates, then the time until the last result shows;
 //! - `animation` (Windows): a size transition run repeatedly, its frame
 //!   intervals recorded;
 //! - `compile` (any machine): the markup and style compile steps;
 //! - `core` (any machine): diffing, laying out, and re-rendering a tree of
 //!   a thousand nodes;
 //! - `headless` (any machine): launching the bench screen on the headless
-//!   backend, and a click's latency through its input path.
+//!   backend, a click's latency through its input path, and a keystroke's
+//!   handling in the filter over 200 000 rows.
 //!
 //! `--low-end` pins the process to one core first: the low-end reference
 //! profile, until a device matrix exists.
@@ -273,7 +277,28 @@ fn headless() -> Value {
         assert!(clicked.is_ok());
         elapsed
     });
-    json!({ "launch_ms": millis(launch), "input_latency_ms": millis(latency) })
+    // Milestone 54: a keystroke into the filter over 200 000 rows, handled
+    // (the event and the render it causes) without waiting for the filter.
+    let mut filter =
+        HeadlessApp::launch(Window::new(TITLE, Size::new(480, 720)), || filter_demo::App::new(()));
+    let mut typed = String::new();
+    let mut keystrokes = Vec::new();
+    for character in "amber falcon".chars() {
+        typed.push(character);
+        let started = Instant::now();
+        filter.application_mut().dispatch(framework_core::Event::TextChanged {
+            target: framework_core::NodeId::from_key("query"),
+            value: typed.clone(),
+        });
+        keystrokes.push(started.elapsed());
+    }
+    filter.settle();
+    let keystroke = framework_core::perf::percentile(&keystrokes, 50).unwrap_or_default();
+    json!({
+        "launch_ms": millis(launch),
+        "input_latency_ms": millis(latency),
+        "filter_input_latency_ms": millis(keystroke),
+    })
 }
 
 #[cfg(windows)]
@@ -290,7 +315,7 @@ mod native {
     };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        BM_CLICK, EnumChildWindows, GetClassNameW, GetWindowTextW, PostMessageW, WM_CLOSE,
+        BM_CLICK, EnumChildWindows, GetClassNameW, GetWindowTextW, PostMessageW, WM_CHAR, WM_CLOSE,
     };
 
     use super::{TITLE, millis};
@@ -419,6 +444,94 @@ mod native {
         })
     }
 
+    /// Milestone 54: keystrokes posted to the real edit control of the
+    /// filter over 200 000 rows, each timed until its echo is realized,
+    /// while the filtered view updates behind them; then the time until the
+    /// last filter's result is shown.
+    pub(super) fn filter() -> Value {
+        run(filter_demo::App::new(()), || {
+            wait_for(StartupPhase::Interactive);
+            let window =
+                framework_windows::native_window_handle(WindowId::PRIMARY).unwrap_or(0) as HWND;
+            let edit = find_child(window, "edit", None).expect("the query field");
+            let mut latencies = Vec::new();
+            for character in "amber falcon".encode_utf16() {
+                let started = Instant::now();
+                // SAFETY: a live edit control of this process.
+                unsafe { PostMessageW(edit, WM_CHAR, usize::from(character), 0) };
+                let deadline = started + Duration::from_secs(5);
+                while perf::last_realized().is_none_or(|at| at <= started) {
+                    assert!(Instant::now() < deadline, "the keystroke was never realized");
+                    std::hint::spin_loop();
+                }
+                latencies.push(
+                    perf::last_realized().unwrap_or(started).saturating_duration_since(started),
+                );
+                std::thread::sleep(Duration::from_millis(30));
+            }
+            let typed = Instant::now();
+            let deadline = typed + Duration::from_secs(10);
+            while find_child(window, "static", Some("rows match"))
+                .is_some_and(|status| text_of(status).contains("updating"))
+            {
+                assert!(Instant::now() < deadline, "the filter never finished");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let settled = typed.elapsed();
+            close();
+            json!({
+                "filter_input_latency_ms": perf::percentile(&latencies, 50).map_or(f64::NAN, millis),
+                "filter_input_latency_max_ms": perf::percentile(&latencies, 100).map_or(f64::NAN, millis),
+                "filter_results_ms": millis(settled),
+            })
+        })
+    }
+
+    fn text_of(hwnd: HWND) -> String {
+        let mut text = [0u16; 128];
+        // SAFETY: a live window; the buffer's length is passed.
+        let length = unsafe { GetWindowTextW(hwnd, text.as_mut_ptr(), 128) };
+        String::from_utf16_lossy(&text[..usize::try_from(length).unwrap_or(0)])
+    }
+
+    /// The first descendant of `parent` of window class `class` whose text
+    /// contains `containing`, when given.
+    fn find_child(parent: HWND, class: &str, containing: Option<&str>) -> Option<HWND> {
+        struct Search {
+            class: String,
+            containing: Option<String>,
+            found: Option<HWND>,
+        }
+        unsafe extern "system" fn visit(hwnd: HWND, search: LPARAM) -> i32 {
+            // SAFETY: `search` is the `Search` passed to `EnumChildWindows`
+            // below, alive for the whole enumeration.
+            let search = unsafe { &mut *(search as *mut Search) };
+            let mut class = [0u16; 32];
+            // SAFETY: `hwnd` is the live window being enumerated.
+            let length = unsafe { GetClassNameW(hwnd, class.as_mut_ptr(), 32) };
+            let class = String::from_utf16_lossy(&class[..usize::try_from(length).unwrap_or(0)]);
+            if class.eq_ignore_ascii_case(&search.class)
+                && search
+                    .containing
+                    .as_ref()
+                    .is_none_or(|part| text_of(hwnd).contains(part.as_str()))
+            {
+                search.found = Some(hwnd);
+                return 0;
+            }
+            1
+        }
+        let mut search = Search {
+            class: class.to_owned(),
+            containing: containing.map(str::to_owned),
+            found: None,
+        };
+        // SAFETY: `parent` is a live window; `visit` only reads the
+        // `Search` it is given, which outlives the call.
+        unsafe { EnumChildWindows(parent, Some(visit), (&raw mut search) as LPARAM) };
+        search.found
+    }
+
     pub(super) fn animation() -> Value {
         run(super::Animated::new(()), || {
             wait_for(StartupPhase::Interactive);
@@ -469,6 +582,8 @@ fn main() -> ExitCode {
         "interaction" => native::interaction(),
         #[cfg(windows)]
         "animation" => native::animation(),
+        #[cfg(windows)]
+        "filter" => native::filter(),
         other => {
             eprintln!("bench-app: no scenario `{other}` on this platform");
             return ExitCode::FAILURE;

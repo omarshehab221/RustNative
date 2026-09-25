@@ -223,6 +223,7 @@ impl Runtime {
         }
         self.apply_input_requests();
         super::lifecycle::after_dispatch(self);
+        self.schedule_deferred();
 
         // A component may have queued a window-open or window-close
         // request while handling that event (see `ComponentContext::windows`).
@@ -240,9 +241,31 @@ impl Runtime {
         {
             self.render()?;
         }
+        // Deferrable work only while no input waits (`PLAN.md` Milestone
+        // 54): one budgeted slice, then back to the queue.
+        if !input_pending()
+            && self.with_application(|application| application.pump_deferred_for(self.window_id))
+        {
+            self.render()?;
+        }
+        self.schedule_deferred();
         self.apply_input_requests();
         super::lifecycle::after_dispatch(self);
         self.sync_windows()
+    }
+
+    /// Asks for another pump while deferrable work remains. Not while input
+    /// waits: a posted wake is retrieved before input, so posting one then
+    /// would starve the input; the dispatch that handles it asks again.
+    fn schedule_deferred(&self) {
+        let window = self.window_id;
+        if !input_pending()
+            && self.with_application(|application| application.has_deferred_work(window))
+        {
+            // SAFETY: a live window of this thread; a failed post is retried
+            // by the next dispatch.
+            let _ = unsafe { PostMessageW(self.window, super::WM_FRAMEWORK_SCHEDULE, 0, 0) };
+        }
     }
 
     /// Applies the pointer-capture, drag-feedback, and animation requests
@@ -599,4 +622,12 @@ impl WindowRegistry {
 
         Ok(())
     }
+}
+
+/// Whether keyboard or mouse input is waiting in this thread's queue.
+fn input_pending() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetQueueStatus, QS_INPUT};
+    // SAFETY: a plain query of this thread's queue.
+    let status = unsafe { GetQueueStatus(QS_INPUT) };
+    status >> 16 != 0
 }

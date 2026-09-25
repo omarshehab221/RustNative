@@ -2888,6 +2888,13 @@ reference board shows no periodic wake when idle, by measured current.
 **Depends on** Milestone 45 (deterministic scheduling in tests) and the
 host-clock and single-threaded executor core work.
 
+**Status (2026-09-25): implemented** on Windows and the headless backend.
+`examples/filter-demo` filters 200 000 rows. Keystrokes stay within the
+Milestone 42 budget on both backends (`rustnative bench`), and a hidden
+screen does no periodic work. An idle Windows window receives no messages.
+The embedded measurement is owed with Milestone 37. See
+`docs/responsiveness.md` and `BUILD_STATUS.md`.
+
 ## Tier 3 — with and after the Web track
 
 ## Milestone 49 — The server application model

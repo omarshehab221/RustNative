@@ -7,6 +7,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use super::Component;
 use super::context::{
@@ -215,6 +216,18 @@ pub struct ComponentTree {
     boundaries: HashMap<ComponentId, Rc<RefCell<super::boundary::BoundaryState>>>,
     /// Failures contained since [`Self::take_failures`] was last called.
     failures: Vec<super::boundary::Failure>,
+    /// Deferrable messages waiting for nothing more urgent (Milestone 54).
+    deferred_messages: VecDeque<QueuedMessage>,
+    /// How long one slice of deferrable work may take.
+    render_budget: std::time::Duration,
+    /// Components currently suspended because their output is hidden.
+    hidden: HashSet<ComponentId>,
+    /// Whether the whole window is in the background (minimized).
+    backgrounded: bool,
+    /// Deferred values, by component and key.
+    deferreds: HashMap<(ComponentId, String), Rc<dyn Any>>,
+    /// Props types seen to compare unequal to their own clone.
+    unskippable: std::collections::BTreeSet<&'static str>,
 }
 
 impl ComponentTree {
@@ -296,6 +309,12 @@ impl ComponentTree {
             scoped: HashMap::new(),
             boundaries: HashMap::new(),
             failures: Vec::new(),
+            deferred_messages: VecDeque::new(),
+            render_budget: std::time::Duration::from_millis(4),
+            hidden: HashSet::new(),
+            backgrounded: false,
+            deferreds: HashMap::new(),
+            unskippable: std::collections::BTreeSet::new(),
         };
         let root_scope =
             TaskScope::new(tree.scheduler.clone(), Rc::clone(&tree.local), ComponentId::ROOT);
@@ -390,6 +409,7 @@ impl ComponentTree {
             });
             self.root_view = Some(root);
             self.rebuild_node_owners();
+            self.update_visibility();
             self.resolve_styles();
             self.commit_effects();
             force = false;
@@ -944,11 +964,16 @@ impl ComponentTree {
     /// anything changed.
     pub fn pump_tasks(&mut self) -> bool {
         self.local.run_until_stalled();
+        // Messages a local task sent through a callback.
+        let had_messages = !self.message_sink.borrow().is_empty();
+        if had_messages {
+            self.drain_messages();
+        }
         let completed = self.scheduler.drain();
         if completed.is_empty() {
             // Local work (a data layer's fetch, say) may have updated a
             // store without delivering a message to anyone.
-            if self.stores_changed() {
+            if self.stores_changed() || had_messages {
                 let before = self.generation;
                 let _ = self.render_pass(false);
                 return self.generation != before;
@@ -997,7 +1022,7 @@ impl ComponentTree {
             }
             self.components.insert(target, entry);
         }
-        if changed || self.stores_changed() {
+        if changed || self.stores_changed() || had_messages {
             let _ = self.render_pass(false);
             changed = true;
         }
@@ -1108,10 +1133,14 @@ impl ComponentTree {
     fn drain_messages(&mut self) {
         loop {
             let next = self.message_sink.borrow_mut().pop_front();
-            let Some(QueuedMessage { target, message }) = next else {
+            let Some(QueuedMessage { target, message, priority }) = next else {
                 break;
             };
 
+            if priority == crate::scheduler::Priority::Deferrable {
+                self.deferred_messages.push_back(QueuedMessage { target, message, priority });
+                continue;
+            }
             let Some(mut entry) = self.components.remove(&target) else {
                 continue;
             };
@@ -1265,6 +1294,11 @@ impl ComponentTree {
                 .components
                 .get(&id)
                 .is_some_and(|entry| !entry.component.props_equal(&props as &dyn Any));
+            // A props type unequal to its own clone can never be skipped
+            // (`C04-1`): report it rather than silently re-render it.
+            if changed && cfg!(debug_assertions) && props != props.clone() {
+                self.unskippable.insert(std::any::type_name::<C>());
+            }
 
             if changed {
                 let mut entry = self
@@ -1389,7 +1423,12 @@ impl ComponentTree {
             if let Some(mut previous) = entry.effects.remove(&key) {
                 Self::dispose_effect(&mut previous);
             }
-            let scope = TaskScope::new(self.scheduler.clone(), Rc::clone(&self.local), id);
+            let scope = TaskScope::with_suspension(
+                self.scheduler.clone(),
+                Rc::clone(&self.local),
+                id,
+                Arc::clone(entry.task_scope.suspension()),
+            );
             let cleanup = (declaration.run)(EffectContext { task_scope: scope.clone() });
             entry.effects.insert(
                 key,
@@ -1512,6 +1551,8 @@ impl ComponentTree {
         self.selections.remove(&id);
         self.scoped.remove(&id);
         self.boundaries.remove(&id);
+        self.hidden.remove(&id);
+        self.deferreds.retain(|(owner, _), _| *owner != id);
     }
 
     fn update_component(&mut self, id: ComponentId, event: &Event) -> bool {
@@ -1634,6 +1675,9 @@ fn scope_component_node_ids(
 
 mod inspection;
 mod resilience;
+mod responsiveness;
+
+pub use responsiveness::Deferred;
 
 #[cfg(test)]
 mod tests;
@@ -1656,9 +1700,22 @@ fn escape_key(key: &str) -> String {
 /// Replaces the subtree rooted at `target` inside `root` with `fresh`,
 /// returning whether it was found. How a reused component's output takes a
 /// re-rendered child's new output without the parent rendering again.
+/// A child's fresh output, keeping what its parent set on the node it
+/// composed: whether it is hidden (a screen under another on a navigation
+/// stack) and its place in a virtual list. Without this, a child that
+/// re-renders alone would reappear, or lose its index, in a parent that was
+/// not rendered again.
+fn keep_placement(previous: &Node, fresh: Node) -> Node {
+    let fresh = fresh.hidden(previous.is_hidden());
+    match previous.item_index() {
+        Some(index) => fresh.with_item_index(index),
+        None => fresh,
+    }
+}
+
 fn replace_subtree(root: &mut Node, target: NodeId, fresh: Node) -> bool {
     if root.id() == target {
-        *root = fresh;
+        *root = keep_placement(root, fresh);
         return true;
     }
     let children = match root {
@@ -1670,7 +1727,7 @@ fn replace_subtree(root: &mut Node, target: NodeId, fresh: Node) -> bool {
     for child in children.iter_mut() {
         if child.id() == target {
             if let Some(fresh) = fresh.take() {
-                *child = fresh;
+                *child = keep_placement(child, fresh);
             }
             return true;
         }

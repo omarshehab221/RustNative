@@ -46,6 +46,8 @@ mod ownership;
 mod preview_integration;
 mod registry;
 pub(crate) mod rendering;
+#[cfg(test)]
+mod responsiveness_integration;
 mod runtime;
 pub(crate) mod single_instance;
 #[cfg(test)]

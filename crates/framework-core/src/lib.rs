@@ -367,8 +367,8 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::{Command, CommandId, CommandRegistry, Shortcut};
 pub use component::{
     AnimationRequest, AnimationRequests, Callback, Component, ComponentContext, ComponentHost,
-    ComponentTree, EffectCleanup, EffectContext, Failure, InputRequest, InputRequests, RenderCause,
-    RenderError, RenderRecord, WindowRequests,
+    ComponentTree, Deferred, EffectCleanup, EffectContext, Failure, InputRequest, InputRequests,
+    Pure, PureComponent, RenderCause, RenderError, RenderRecord, WindowRequests,
 };
 pub use environment::{
     Breakpoint, ColorScheme, Contrast, EnvKey, EnvValue, Environment, Locale, PointerPrecision,
@@ -410,8 +410,8 @@ pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};
 pub use scheduler::{
     Background, Executor, ExecutorHandle, LocalBoxedTask, LocalExecutor, LocalPool, ManualExecutor,
-    Offloaded, Scheduler, SleepFuture, Supervised, SupervisionPolicy, TaskFailure, TaskHandle,
-    TaskId, TaskScope, TokioExecutor,
+    Offloaded, Priority, Scheduler, SleepFuture, Supervised, SupervisionPolicy, SuspendRule,
+    TaskFailure, TaskHandle, TaskId, TaskScope, TokioExecutor,
 };
 pub use services::{
     CertificatePins, ClipboardService, FileDialogKind, FileDialogRequest, FileDialogService,

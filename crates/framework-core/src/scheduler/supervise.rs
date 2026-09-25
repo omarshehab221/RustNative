@@ -27,7 +27,9 @@
 //!   ahead of the UI sends through a bounded channel, which backpressures
 //!   the producer rather than the UI.
 //! - **Lifetime:** collection is a task of the component's scope, so it
-//!   ends when the component unmounts.
+//!   ends when the component unmounts, and pauses while the component is
+//!   hidden ([`crate::scheduler::suspend`]): a hot stream's producer is
+//!   then backpressured by its channel, not drained into a hidden screen.
 //!
 //! # Prepare, then apply (`C09-2`)
 //!
@@ -216,13 +218,19 @@ impl TaskScope {
         M: Send + 'static,
     {
         let settled = self.settlement();
+        let suspension = std::sync::Arc::clone(&self.inner.suspension);
         let handle = self.scheduler().spawn_posting(
             self.inner.target,
-            move |post| async move {
-                let mut stream = Box::pin(stream);
-                while let Some(item) = (Next { stream: &mut stream }).await {
-                    post.post(map(item));
-                }
+            move |post| super::suspend::Gated {
+                // Paused while the component is hidden: a stream is pulled
+                // only while its items can be shown.
+                future: Box::pin(async move {
+                    let mut stream = Box::pin(stream);
+                    while let Some(item) = (Next { stream: &mut stream }).await {
+                        post.post(map(item));
+                    }
+                }),
+                suspension,
             },
             settled,
         );

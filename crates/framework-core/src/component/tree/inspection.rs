@@ -78,7 +78,11 @@ impl ComponentTree {
             .get(&id)
             .and_then(|entry| entry.component.edit(field, value))
             .ok_or_else(|| format!("`{path}` does not make `{field}` editable to {value}"))?;
-        self.message_sink.borrow_mut().push_back(QueuedMessage { target: id, message });
+        self.message_sink.borrow_mut().push_back(QueuedMessage {
+            target: id,
+            message,
+            priority: crate::scheduler::Priority::Normal,
+        });
         self.drain_messages();
         let _ = self.render_pass(false);
         Ok(())
