@@ -65,6 +65,38 @@ pub struct Config {
     /// `RUSTNATIVE_RESOURCE_<NAME>` (`framework_core::dev::resource`).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub resources: std::collections::BTreeMap<String, Resource>,
+    /// Localization (`[i18n]`, Milestone 46).
+    #[serde(default, skip_serializing_if = "I18n::is_default")]
+    pub i18n: I18n,
+}
+
+/// The `[i18n]` table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct I18n {
+    /// The locale messages are written in first (`locales/<source>.ftl`).
+    #[serde(default = "I18n::default_source")]
+    pub source: String,
+    /// Literal texts `rustnative i18n lint` accepts untranslated (a brand
+    /// name, a symbol).
+    #[serde(default)]
+    pub allow: Vec<String>,
+}
+
+impl I18n {
+    fn default_source() -> String {
+        "en".to_owned()
+    }
+
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+impl Default for I18n {
+    fn default() -> Self {
+        Self { source: Self::default_source(), allow: Vec::new() }
+    }
 }
 
 /// One development resource.
@@ -194,6 +226,7 @@ impl Config {
                 url_schemes: Vec::new(),
             },
             resources: std::collections::BTreeMap::new(),
+            i18n: I18n::default(),
         }
     }
 }

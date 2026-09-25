@@ -227,6 +227,24 @@ macro_rules! rsx_mod {
     };
 }
 
+/// Declares the module `framework_build::compile_messages()` generated from
+/// `locales/*.ftl` (`PLAN.md` Milestone 46): `messages::catalogues()` and
+/// one typed function per message.
+///
+/// ```ignore
+/// framework_core::messages_mod!();
+/// // Node::label("count", messages::inbox_count(n))
+/// ```
+#[macro_export]
+macro_rules! messages_mod {
+    () => {
+        /// The application's messages, generated from `locales/*.ftl`.
+        pub mod messages {
+            include!(concat!(env!("OUT_DIR"), "/messages.rs"));
+        }
+    };
+}
+
 /// Utility classes — the vocabulary of Tailwind CSS v4.1.13 — compiled
 /// into a [`style::DeclarationSet`] (`PLAN.md` 2.14, Milestone 58).
 ///
@@ -308,6 +326,7 @@ pub mod event;
 pub mod grant;
 pub mod graphics;
 pub mod handle;
+pub mod i18n;
 pub mod identity;
 pub mod input;
 pub mod inspect;

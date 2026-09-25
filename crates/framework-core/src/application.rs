@@ -418,6 +418,12 @@ impl Application {
         self.windows.get(&id).map(|entry| &entry.components)
     }
 
+    /// Rebuilds the application's services with `change` — what later
+    /// windows are opened with.
+    pub(crate) fn replace_services(&mut self, change: impl FnOnce(Services) -> Services) {
+        self.services = change(self.services.clone());
+    }
+
     pub(crate) fn components_mut(&mut self, id: WindowId) -> Option<&mut ComponentTree> {
         self.windows.get_mut(&id).map(|entry| &mut entry.components)
     }

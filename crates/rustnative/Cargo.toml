@@ -27,6 +27,8 @@ framework-style.workspace = true
 framework-interop.workspace = true
 # `inspect` speaks the runtime's inspection protocol (Milestone 44).
 framework-core.workspace = true
+# `i18n` reads catalogues the way the build does (Milestone 46).
+framework-i18n.workspace = true
 # The style file's location, read the way the build script reads it.
 framework-build.workspace = true
 prettyplease = "0.2"

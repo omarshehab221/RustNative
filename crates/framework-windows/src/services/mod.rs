@@ -4,6 +4,8 @@
 
 pub mod clipboard;
 pub mod dialogs;
+#[cfg(windows)]
+pub mod locale;
 pub mod notifications;
 #[cfg(windows)]
 pub mod permissions;

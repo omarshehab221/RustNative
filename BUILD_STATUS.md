@@ -14,6 +14,64 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 46 — Internationalization and localization — complete (Windows scope)
+
+**Built.** `docs/i18n.md`.
+
+- **Catalogues** (`framework-i18n`, a new platform-free crate): a documented
+  Fluent subset.
+  - It covers messages, `{ $var }`, `{ -term }`, selectors with exact
+    numbers, plural categories, and gender or text keys, and comments as
+    translator context.
+  - It has CLDR cardinal rules for en, de, fr, ar, he, pl, ru, ja, zh, and
+    ko, tested on CLDR's own samples (`VENDORED.md`).
+  - Fallback goes locale → language → source.
+- **Typed messages**: `framework_build::compile_messages` checks the
+  translations against the source (a translation reading a variable its
+  source never passes fails the build). It generates one function per
+  message whose parameters are exactly its variables (`i64` for plurals,
+  text otherwise), plus the embedded `catalogues()`.
+  `framework_core::messages_mod!()` declares them.
+- **Resolution** (`framework_core::i18n`): `Message` is data, and becomes
+  text during the render of the component showing it, against that
+  component's `LOCALE`.
+  - Showing a message records the locale read, so a switch re-renders only
+    message readers (`C15`).
+  - `Application::set_catalogues` / inspection `SetCatalogue` replace
+    catalogues live; the dev loop uses them for `.ftl` saves.
+  - The pseudo-locales are `en-XA` and `ar-XB`, and
+    `RUSTNATIVE_I18N_SHOW_KEYS` shows each message's key.
+- **Host formatting**: the `LocaleService` contract. `WindowsLocale` covers
+  numbers, currency, dates, times, collation, and casing through NLS, with
+  the person's overrides honored. `InvariantLocale` is deterministic for
+  headless and tests.
+- **Routes**: `Router::localized`, `alternates`, and `locale_of` (`C41-2`).
+- **Tooling**: `rustnative i18n extract|merge|show|lint`, reading builder
+  calls, `.rsx`, and `rsx!` alike. `[i18n]` in `rustnative.toml` sets the
+  source locale and the allow-list.
+- **Layout suite**: the reference screen's strings are now a catalogue, and
+  its pseudo variant resolves through the real message path.
+
+**Found and fixed.** A gender selector (`[feminine] … *[other]`) was typed
+as a plural, because `other` is also a plural category. It is now a plural
+only when every key is a plural category or a number.
+
+**Verified.** Full gate. The example's headless tests cover:
+- runtime switching;
+- Polish few and many forms;
+- Arabic few and zero forms and the feminine form;
+- RTL mirroring, measured by position;
+- the pseudo-locale.
+
+The native test (`native::i18n_integration`) shows the same controls taking
+Arabic text with its plural, and the subtree gaining `WS_EX_LAYOUTRTL`. NLS
+formatting is tested for de, fr, en-NZ, and tr casing. The CLI workflow test
+runs on a copy of the example.
+
+**Not verified / owed.** HTML language alternates wait for Web H. No
+translator has reviewed the Arabic and Polish strings; they are the
+example's own.
+
 ### Milestone 43 — The developer loop — complete (Windows scope)
 
 **Built.** `docs/developer-loop.md`.

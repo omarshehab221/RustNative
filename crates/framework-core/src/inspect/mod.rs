@@ -193,6 +193,14 @@ pub enum Request {
         /// The style file's text.
         css: String,
     },
+    /// Replaces one locale's catalogue file in the running application —
+    /// the development loop's live translation edit (Milestone 46).
+    SetCatalogue {
+        /// The locale.
+        locale: String,
+        /// The file's text.
+        ftl: String,
+    },
     /// Asks the application to close, as the person closing its window
     /// would: state is flushed and placement saved.
     Quit,

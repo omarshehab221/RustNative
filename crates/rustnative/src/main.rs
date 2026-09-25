@@ -34,6 +34,7 @@ mod diagnostics;
 mod doctor;
 mod error;
 mod generate;
+mod i18n;
 mod inspect;
 mod lsp;
 mod lsp_assist;

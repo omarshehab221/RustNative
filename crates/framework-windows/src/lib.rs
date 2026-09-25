@@ -99,6 +99,8 @@ pub use services::clipboard::WindowsClipboard;
 #[cfg(windows)]
 pub use services::dialogs::WindowsFileDialogs;
 #[cfg(windows)]
+pub use services::locale::WindowsLocale;
+#[cfg(windows)]
 pub use services::permissions::WindowsPermissions;
 #[cfg(windows)]
 pub use services::state_store::FileStateStore;

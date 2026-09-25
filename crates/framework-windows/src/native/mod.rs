@@ -22,6 +22,8 @@ mod guarantees_integration;
 #[cfg(test)]
 mod harness;
 mod host_traits;
+#[cfg(test)]
+mod i18n_integration;
 pub(crate) mod input;
 #[cfg(test)]
 mod input_integration;

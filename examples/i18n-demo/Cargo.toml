@@ -1,0 +1,28 @@
+[package]
+name = "i18n-demo"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# Milestone 46's example: English, Arabic (right to left), and Polish
+# (plural-rich), switched at runtime.
+[dependencies]
+framework-core.workspace = true
+framework-windows.workspace = true
+
+[dev-dependencies]
+framework-headless.workspace = true
+
+[build-dependencies]
+framework-build.workspace = true

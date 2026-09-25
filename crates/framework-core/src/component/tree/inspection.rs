@@ -139,6 +139,23 @@ impl ComponentTree {
         PassInfo { rendered, skipped }
     }
 
+    /// Replaces the message catalogues and re-renders exactly the
+    /// components that show messages (those that read the locale).
+    pub fn set_catalogues(&mut self, catalogues: std::sync::Arc<crate::i18n::Catalogues>) {
+        self.services = self.services.clone().with_catalogues(catalogues);
+        let locale = crate::environment::keys::LOCALE.name();
+        let readers: Vec<ComponentId> = self
+            .env_seen
+            .iter()
+            .filter(|(_, seen)| seen.contains_key(locale))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in readers {
+            self.dirty.entry(id).or_insert(crate::component::RenderCause::Environment(locale));
+        }
+        let _ = self.render_pass(false);
+    }
+
     /// What node `id`'s style conditions are evaluated against: its
     /// rendering component's environment.
     pub(crate) fn condition_env(&self, id: NodeId) -> framework_style::ConditionEnv {

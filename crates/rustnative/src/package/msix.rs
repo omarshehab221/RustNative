@@ -252,6 +252,7 @@ mod tests {
                 url_schemes: schemes.iter().map(|scheme| (*scheme).to_owned()).collect(),
             },
             resources: std::collections::BTreeMap::new(),
+            i18n: crate::config::I18n::default(),
         }
     }
 

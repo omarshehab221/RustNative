@@ -1253,7 +1253,14 @@ impl ComponentTree {
         if let Some(previous) = self.provided.remove(&id) {
             self.provided_previous.insert(id, previous);
         }
+        // Messages become text against this component's locale; showing one
+        // is reading the locale (`crate::i18n`).
+        let locale = self.env_at(Some(id), &crate::environment::keys::LOCALE);
+        crate::i18n::enter(locale, self.services.catalogues().cloned());
         let mut node = entry.component.render(self, id, generation, task_scope);
+        if crate::i18n::leave() {
+            let _ = self.read_env(id, &crate::environment::keys::LOCALE);
+        }
         self.provided_previous.remove(&id);
         let child_node_ids = self
             .pending_children

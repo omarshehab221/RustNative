@@ -1,0 +1,12 @@
+# The internationalization example (Milestone 46).
+[app]
+name = "i18n-demo"
+id = "dev.rustnative.i18n-demo"
+display-name = "Rust Native i18n"
+version = "0.1.0"
+publisher = "CN=Rust Native"
+description = "Messages in English, Arabic, and Polish, switched at runtime"
+
+[i18n]
+source = "en"
+allow = ["English", "العربية", "Polski", "Pseudo"]

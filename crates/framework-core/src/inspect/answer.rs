@@ -121,6 +121,17 @@ impl Application {
         Ok(count)
     }
 
+    /// Replaces the message catalogues in every window; only the components
+    /// that show messages re-render.
+    pub fn set_catalogues(&mut self, catalogues: Arc<crate::i18n::Catalogues>) {
+        for id in self.window_ids() {
+            if let Some(tree) = self.components_mut(id) {
+                tree.set_catalogues(Arc::clone(&catalogues));
+            }
+        }
+        self.replace_services(|services| services.with_catalogues(catalogues));
+    }
+
     /// Whether an inspector asked the application to close since the last
     /// call — a backend closes its windows when it did.
     pub fn take_quit_request(&mut self) -> bool {
@@ -339,6 +350,18 @@ impl Application {
                 Ok(tokens) => Reply::of(&tokens),
                 Err(error) => Reply::Error(error),
             },
+            Request::SetCatalogue { locale, ftl } => {
+                let Some(current) = self.services().catalogues().cloned() else {
+                    return Reply::Error("the application has no catalogues".into());
+                };
+                match current.with_file(locale, ftl) {
+                    Ok(replaced) => {
+                        self.set_catalogues(Arc::new(replaced));
+                        Reply::of(&true)
+                    }
+                    Err(errors) => Reply::Error(errors.join("; ")),
+                }
+            }
             Request::Quit => {
                 self.inspection.quit = true;
                 Reply::of(&true)

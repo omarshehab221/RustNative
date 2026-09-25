@@ -24,7 +24,10 @@ The current working backend is Windows/Win32. The framework core is designed to 
 Two notes on what "planned" means here. macOS and iOS are fully planned platforms that this project has no hardware to build or verify on yet, so their milestones are specified and designed for but not started — order follows hardware, not priority. And a backend advertises a capability only once it genuinely realizes it, so "planned" never reaches an application as a claim of support.
 
 Milestones 39–58 are being built on the Windows backend (every milestone and
-tier except the other backends, which come later). Done so far: **Milestone 43
+tier except the other backends, which come later). Done so far: **Milestone 46
+— internationalization** (typed message catalogues with CLDR plurals and
+gender, runtime locale switching, host formatting, the translator's
+workflow; `docs/i18n.md`), **Milestone 43
 — the developer loop**, **Milestone 42
 — budgets** (a budget file per shipped target, enforced in CI), **Milestone 44
 — inspection and diagnostics** (one protocol every backend answers, the

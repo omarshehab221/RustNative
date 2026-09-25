@@ -8,7 +8,9 @@
 //!   to the running application, which re-resolves its style. Tokens are
 //!   references, not constants (Milestone 58), so nothing is rebuilt.
 //! - **Anything else** is rebuilt: Rust, `.rsx`, a utility added or
-//!   removed, `Cargo.toml`, `build.rs`, `rustnative.toml`. If the build
+//!   removed, `Cargo.toml`, `build.rs`, `rustnative.toml`. (A change to
+//!   `locales/*.ftl` alone replaces those catalogues in the running
+//!   application instead, through inspection's `SetCatalogue`.) If the build
 //!   fails, the running application stays and the errors are shown. If it
 //!   succeeds:
 //!   1. every inspectable component's state is read from the running
@@ -64,6 +66,9 @@ pub struct Remote {
 pub enum Change {
     /// Only `@theme` token values changed: re-resolve, no rebuild.
     Theme,
+    /// Only catalogue files (`locales/*.ftl`) changed: replace them in the
+    /// running application, no rebuild (Milestone 46).
+    Catalogues,
     /// Anything else: rebuild and restart.
     Rebuild,
 }
@@ -97,6 +102,13 @@ pub fn token_only(old: &str, new: &str) -> bool {
 /// What the saves in `changed` need, given `app.css` before and after.
 #[must_use]
 pub fn classify(changed: &[PathBuf], old_css: Option<&str>, new_css: Option<&str>) -> Change {
+    let catalogue = |path: &PathBuf| {
+        path.extension().is_some_and(|extension| extension == "ftl")
+            && path.parent().and_then(Path::file_name).is_some_and(|folder| folder == "locales")
+    };
+    if !changed.is_empty() && changed.iter().all(catalogue) {
+        return Change::Catalogues;
+    }
     let only_css = !changed.is_empty()
         && changed.iter().all(|path| path.file_name().is_some_and(|name| name == "app.css"));
     match (only_css, old_css, new_css) {
@@ -477,6 +489,21 @@ fn watch(project: &Project, host: &mut Host, endpoint: &mut Endpoint, once: bool
                     Err(error) => println!("dev: the theme could not be applied: {error}"),
                 }
             }
+            Change::Catalogues => {
+                for path in &paths {
+                    let locale = path.file_stem().map(|stem| stem.to_string_lossy().into_owned());
+                    let (Some(locale), Ok(ftl)) = (locale, std::fs::read_to_string(path)) else {
+                        continue;
+                    };
+                    match ask(endpoint, &Request::SetCatalogue { locale: locale.clone(), ftl }) {
+                        Ok(_) => println!(
+                            "dev: locales/{locale}.ftl changed — applied live in {:.0} ms, no rebuild",
+                            millis(seen.elapsed())
+                        ),
+                        Err(error) => println!("dev: locales/{locale}.ftl: {error}"),
+                    }
+                }
+            }
             Change::Rebuild => {
                 let names: Vec<String> = paths
                     .iter()
@@ -735,6 +762,10 @@ mod tests {
             Change::Rebuild,
             "an inline theme is folded at build time"
         );
+        let locales = [PathBuf::from("locales/pl.ftl"), PathBuf::from("locales/ar.ftl")];
+        assert_eq!(classify(&locales, None, None), Change::Catalogues, "translations are live");
+        let mixed = [PathBuf::from("locales/pl.ftl"), PathBuf::from("src/lib.rs")];
+        assert_eq!(classify(&mixed, None, None), Change::Rebuild);
         let both = [PathBuf::from("app.css"), PathBuf::from("src/lib.rs")];
         assert_eq!(classify(&both, Some(CSS), Some(&token)), Change::Rebuild);
         assert_eq!(classify(&css, Some(CSS), Some("@theme {")), Change::Rebuild, "unparsable");

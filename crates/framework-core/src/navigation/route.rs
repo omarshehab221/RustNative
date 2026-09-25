@@ -215,6 +215,9 @@ impl RouteParams {
 #[derive(Debug, Clone, Default)]
 pub struct Router {
     routes: Vec<(String, Route)>,
+    /// Per-locale patterns of localized routes (`C41-2`): name → (locale,
+    /// pattern).
+    localized: Vec<(String, Vec<(String, Route)>)>,
 }
 
 impl Router {
@@ -232,6 +235,64 @@ impl Router {
     pub fn route(mut self, name: impl Into<String>, pattern: &str) -> Result<Self, RouteError> {
         self.routes.push((name.into(), Route::parse(pattern)?));
         Ok(self)
+    }
+
+    /// Adds a route named `name` whose path differs by locale (`C41-2`):
+    /// `/settings` in English, `/einstellungen` in German. Each pattern is
+    /// also an ordinary route of that name, so any of them resolves.
+    ///
+    /// ```
+    /// use framework_core::navigation::Router;
+    ///
+    /// let router = Router::new()
+    ///     .localized("settings", &[("en", "/settings"), ("de", "/einstellungen"), ("ar", "/الإعدادات")])?;
+    /// assert_eq!(router.resolve("/einstellungen").map(|(name, _)| name), Some("settings"));
+    /// assert_eq!(router.locale_of("/einstellungen"), Some("de"));
+    /// let alternates = router.alternates("settings", &[]);
+    /// assert_eq!(alternates[0], ("en".to_owned(), "/settings".to_owned()));
+    /// assert_eq!(alternates.len(), 3);
+    /// # Ok::<(), framework_core::RouteError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// A pattern's [`RouteError`].
+    pub fn localized(
+        mut self,
+        name: impl Into<String>,
+        patterns: &[(&str, &str)],
+    ) -> Result<Self, RouteError> {
+        let name = name.into();
+        let mut parsed = Vec::new();
+        for (locale, pattern) in patterns {
+            let route = Route::parse(pattern)?;
+            self.routes.push((name.clone(), route.clone()));
+            parsed.push(((*locale).to_owned(), route));
+        }
+        self.localized.push((name, parsed));
+        Ok(self)
+    }
+
+    /// The locale whose localized pattern `path` matches, if any.
+    #[must_use]
+    pub fn locale_of(&self, path: &str) -> Option<&str> {
+        self.localized
+            .iter()
+            .flat_map(|(_, patterns)| patterns)
+            .find_map(|(locale, route)| route.matches(path).map(|_| locale.as_str()))
+    }
+
+    /// Route `name`'s path in every locale it is localized for, with
+    /// `params` filled in — the language alternates a page or a share sheet
+    /// offers.
+    #[must_use]
+    pub fn alternates(&self, name: &str, params: &[(&str, &str)]) -> Vec<(String, String)> {
+        self.localized
+            .iter()
+            .filter(|(route, _)| route == name)
+            .flat_map(|(_, patterns)| patterns)
+            .filter_map(|(locale, route)| Some((locale.clone(), route.build(params)?)))
+            .collect()
     }
 
     /// The first route matching `path`, and what it captured.

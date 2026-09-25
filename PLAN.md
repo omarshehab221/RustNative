@@ -2659,6 +2659,11 @@ under pseudo-localization on every backend.
 
 **Depends on** Milestone 39 (mirroring) and Milestone 41 (conformance).
 
+**Status (2026-09-24): implemented** on Windows and the headless backend.
+`examples/i18n-demo` ships in English, Arabic, and Polish, switching at
+runtime. The layout suite passes under the pseudo-locale on both backends.
+See `docs/i18n.md` and `BUILD_STATUS.md`.
+
 ## Milestone 47 — State, resilience, and data
 
 Four absences that together account for most of what an application actually

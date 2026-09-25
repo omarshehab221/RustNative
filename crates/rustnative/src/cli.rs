@@ -53,6 +53,14 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// The translator's workflow: extract the messages the code uses, merge
+    /// them into every translation, show where one is used, and lint for
+    /// untranslated literals (`PLAN.md` Milestone 46).
+    I18n {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::i18n::I18nCommand,
+    },
     /// Generate a component, a screen, or a service, with its preview and
     /// its test, in the project's syntax (`PLAN.md` Milestone 43).
     Generate {
@@ -318,6 +326,7 @@ impl Cli {
             }
             Command::Inspect { target, question } => crate::inspect::run(&target, question),
             Command::Generate { what } => crate::generate::run(&here, &what),
+            Command::I18n { command } => crate::i18n::run(&here, &command),
             Command::Preview { name, headless } => {
                 let project = Project::find(&here)?;
                 if headless {

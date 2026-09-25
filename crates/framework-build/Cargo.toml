@@ -16,6 +16,8 @@ workspace = true
 
 [dependencies]
 framework-markup.workspace = true
+# The message catalogues `compile_messages` checks and types (Milestone 46).
+framework-i18n.workspace = true
 framework-style = { workspace = true, features = ["tokens"] }
 quote = "1"
 serde = { version = "1", features = ["derive"] }

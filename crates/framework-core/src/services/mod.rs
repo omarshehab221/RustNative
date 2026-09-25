@@ -336,6 +336,8 @@ pub struct Services {
     state: Option<Arc<dyn crate::persistence::StateStore>>,
     clock: Option<Arc<dyn crate::clock::Clock>>,
     permissions: Option<Arc<dyn crate::permission::PermissionService>>,
+    catalogues: Option<Arc<crate::i18n::Catalogues>>,
+    locale: Option<Arc<dyn crate::i18n::LocaleService>>,
 }
 
 impl fmt::Debug for Services {
@@ -349,6 +351,8 @@ impl fmt::Debug for Services {
             .field("state", &self.state.is_some())
             .field("clock", &self.clock.is_some())
             .field("permissions", &self.permissions.is_some())
+            .field("catalogues", &self.catalogues.is_some())
+            .field("locale", &self.locale.is_some())
             .finish()
     }
 }
@@ -376,6 +380,33 @@ impl Services {
     #[must_use]
     pub fn scoped(&self, grants: crate::grant::GrantSet) -> crate::grant::ScopedServices {
         crate::grant::ScopedServices::new(self.clone(), grants)
+    }
+
+    /// Resolves messages from `catalogues` (Milestone 46).
+    #[must_use]
+    pub fn with_catalogues(mut self, catalogues: Arc<crate::i18n::Catalogues>) -> Self {
+        self.catalogues = Some(catalogues);
+        self
+    }
+
+    /// The message catalogues messages are resolved from (Milestone 46).
+    #[must_use]
+    pub fn catalogues(&self) -> Option<&Arc<crate::i18n::Catalogues>> {
+        self.catalogues.as_ref()
+    }
+
+    /// Uses `service` for locale-aware formatting (Milestone 46).
+    #[must_use]
+    pub fn with_locale_service(mut self, service: Arc<dyn crate::i18n::LocaleService>) -> Self {
+        self.locale = Some(service);
+        self
+    }
+
+    /// Locale-aware formatting: the host's, or — when none was provided —
+    /// the deterministic [`crate::i18n::InvariantLocale`].
+    #[must_use]
+    pub fn locale_service(&self) -> Arc<dyn crate::i18n::LocaleService> {
+        self.locale.clone().unwrap_or_else(|| Arc::new(crate::i18n::InvariantLocale))
     }
 
     /// Returns `self` with the clock set (see [`crate::clock`]).
