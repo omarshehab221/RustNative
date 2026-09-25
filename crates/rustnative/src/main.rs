@@ -28,7 +28,9 @@
 
 mod bench;
 mod cli;
+mod compliance;
 mod config;
+mod crash;
 mod db;
 mod deploy;
 mod dev;

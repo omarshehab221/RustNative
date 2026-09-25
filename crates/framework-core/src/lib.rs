@@ -331,6 +331,7 @@ pub mod handle;
 mod host_content;
 pub mod i18n;
 pub mod identity;
+pub mod industrial;
 pub mod input;
 pub mod inspect;
 pub mod layout;

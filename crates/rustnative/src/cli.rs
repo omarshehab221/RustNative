@@ -94,6 +94,18 @@ enum Command {
         #[command(subcommand)]
         command: crate::deploy::UpdateCommand,
     },
+    /// Crash reports the application left on this machine (`PLAN.md`
+    /// Milestone 51).
+    Crash {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::crash::CrashCommand,
+    },
+    /// Generate compliance evidence into `target/compliance/`: a software
+    /// bill of materials, licenses, privacy and permission manifests,
+    /// accessibility results, and requirement traceability (`PLAN.md`
+    /// Milestone 51).
+    Compliance,
     /// Design tokens (`PLAN.md` Milestone 48).
     Tokens {
         /// What to do.
@@ -382,6 +394,8 @@ impl Cli {
             Command::Generate { what } => crate::generate::run(&here, &what),
             Command::I18n { command } => crate::i18n::run(&here, &command),
             Command::Db { command } => crate::db::run(&here, &command),
+            Command::Crash { command } => crate::crash::run(&here, &command),
+            Command::Compliance => crate::compliance::run(&here),
             Command::Deploy { command } => crate::deploy::run(&here, command),
             Command::Update { command } => crate::deploy::run_update(&here, command),
             Command::Tokens { command: TokensCommand::Import { file, out } } => {

@@ -83,6 +83,9 @@ windows = { version = "0.62", default-features = false, features = [
     "Win32_Graphics_Direct2D_Common",
     "Win32_Graphics_DirectWrite",
     "Win32_Graphics_Dxgi_Common",
+    # Milestone 51: accelerator answers (`native::accelerator`).
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_DXCore",
     "Win32_Graphics_Imaging",
 ] }
 # Direct2D takes transforms as `windows_numerics::Matrix3x2`, a type the

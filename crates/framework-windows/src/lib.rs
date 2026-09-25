@@ -72,9 +72,13 @@
 //! lint is `deny` rather than `warn` so the coverage cannot silently regress.
 #![deny(missing_docs)]
 
+#[cfg(windows)]
+pub mod crash;
 mod error;
 mod ffi;
 mod handle;
+#[cfg(windows)]
+pub mod isolated;
 mod mappers;
 #[cfg(windows)]
 mod native;
@@ -104,6 +108,8 @@ pub use services::data::{WicDecoder, WindowsConditions};
 pub use services::dialogs::WindowsFileDialogs;
 #[cfg(windows)]
 pub use services::http::WinHttp;
+#[cfg(windows)]
+pub use services::industrial::{WindowsPrinting, WindowsSerial};
 #[cfg(windows)]
 pub use services::locale::WindowsLocale;
 #[cfg(windows)]

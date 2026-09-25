@@ -838,6 +838,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-observe"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "framework-core",
+ "framework-observe",
+ "framework-server",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "framework-server"
 version = "0.1.0"
 dependencies = [

@@ -9,6 +9,8 @@ pub mod dialogs;
 #[cfg(windows)]
 pub mod http;
 #[cfg(windows)]
+pub mod industrial;
+#[cfg(windows)]
 pub mod locale;
 pub mod notifications;
 #[cfg(windows)]

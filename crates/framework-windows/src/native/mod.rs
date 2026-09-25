@@ -2,6 +2,7 @@
 //! Rust UI tree against real Win32 windows and controls, and runs the
 //! message loop that drives it.
 
+pub(crate) mod accelerator;
 mod animation;
 #[cfg(test)]
 mod animation_integration;

@@ -391,6 +391,8 @@ pub struct Services {
     permissions: Option<Arc<dyn crate::permission::PermissionService>>,
     catalogues: Option<Arc<crate::i18n::Catalogues>>,
     locale: Option<Arc<dyn crate::i18n::LocaleService>>,
+    printing: Option<Arc<dyn crate::industrial::PrintService>>,
+    serial: Option<Arc<dyn crate::industrial::SerialService>>,
 }
 
 impl fmt::Debug for Services {
@@ -406,11 +408,39 @@ impl fmt::Debug for Services {
             .field("permissions", &self.permissions.is_some())
             .field("catalogues", &self.catalogues.is_some())
             .field("locale", &self.locale.is_some())
+            .field("printing", &self.printing.is_some())
+            .field("serial", &self.serial.is_some())
             .finish()
     }
 }
 
 impl Services {
+    /// Returns `self` with the printing service set (Milestone 51).
+    #[must_use]
+    pub fn with_printing(mut self, service: Arc<dyn crate::industrial::PrintService>) -> Self {
+        self.printing = Some(service);
+        self
+    }
+
+    /// Returns the configured printing service, if any.
+    #[must_use]
+    pub fn printing(&self) -> Option<&Arc<dyn crate::industrial::PrintService>> {
+        self.printing.as_ref()
+    }
+
+    /// Returns `self` with the serial-port service set (Milestone 51).
+    #[must_use]
+    pub fn with_serial(mut self, service: Arc<dyn crate::industrial::SerialService>) -> Self {
+        self.serial = Some(service);
+        self
+    }
+
+    /// Returns the configured serial-port service, if any.
+    #[must_use]
+    pub fn serial(&self) -> Option<&Arc<dyn crate::industrial::SerialService>> {
+        self.serial.as_ref()
+    }
+
     /// Returns `self` with the permission service set.
     #[must_use]
     pub fn with_permissions(

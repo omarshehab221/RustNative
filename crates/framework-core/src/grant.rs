@@ -150,6 +150,30 @@ mod tests {
     }
 }
 
+/// An [`crate::services::HttpService`] that refuses requests to origins
+/// the scope was not granted — checked at each call, so a redirect target
+/// or a URL built at run time gets no further than a literal one.
+struct OriginGuard {
+    inner: std::sync::Arc<dyn crate::services::HttpService>,
+    grants: GrantSet,
+}
+
+#[async_trait::async_trait]
+impl crate::services::HttpService for OriginGuard {
+    async fn execute(
+        &self,
+        request: crate::services::HttpRequest,
+    ) -> Result<crate::services::HttpResponse, crate::services::ServiceError> {
+        if !self.grants.allows_url(request.url()) {
+            return Err(crate::services::ServiceError::new(format!(
+                "not granted: {} is outside this scope's origins",
+                origin_of(request.url())
+            )));
+        }
+        self.inner.execute(request).await
+    }
+}
+
 /// The services one part of an application may reach: what
 /// [`crate::Services::scoped`] returns.
 #[derive(Debug, Clone)]
@@ -185,7 +209,14 @@ impl ScopedServices {
     pub fn http(&self) -> Option<Granted<dyn crate::services::HttpService>> {
         let any_origin = self.grants.is_unrestricted()
             || self.grants.grants().iter().any(|grant| matches!(grant, Grant::Origins(_)));
-        any_origin.then(|| self.services.http().cloned().map(Granted::new)).flatten()
+        let http = any_origin.then(|| self.services.http().cloned()).flatten()?;
+        if self.grants.is_unrestricted() {
+            return Some(Granted::new(http));
+        }
+        Some(Granted::new(std::sync::Arc::new(OriginGuard {
+            inner: http,
+            grants: self.grants.clone(),
+        })))
     }
 
     /// The persisted-state store, if granted and present.

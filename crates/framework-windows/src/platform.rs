@@ -141,8 +141,17 @@ impl Platform for WindowsPlatform {
                 // camera where a capture driver is installed; web content is
                 // not offered (see `native::host_content`).
                 Capability::MediaPlayback,
+                // Milestone 51: the spooler and COM ports.
+                Capability::Printing,
+                Capability::SerialPorts,
             ]
             .into_iter()
+            .chain(crate::native::accelerator::gpu_available().then_some(Capability::Accelerator(
+                framework_core::capability::AcceleratorKind::Gpu,
+            )))
+            .chain(crate::native::accelerator::npu_available().then_some(Capability::Accelerator(
+                framework_core::capability::AcceleratorKind::Npu,
+            )))
             .chain(crate::native::host_content::camera_available().then_some(Capability::Camera)),
         )
     }
@@ -220,6 +229,21 @@ mod tests {
         // System sharing is still only a portable contract, and no surface
         // beyond the main window is realized until Milestone 57.
         assert!(!capabilities.supports(Capability::SystemShare));
+        assert!(capabilities.supports(Capability::Printing));
+        assert!(capabilities.supports(Capability::SerialPorts));
+        // Answered from the machine, never assumed.
+        assert_eq!(
+            capabilities.supports(Capability::Accelerator(
+                framework_core::capability::AcceleratorKind::Gpu
+            )),
+            crate::native::accelerator::gpu_available()
+        );
+        assert_eq!(
+            capabilities.supports(Capability::Accelerator(
+                framework_core::capability::AcceleratorKind::Npu
+            )),
+            crate::native::accelerator::npu_available()
+        );
         for surface in [
             framework_core::SurfaceKind::Widget,
             framework_core::SurfaceKind::TrayExtra,

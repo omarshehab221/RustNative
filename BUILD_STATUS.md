@@ -14,6 +14,106 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 51 — Observability, security, and compliance — complete for Windows and the server
+
+**Built.** Guide: `docs/observability.md`. Also written:
+`docs/security/threat-model-windows.md`,
+`docs/security/threat-model-server.md`,
+`docs/security/certification-posture.md`, and `docs/telemetry-policy.md`.
+
+- **`framework-observe`** follows OpenTelemetry's model (`C70`).
+  - Spans, structured logs tied to spans, semantic conventions, counters
+    and histograms, and output in the Prometheus text format.
+  - Exporters write to stdout, a file, OTLP/HTTP (batched), or memory.
+  - `TracedHttp` sends `traceparent`, and the server middleware continues
+    that trace, so one trace spans the client and the server.
+  - The OTLP exporter holds and sends nothing until the person consents
+    (`Telemetry` is off by default, and the choice persists).
+- **Crash capture on Windows** (`framework_windows::crash`).
+  - Handles panics and unhandled exceptions.
+  - Writes a minidump (`MiniDumpWriteDump`) and a JSON report.
+  - The report carries the message, a backtrace symbolicated in process,
+    the versions, and the UI tree as last rendered (wire JSON, kept after
+    each render while capture is on).
+  - `rustnative crash list|show` reads the reports.
+- **Grants enforced at each call** (`C68`): a scoped `HttpService`
+  refuses origins outside its grant when each request is made, so
+  refused requests never leave.
+- **The isolated worker** (`C67`, `framework_windows::isolated`).
+  - Runs with a low-integrity token.
+  - A job object caps its memory, withholds UI access, and kills it when
+    its owner drops it.
+  - It talks to the owner in typed JSON messages over pipes.
+- **Power loss** (`C80`). `FileStateStore` files now lead with a magic
+  number and an FNV-1a checksum, so a torn file or a flipped bit reads as
+  nothing stored. Files in the old format are still read.
+- **Industrial services.**
+  - `framework_core::industrial::{PrintService, SerialService}` are the
+    contracts.
+  - `WindowsPrinting` prints through the spooler and can print to a file.
+  - `WindowsSerial` opens COM ports through the communications API.
+  - `Capability::Printing` and `Capability::SerialPorts` report them.
+- **Accelerators as capability answers** (`C89`).
+  `Capability::Accelerator(Gpu | Npu)` is answered from the machine: DXGI
+  hardware adapters for a GPU, and DXCore machine-learning adapters for an
+  NPU (DXCore is loaded at run time).
+- **`rustnative compliance`** generates, from the build:
+  - a CycloneDX 1.5 SBOM;
+  - licenses and a dependency inventory;
+  - privacy and permission manifests;
+  - an accessibility report;
+  - requirement traceability, from `// req: ID` annotations.
+- **Threat models** for Windows applications and for servers, a
+  telemetry policy, and a certification posture.
+
+**Verified.** Full gate.
+- **Tracing:**
+  - one trace across an in-process client and server, with correct
+    parenting and no query string in span names;
+  - `traceparent` parsing rejects garbage;
+  - consent: a span recorded before consent is never sent, and one
+    recorded after is sent;
+  - Prometheus output.
+- **Crash capture:** real child processes that panic, and one that
+  dereferences null, each leave a report and a non-empty dump. The panic's
+  report carries the tree and a symbolicated backtrace.
+- **The isolated worker:** a round trip over its channel works; a write to
+  a medium-integrity folder is denied; dropping the worker kills its
+  process.
+- **Grants:** a request to an origin outside the grant is refused and
+  never reaches the service; a look-alike host is refused.
+- **Power loss:**
+  - every truncation of a state file reads as nothing stored;
+  - a flipped bit is caught, and legacy files still read;
+  - a process killed mid-save 12 times always leaves a whole value;
+  - on its first run, the truncation test found that the first design (a
+    trailing checksum) let a file cut short pass as a legacy file, and the
+    checksum was moved to the front.
+- **Printing:** to a file through the XPS Document Writer where it is
+  installed.
+- **Serial:** a missing port is an error.
+- **Capabilities:** the platform's accelerator answers match what the
+  machine reports.
+- **Compliance:** the SBOM and the traceability mapping.
+
+**Not verified / owed.**
+- **Embedded obligations**: power-aware scheduling, the watchdog, the
+  bounded-allocation mode, pools and high-water reports (`C77`),
+  supervised or unprivileged domains (`C78`), and partition layouts
+  (`C80-2`). These belong with the embedded backend milestones.
+- **Symbolication on other targets.**
+- **Uploading crash reports**: they stay on the machine, and uploading is
+  the application's choice.
+- **Integration contracts**: device messaging and provisioning beyond
+  Milestone 55's MQTT, inference kept off the frame path, and node-graph
+  transports.
+- **Web security headers** were delivered by Milestone 49. Permissions
+  policy on web targets is owed with the Web track.
+- **A real power cut**: the power-loss test kills a process, which is not
+  a power cut. The checksum covers the difference, and a power cut on
+  hardware is owed.
+- **Printing to paper** was not checked, since no printer is attached.
+
 ### Milestone 50 — Deployment, updates, and fleet operations — complete for Windows and the long-lived server
 
 **Built.** Guides: `docs/deploy.md` and `docs/deploy/update-rules.md`.

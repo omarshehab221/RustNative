@@ -3156,6 +3156,22 @@ tree state, and every artifact ships with generated compliance evidence.
 
 **Depends on** Milestone 44 (protocol), Milestone 50 (artifacts).
 
+**Status (2026-09-26): implemented for Windows and the server.** This
+covers:
+
+- tracing across the client and the server, with consent-gated export;
+- crash reports carrying the tree at failure and a minidump
+  (`rustnative crash`);
+- grants enforced at each request;
+- a low-integrity, job-limited isolated worker;
+- a checksummed state store that survives a process killed mid-save;
+- printing and serial ports;
+- accelerator answers;
+- `rustnative compliance`.
+
+The embedded obligations are owed with the embedded backends. See
+`docs/observability.md` and `BUILD_STATUS.md`.
+
 ## Milestone 52 — The project around the framework
 
 The layer that decides whether anything above gets a second project. Two items

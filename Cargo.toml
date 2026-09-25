@@ -39,6 +39,7 @@ framework-server = { path = "crates/framework-server", version = "0.1.0" }
 framework-server-macros = { path = "crates/framework-server-macros", version = "0.1.0" }
 framework-sync = { path = "crates/framework-sync", version = "0.1.0" }
 framework-durable = { path = "crates/framework-durable", version = "0.1.0" }
+framework-observe = { path = "crates/framework-observe", version = "0.1.0" }
 framework-conformance = { path = "crates/framework-conformance", version = "0.1.0" }
 tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 parking_lot = "0.12"
@@ -76,6 +77,15 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
     "Win32_UI_Accessibility",
     "Win32_UI_Controls",
     "Win32_UI_Controls_Dialogs",
+    # Milestone 51: crash capture, the isolated worker, printing, and
+    # serial ports.
+    "Win32_Devices_Communication",
+    "Win32_Graphics_Printing",
+    "Win32_Security_Authorization",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_JobObjects",
+    "Win32_System_Kernel",
+    "Win32_System_Pipes",
 ] }
 
 [workspace.lints.rust]

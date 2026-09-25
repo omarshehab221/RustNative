@@ -418,6 +418,10 @@ impl Application {
             C::RightToLeft,
             C::HostTraits,
             C::Permissions,
+            C::Printing,
+            C::SerialPorts,
+            C::Accelerator(crate::capability::AcceleratorKind::Gpu),
+            C::Accelerator(crate::capability::AcceleratorKind::Npu),
         ];
         let mut refused: Vec<Refusal> = every
             .iter()

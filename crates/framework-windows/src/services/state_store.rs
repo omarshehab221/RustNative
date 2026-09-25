@@ -19,6 +19,16 @@
 //! either the old value or the new one — never a half-written file. A
 //! temporary file a crash left behind is ignored by reads and deleted the
 //! next time the store is opened.
+//!
+//! # Power loss (`C80`)
+//!
+//! The atomic replace is only as good as the disk's promise to honour
+//! write-through. A disk that loses power with a sector half written can
+//! still hand back a committed file cut short, so each file ends with a
+//! checksum of what it holds: a torn file reads as nothing stored, never
+//! as a truncated value. Files written before the checksum existed are
+//! still read. The checksum leads the file, so a file cut short can never
+//! pass for one of those.
 
 use std::fs;
 use std::io::Write as _;
@@ -165,23 +175,45 @@ impl StateStore for FileStateStore {
     }
 }
 
-/// A file's contents: the key's length (little-endian `u32`), the key, then
-/// the value.
+/// The marker starting a checksummed file. No file from before the
+/// checksum starts with it: there, the first four bytes are the key's
+/// length, and a key is never 827 MB long.
+const MAGIC: &[u8; 4] = b"RNS1";
+
+/// A file's contents: [`MAGIC`], the FNV-1a of the rest, then the key's
+/// length (little-endian `u32`), the key, and the value.
 fn encode(key: &str, value: &[u8]) -> Vec<u8> {
     let length = u32::try_from(key.len()).unwrap_or(u32::MAX);
-    let mut bytes = Vec::with_capacity(4 + key.len() + value.len());
-    bytes.extend_from_slice(&length.to_le_bytes());
-    bytes.extend_from_slice(key.as_bytes());
-    bytes.extend_from_slice(value);
+    let mut body = Vec::with_capacity(4 + key.len() + value.len());
+    body.extend_from_slice(&length.to_le_bytes());
+    body.extend_from_slice(key.as_bytes());
+    body.extend_from_slice(value);
+    let mut bytes = Vec::with_capacity(12 + body.len());
+    bytes.extend_from_slice(MAGIC);
+    bytes.extend_from_slice(&fnv1a(&body).to_le_bytes());
+    bytes.extend_from_slice(&body);
     bytes
 }
 
 /// The value in `bytes` if the file holds `key`; `None` for a file that is
-/// another key's (a hash collision) or not a state file at all.
+/// another key's (a hash collision), torn, or not a state file at all.
 fn decode(bytes: &[u8], key: &str) -> Option<Vec<u8>> {
-    let length = usize::try_from(u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?)).ok()?;
-    let stored = bytes.get(4..4 + length)?;
-    (stored == key.as_bytes()).then(|| bytes[4 + length..].to_vec())
+    let body = if let Some(rest) = bytes.strip_prefix(MAGIC) {
+        // The checksum covers everything after it, so a file cut short or
+        // a flipped bit anywhere reads as nothing stored.
+        let checksum = u64::from_le_bytes(rest.get(..8)?.try_into().ok()?);
+        let body = &rest[8..];
+        if fnv1a(body) != checksum {
+            return None;
+        }
+        body
+    } else {
+        // A file from before the checksum.
+        bytes
+    };
+    let length = usize::try_from(u32::from_le_bytes(body.get(..4)?.try_into().ok()?)).ok()?;
+    let stored = body.get(4..4 + length)?;
+    (stored == key.as_bytes()).then(|| body[4 + length..].to_vec())
 }
 
 /// 64-bit FNV-1a: small, stable across Rust versions (unlike `std`'s
@@ -249,6 +281,70 @@ mod tests {
         let reopened = FileStateStore::in_directory(&directory).unwrap();
         assert!(!debris.exists(), "the leftover temporary file was deleted");
         assert_eq!(reopened.load("key").unwrap().as_deref(), Some(&b"committed"[..]));
+    }
+
+    // req: C80-1
+    #[test]
+    fn a_torn_file_reads_as_nothing_never_as_a_shorter_value() {
+        let store = FileStateStore::in_directory(scratch("torn")).unwrap();
+        store.save("key", b"the whole value").unwrap();
+        let path = store.path_for("key", EXTENSION);
+        let whole = fs::read(&path).unwrap();
+        for cut in 0..whole.len() {
+            fs::write(&path, &whole[..cut]).unwrap();
+            assert_eq!(store.load("key").unwrap(), None, "cut at {cut} of {}", whole.len());
+        }
+        let mut flipped = whole.clone();
+        flipped[6] ^= 1;
+        fs::write(&path, flipped).unwrap();
+        assert_eq!(store.load("key").unwrap(), None, "a flipped bit is caught");
+        fs::write(&path, b"\x03\x00\x00\x00keylegacy").unwrap();
+        assert_eq!(
+            store.load("key").unwrap().as_deref(),
+            Some(&b"legacy"[..]),
+            "old files still read"
+        );
+    }
+
+    /// The child side of the power-cut test: saves ever-longer values
+    /// until it is killed.
+    #[test]
+    fn power_cut_child() {
+        let Some(directory) = std::env::var_os("RUSTNATIVE_POWER_CUT_DIR") else { return };
+        let store = FileStateStore::in_directory(PathBuf::from(directory)).unwrap();
+        for round in 0..u32::MAX {
+            let value =
+                format!("{round}|{}", "x".repeat(usize::try_from(round % 4096).unwrap_or(0)));
+            store.save("key", value.as_bytes()).unwrap();
+        }
+    }
+
+    // req: C80-1
+    #[test]
+    fn a_process_killed_mid_save_leaves_a_whole_value() {
+        let directory = scratch("power-cut");
+        for attempt in 0..12u64 {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "services::state_store::tests::power_cut_child", "--nocapture"])
+                .env("RUSTNATIVE_POWER_CUT_DIR", &directory)
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(150 + attempt * 37));
+            child.kill().unwrap();
+            let _ = child.wait();
+            let store = FileStateStore::in_directory(&directory).unwrap();
+            if let Some(value) = store.load("key").unwrap() {
+                let text = String::from_utf8(value).unwrap();
+                let (round, filler) = text.split_once('|').unwrap();
+                let round: u32 = round.parse().unwrap();
+                assert_eq!(
+                    filler.len(),
+                    usize::try_from(round % 4096).unwrap(),
+                    "attempt {attempt}: a whole value"
+                );
+            }
+        }
     }
 
     #[test]

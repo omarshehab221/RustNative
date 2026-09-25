@@ -79,6 +79,23 @@ pub enum Capability {
     Permissions,
     /// A surface beyond the main window (`C49-1`), realized by Milestone 57.
     Surface(SurfaceKind),
+    /// Printing documents ([`crate::industrial::PrintService`]).
+    Printing,
+    /// Serial ports ([`crate::industrial::SerialService`]).
+    SerialPorts,
+    /// A hardware accelerator for compute and inference (`C89-1`),
+    /// answered from what the machine actually has.
+    Accelerator(AcceleratorKind),
+}
+
+/// Kinds of compute accelerator (`C89-1`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum AcceleratorKind {
+    /// A graphics processor usable for general compute.
+    Gpu,
+    /// A neural processing unit.
+    Npu,
 }
 
 /// Surfaces an application can have beyond its windows (`C49-1`). Every
