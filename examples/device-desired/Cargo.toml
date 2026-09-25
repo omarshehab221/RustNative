@@ -1,0 +1,22 @@
+[package]
+name = "device-desired"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# Milestone 55's device example: desired state over MQTT.
+[dependencies]
+framework-sync.workspace = true
+serde = { version = "1", features = ["derive"] }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "time"] }

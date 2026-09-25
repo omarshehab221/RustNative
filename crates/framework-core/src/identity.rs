@@ -205,6 +205,12 @@ impl ComponentId {
         self.0
     }
 
+    /// The identity with raw value `raw`, as [`Self::get`] gave it (for a
+    /// node key that crossed the wire; see `crate::wire`).
+    pub(crate) const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
     /// Allocates the next sequential id from `counter`, advancing it.
     ///
     /// # Panics

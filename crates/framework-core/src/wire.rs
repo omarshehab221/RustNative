@@ -154,8 +154,28 @@ const fn one() -> f32 {
     1.0
 }
 
-fn key_of(id: crate::identity::NodeId) -> String {
-    id.local_key().unwrap_or_else(|| format!("#{}", id.get()))
+/// A node's key on the wire: its local key, prefixed `owner~` when a
+/// component (not the root) owns it, so an event naming it finds the same
+/// node when it comes back (see [`node_id`]).
+#[must_use]
+pub fn key_of(id: crate::identity::NodeId) -> String {
+    let local = id.local_key().unwrap_or_else(|| format!("#{}", id.get()));
+    match id.owner() {
+        Some(owner) => format!("{}~{local}", owner.get()),
+        None => local,
+    }
+}
+
+/// The node a wire key names ([`key_of`]'s inverse).
+#[must_use]
+pub fn node_id(key: &str) -> crate::identity::NodeId {
+    use crate::identity::{ComponentId, NodeId};
+    if let Some((owner, local)) = key.split_once('~') {
+        if let Ok(owner) = owner.parse::<u64>() {
+            return NodeId::scoped(ComponentId::from_raw(owner), NodeId::from_key(local));
+        }
+    }
+    NodeId::from_key(key)
 }
 
 /// A command id for a name read off the wire. Command ids are
