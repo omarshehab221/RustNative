@@ -258,8 +258,18 @@ fn a_toast_dismisses_itself() {
     let mut app = launch();
     stores().toast.set(Some("Saved".into()));
     app.settle();
-    assert!(app.find(&Query::text("Saved")).is_ok(), "shown: {}", app.golden().lines().filter(|l| l.contains("toast") || l.contains("Saved")).collect::<Vec<_>>().join("
-"));
+    assert!(
+        app.find(&Query::text("Saved")).is_ok(),
+        "shown: {}",
+        app.golden()
+            .lines()
+            .filter(|l| l.contains("toast") || l.contains("Saved"))
+            .collect::<Vec<_>>()
+            .join(
+                "
+"
+            )
+    );
     app.advance(Duration::from_secs(5));
     assert_eq!(stores().toast.get(), None);
     assert!(app.find(&Query::text("Saved")).is_err(), "gone");

@@ -10,16 +10,23 @@
 //! | `LOCALE`, `LAYOUT_DIRECTION` | `GetUserDefaultLocaleName`, and its script's direction |
 //! | `WINDOW_MODE` | the window's width against its monitor's work area, when snapped |
 //! | `SAFE_AREA`, `POSTURE` | none: a desktop window has neither, so the defaults stand |
+//! | host colors (`Application::set_host_palette`) | `DwmGetColorizationColor`, `GetSysColor` |
 //!
 //! Read once when the application starts and again on every
 //! `WM_SETTINGCHANGE`. Setting an unchanged value invalidates nothing, so
 //! re-reading everything on any change is cheap and cannot drift.
 
 use framework_core::{
-    Application, ColorScheme, Contrast, Locale, Scalar, WindowId, WindowMode, keys,
+    Application, Color, ColorScheme, Contrast, HostPalette, Locale, Scalar, WindowId, WindowMode,
+    keys,
 };
 use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
+use windows_sys::Win32::Graphics::Dwm::DwmGetColorizationColor;
+use windows_sys::Win32::Graphics::Gdi::{
+    COLOR_BTNSHADOW, COLOR_GRAYTEXT, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW,
+    COLOR_WINDOWTEXT, GetSysColor,
+};
 use windows_sys::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
@@ -38,6 +45,46 @@ pub(crate) struct HostTraits {
     pub(crate) text_scale: Scalar,
     pub(crate) contrast: Contrast,
     pub(crate) locale: Locale,
+    /// The colors host-following tokens take (`docs/tokens.md`).
+    pub(crate) palette: HostPalette,
+}
+
+fn system_color(index: i32) -> Color {
+    // SAFETY: a documented system-color index; no pointers.
+    let value = unsafe { GetSysColor(index) };
+    let [red, green, blue, _] = value.to_le_bytes();
+    Color::rgb(red, green, blue)
+}
+
+/// The person's colors: the accent they chose (`DwmGetColorizationColor`)
+/// and the system colors of windows, text, and selection.
+pub(crate) fn palette() -> HostPalette {
+    let mut colorization = 0_u32;
+    let mut opaque = 0;
+    // SAFETY: both out-parameters are valid for the call.
+    let ok = unsafe { DwmGetColorizationColor(&raw mut colorization, &raw mut opaque) } >= 0;
+    let fallback = HostPalette::default();
+    let accent = if ok {
+        let [blue, green, red, _] = colorization.to_le_bytes();
+        Color::rgb(red, green, blue)
+    } else {
+        fallback.accent
+    };
+    // White or black text on the accent, whichever reads.
+    let luminance =
+        u32::from(accent.red) * 299 + u32::from(accent.green) * 587 + u32::from(accent.blue) * 114;
+    let on_accent =
+        if luminance > 150_000 { Color::rgb(0, 0, 0) } else { Color::rgb(255, 255, 255) };
+    HostPalette {
+        accent,
+        on_accent,
+        surface: system_color(COLOR_WINDOW),
+        on_surface: system_color(COLOR_WINDOWTEXT),
+        highlight: system_color(COLOR_HIGHLIGHT),
+        on_highlight: system_color(COLOR_HIGHLIGHTTEXT),
+        border: system_color(COLOR_BTNSHADOW),
+        muted: system_color(COLOR_GRAYTEXT),
+    }
 }
 
 /// Reads the host's current traits.
@@ -62,6 +109,7 @@ pub(crate) fn read() -> HostTraits {
         ),
         contrast: if high_contrast() { Contrast::High } else { Contrast::Standard },
         locale: user_locale().map_or_else(Locale::default, Locale::new),
+        palette: palette(),
     }
 }
 
@@ -75,6 +123,7 @@ pub(crate) fn apply(application: &mut Application, traits: &HostTraits) {
     if application.environment_for(WindowId::PRIMARY, &keys::LOCALE) != traits.locale {
         application.set_locale(traits.locale.clone());
     }
+    application.set_host_palette(traits.palette);
 }
 
 /// Reports whether `window` shares its monitor with another window — a
@@ -160,6 +209,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_host_palette_reads_without_failing() {
+        let palette = palette();
+        assert_eq!(palette.accent.alpha, 255);
+    }
+
+    #[test]
     fn the_host_answers_every_trait() {
         let traits = read();
         assert!(!traits.locale.tag().is_empty(), "Windows always has a user locale");
@@ -192,8 +247,18 @@ mod tests {
             text_scale: Scalar::new(1.5),
             contrast: Contrast::High,
             locale: Locale::new("he-IL"),
+            palette: HostPalette { accent: Color::rgb(1, 2, 3), ..HostPalette::default() },
         };
+        application.set_theme(
+            framework_core::Theme::default()
+                .with_host_role("color-accent", framework_core::HostRole::Accent),
+        );
         apply(&mut application, &traits);
+        assert_eq!(
+            application.theme().tokens().get("color-accent"),
+            Some(&framework_core::StyleValue::Color(Color::rgb(1, 2, 3))),
+            "a host-following token takes the host's color"
+        );
         let id = WindowId::PRIMARY;
         assert_eq!(application.environment_for(id, &keys::COLOR_SCHEME), ColorScheme::Dark);
         assert_eq!(application.environment_for(id, &keys::CONTRAST), Contrast::High);

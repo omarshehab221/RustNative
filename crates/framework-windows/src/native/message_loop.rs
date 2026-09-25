@@ -668,6 +668,10 @@ unsafe extern "system" fn window_proc(
     wndproc_boundary(hwnd, move || window_proc_impl(hwnd, message, wparam, lparam))
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the window procedure is one dispatch table: an arm per message, each delegating"
+)]
 fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     // Delegating to the default window procedure, which every arm below
     // that declines to handle a message falls back to.
@@ -888,7 +892,8 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
         }
         windows_sys::Win32::UI::WindowsAndMessaging::WM_SETCURSOR
         | windows_sys::Win32::UI::WindowsAndMessaging::WM_INITMENUPOPUP
-        | WM_SETTINGCHANGE => shell_message(hwnd, message, wparam, lparam),
+        | WM_SETTINGCHANGE
+        | WM_DWMCOLORIZATIONCOLORCHANGED => shell_message(hwnd, message, wparam, lparam),
         super::uia::WM_FRAMEWORK_UIA => {
             // Drained inside the borrow, raised after it ends — see
             // `native::uia`'s module docs for why raising must not happen
@@ -1141,6 +1146,10 @@ fn resync_control(runtime: &mut Runtime, id: framework_core::NodeId) {
         }
     }
 }
+
+/// The person changed their accent color (`WM_DWMCOLORIZATIONCOLORCHANGED`):
+/// handled with the other settings changes, which re-read the host palette.
+const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
 
 /// A trackbar moved (a scroll bar sends no control handle).
 fn slider_moved(hwnd: HWND, control: HWND) {

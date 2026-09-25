@@ -22,6 +22,19 @@ pub struct Cli {
 }
 
 /// What `rustnative` was asked to do.
+/// `rustnative tokens`.
+#[derive(Debug, clap::Subcommand)]
+pub enum TokensCommand {
+    /// Import a W3C Design Tokens file into the style file's `@theme` block.
+    Import {
+        /// The token file (`tokens.json`).
+        file: PathBuf,
+        /// The style file to write (default: the project's).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Create a new application.
@@ -60,6 +73,12 @@ enum Command {
         /// What to do.
         #[command(subcommand)]
         command: crate::i18n::I18nCommand,
+    },
+    /// Design tokens (`PLAN.md` Milestone 48).
+    Tokens {
+        /// What to do.
+        #[command(subcommand)]
+        command: TokensCommand,
     },
     /// Generate a component, a screen, or a service, with its preview and
     /// its test, in the project's syntax (`PLAN.md` Milestone 43).
@@ -327,6 +346,9 @@ impl Cli {
             Command::Inspect { target, question } => crate::inspect::run(&target, question),
             Command::Generate { what } => crate::generate::run(&here, &what),
             Command::I18n { command } => crate::i18n::run(&here, &command),
+            Command::Tokens { command: TokensCommand::Import { file, out } } => {
+                crate::tokens::import(&here, &file, out)
+            }
             Command::Preview { name, headless } => {
                 let project = Project::find(&here)?;
                 if headless {

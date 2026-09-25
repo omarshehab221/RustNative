@@ -51,7 +51,25 @@ pub fn theme_source(path: &Path, source: &str) -> Result<String, String> {
     })?;
     let (cleared, set) = vocabulary.project_theme();
     let tokens = framework_style::tokens::token_table(&cleared, &set, &quote!(::framework_core));
-    Ok(quote!(::framework_core::Theme::default().with_tokens(#tokens)).to_string())
+    // Tokens noted `/* host: <role> */` follow the host's color for that
+    // role (`docs/tokens.md`).
+    let roles =
+        framework_style::design_tokens::host_roles(source).into_iter().map(|(name, role)| {
+            let variant = quote::format_ident!(
+                "{}",
+                role.split('-')
+                    .map(|part| {
+                        let mut chars = part.chars();
+                        chars
+                            .next()
+                            .map(|first| first.to_ascii_uppercase().to_string() + chars.as_str())
+                            .unwrap_or_default()
+                    })
+                    .collect::<String>()
+            );
+            quote!(.with_host_role(#name, ::framework_core::HostRole::#variant))
+        });
+    Ok(quote!(::framework_core::Theme::default().with_tokens(#tokens) #(#roles)*).to_string())
 }
 
 /// Compiles the project's style file into `OUT_DIR/app_theme.rs`. With no
@@ -92,6 +110,23 @@ mod tests {
         let theme = theme_source(Path::new("app.css"), source).unwrap();
         assert!(theme.contains("without_namespace (\"color-\")"), "{theme}");
         assert!(theme.contains("\"color-primary\""), "{theme}");
+    }
+
+    #[test]
+    fn host_notes_become_host_roles() {
+        let source = "@theme {
+  --color-accent: #0f6cbd; /* host: accent */
+  --color-on-accent: #fff; /* host: on-accent */
+}
+";
+        let theme = theme_source(Path::new("app.css"), source).unwrap();
+        assert!(
+            theme.contains(
+                "with_host_role (\"color-accent\" , :: framework_core :: HostRole :: Accent)"
+            ),
+            "{theme}"
+        );
+        assert!(theme.contains("HostRole :: OnAccent"), "{theme}");
     }
 
     #[test]

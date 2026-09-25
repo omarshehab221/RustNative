@@ -16,10 +16,12 @@
 //! one typed property, so `classes!("p-4 bg-blue-500")` and a builder chain
 //! setting the same padding and background resolve to the same node.
 
+mod host;
 mod phase;
 mod resolve;
 mod theme;
 
+pub use host::{HostPalette, HostRole};
 pub use phase::{ResolvedStyle, StyleOverride};
 pub(crate) use resolve::{ResolveEnv, resolve_tree};
 pub use theme::{

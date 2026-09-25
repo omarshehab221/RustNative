@@ -46,17 +46,28 @@ pub const ROLES: [&str; 9] = [
 
 /// `theme` with every role token it does not define added at its default
 /// value — so an application's own token set wins where it says something,
-/// and the library still resolves everywhere else.
+/// and the library still resolves everywhere else. The default accent,
+/// surface, text, border, and muted roles follow the host's colors
+/// (`docs/tokens.md`); danger is a brand value.
 #[must_use]
 pub fn with_roles(theme: framework_core::Theme) -> framework_core::Theme {
     let defaults = role_theme();
     let mut tokens = theme.tokens().clone();
+    let mut added = Vec::new();
     for role in ROLES {
         if tokens.get(role).is_none() {
             if let Some(value) = defaults.tokens().get(role) {
                 tokens.insert(role, value.clone());
+                added.push(role);
             }
         }
     }
-    theme.with_tokens(tokens)
+    // A default role that follows the host keeps following it.
+    let mut theme = theme.with_tokens(tokens);
+    for (name, host) in defaults.host_roles() {
+        if added.contains(&name.as_ref()) {
+            theme = theme.with_host_role(name.clone(), *host);
+        }
+    }
+    theme
 }

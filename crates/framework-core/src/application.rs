@@ -97,6 +97,8 @@ pub struct Application {
     /// Tracing, history, recording, the overlay, and the inspection
     /// server (`crate::inspect`).
     pub(crate) inspection: crate::inspect::Inspection,
+    /// The host's colors, once a backend has read them.
+    host_palette: Option<crate::style::HostPalette>,
 }
 
 impl fmt::Debug for Application {
@@ -184,6 +186,7 @@ impl Application {
             executor,
             environment: crate::environment::Environment::new(),
             inspection: crate::inspect::Inspection::default(),
+            host_palette: None,
         };
         application.update_size_class(WindowId::PRIMARY);
         // A component may request another window from its first render. The
@@ -803,11 +806,31 @@ impl Application {
     /// [`ComponentTree::set_theme`]: a backend applies the result to its
     /// existing native objects, creating none.
     pub fn set_theme(&mut self, theme: Theme) {
+        // A theme with host-following tokens takes the host's current
+        // colors (`docs/tokens.md`).
+        let theme = match &self.host_palette {
+            Some(palette) if !theme.host_roles().is_empty() => theme.with_host_palette(palette),
+            _ => theme,
+        };
         self.theme = theme;
         for entry in self.windows.values_mut() {
             let _ = entry.components.set_theme(self.theme.clone());
         }
         self.apply_queued_window_commands();
+    }
+
+    /// Records the host's colors, and re-themes every window whose theme
+    /// has tokens following them — what a backend calls at start and when
+    /// the person changes their colors.
+    pub fn set_host_palette(&mut self, palette: crate::style::HostPalette) {
+        if self.host_palette == Some(palette) {
+            return;
+        }
+        self.host_palette = Some(palette);
+        if !self.theme.host_roles().is_empty() {
+            let theme = self.theme.clone();
+            self.set_theme(theme);
+        }
     }
 
     /// Returns the application-wide theme.

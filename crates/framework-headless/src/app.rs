@@ -143,7 +143,10 @@ impl HeadlessApp {
         perf::mark(StartupPhase::RuntimeReady);
         let executor = ManualExecutor::new();
         let services = services.with_clock(Arc::new(executor.clone()));
-        let app = factory(services.clone(), theme.clone(), Arc::new(executor.clone()));
+        let mut app = factory(services.clone(), theme.clone(), Arc::new(executor.clone()));
+        // Host-following tokens take the fixed reference palette, the same on
+        // every machine (`docs/tokens.md`).
+        app.set_host_palette(framework_core::HostPalette::default());
         let mut headless = Self {
             factory,
             app,

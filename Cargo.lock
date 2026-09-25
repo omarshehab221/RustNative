@@ -542,6 +542,7 @@ dependencies = [
  "framework-types",
  "proc-macro2",
  "quote",
+ "serde_json",
 ]
 
 [[package]]

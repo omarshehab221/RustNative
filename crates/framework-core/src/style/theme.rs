@@ -334,6 +334,8 @@ pub struct Theme {
     text_input: ComponentStyle,
     container: ComponentStyle,
     tokens: TokenTable,
+    /// Tokens that follow a host color (Milestone 48).
+    host_roles: Vec<(std::borrow::Cow<'static, str>, super::host::HostRole)>,
 }
 
 impl Default for Theme {
@@ -374,6 +376,7 @@ impl Default for Theme {
                 ..Default::default()
             },
             tokens: TokenTable::defaults(),
+            host_roles: Vec::new(),
         }
     }
 }
@@ -546,6 +549,36 @@ impl Theme {
         value: StyleValue,
     ) -> Self {
         self.tokens.insert(name, value);
+        self
+    }
+
+    /// Returns `self` with token `name` following the host's `role`: its
+    /// value stays the fallback until a backend applies the host's palette
+    /// ([`Self::with_host_palette`]), and changes with it (`docs/tokens.md`).
+    #[must_use]
+    pub fn with_host_role(
+        mut self,
+        name: impl Into<std::borrow::Cow<'static, str>>,
+        role: super::host::HostRole,
+    ) -> Self {
+        let name = name.into();
+        self.host_roles.retain(|(existing, _)| *existing != name);
+        self.host_roles.push((name, role));
+        self
+    }
+
+    /// The tokens that follow host colors, and the roles they follow.
+    #[must_use]
+    pub fn host_roles(&self) -> &[(std::borrow::Cow<'static, str>, super::host::HostRole)] {
+        &self.host_roles
+    }
+
+    /// Returns `self` with every host-following token set from `palette`.
+    #[must_use]
+    pub fn with_host_palette(mut self, palette: &super::host::HostPalette) -> Self {
+        for (name, role) in &self.host_roles {
+            self.tokens.insert(name.clone(), StyleValue::Color(palette.color(*role)));
+        }
         self
     }
 

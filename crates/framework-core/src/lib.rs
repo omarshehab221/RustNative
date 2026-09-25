@@ -422,9 +422,9 @@ pub use services::{
 };
 pub use state::{Derived, Store, StoreSnapshot};
 pub use style::{
-    Color, ComponentStyle, ControlState, DeclarationSet, ResolvedStyle, ShadowLayer, StateStyles,
-    StyleCapabilities, StyleOverride, StyleProperty, StyleSupport, StyleValue, Theme, TokenTable,
-    Typography, UnitMapping, VisualStyle,
+    Color, ComponentStyle, ControlState, DeclarationSet, HostPalette, HostRole, ResolvedStyle,
+    ShadowLayer, StateStyles, StyleCapabilities, StyleOverride, StyleProperty, StyleSupport,
+    StyleValue, Theme, TokenTable, Typography, UnitMapping, VisualStyle,
 };
 pub use teardown::{Restoration, TeardownPolicy};
 pub use virtualization::{

@@ -44,6 +44,7 @@ mod package;
 mod pgo;
 mod platform;
 mod project;
+mod tokens;
 mod toolchain;
 
 use std::process::ExitCode;

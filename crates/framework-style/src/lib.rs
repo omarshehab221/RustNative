@@ -52,6 +52,7 @@
 
 pub mod capability;
 pub mod color;
+pub mod design_tokens;
 pub mod model;
 pub mod sheet;
 mod token_table;
