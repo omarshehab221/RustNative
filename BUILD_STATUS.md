@@ -14,6 +14,65 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 56 — Durable and event-driven execution — complete (local implementation)
+
+**Built.** A new crate, `framework-durable`. Guide: `docs/durable.md`.
+
+- **Durable workflows**
+  - `step` results are journaled in SQLite, and a replay returns the
+    recorded result.
+  - `transactional_step` commits a step's effect together with its journal
+    entry, so the effect happens exactly once.
+  - Steps get idempotency keys for effects outside the database.
+  - Durable timers (`sleep`), signals and approvals, and compensation that
+    runs in reverse when a workflow fails.
+  - `version` markers let in-flight executions keep their behaviour.
+  - Time and randomness are recorded (`now`, `random`).
+  - A replay that diverges fails and names both steps.
+  - The `WorkflowEngine` contract, with `LocalEngine` as its
+    implementation.
+- **Event handlers**
+  - A standard `EventEnvelope`, and batches that report partial failures.
+  - Failed events are retried with exponential backoff, then moved to
+    dead letters.
+  - Events are deduplicated by id.
+  - Each invocation runs in a task scope bounded by that invocation.
+- **Stateful actors.** `LocalActorSystem` runs one instance per id, which
+  handles one message at a time. Each actor has private durable storage
+  that survives eviction, and durable alarms.
+- **Supervision.** `supervise` restarts a failing or panicking worker
+  according to its `SupervisionPolicy`, and records the history.
+- **Operations across the boundary.** `Operations` runs on the server
+  (`/_ops/:id`, `/_ops/:id/cancel`). Any client over `HttpService` can call
+  `follow` and `cancel`.
+- **Example.** `examples/workflow-crash` is killed after a step and in the
+  middle of another, then completes with each step executed exactly once.
+
+**Verified.** Full gate.
+- **The crash example's test** runs the real binary four times:
+  1. Aborted after `reserve`.
+  2. Aborted inside `charge`, before it commits.
+  3. Run to the end. Each effect row appears exactly once.
+  4. Run again. It adds nothing.
+- **The crate's tests** cover:
+  - timers, signals, approval, and compensation (one refund, for the
+    failed order only);
+  - versioning, and detection of a diverging replay;
+  - a batch with a poison event (only it is retried, then dead-lettered),
+    and suppression of duplicates;
+  - an actor-backed collaborative session: 20 concurrent appends with no
+    lost update, then eviction, restart from storage, and an alarm;
+  - supervised restarts after an error and after a panic;
+  - a client following and cancelling server operations.
+
+**Not verified / owed.**
+- The edge adapter for actors, and serverless adapters for event handlers
+  (Web milestone K).
+- An adapter for a hosted workflow engine.
+- A direct call to the standard library's clock inside a workflow still
+  compiles. The type system cannot forbid it, so divergence detection and
+  the documented `clippy.toml` are the guard, as `docs/durable.md` says.
+
 ### Milestone 55 — Reconciliation beyond the screen — complete (Windows scope)
 
 **Built.** A new crate, `framework-sync`. Guide: `docs/sync.md`.

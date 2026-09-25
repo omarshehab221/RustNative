@@ -3303,6 +3303,16 @@ implementation and on one edge adapter.
 
 **Depends on** Web milestone K and Milestone 49.
 
+**Status (2026-09-26): implemented** on the local implementation.
+
+- A killed workflow completes with each step executed exactly once
+  (`examples/workflow-crash`, which uses a real process abort).
+- An event batch with partial failures is settled event by event.
+- An actor-backed collaborative session runs on `LocalActorSystem`.
+
+The edge adapter is owed with Web milestone K. See `docs/durable.md` and
+`BUILD_STATUS.md`.
+
 ## Milestone 57 — Surfaces beyond the main window, and product services
 
 Cross-platform frameworks are most often abandoned at the moment an application

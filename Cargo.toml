@@ -38,6 +38,7 @@ framework-components = { path = "crates/framework-components", version = "0.1.0"
 framework-server = { path = "crates/framework-server", version = "0.1.0" }
 framework-server-macros = { path = "crates/framework-server-macros", version = "0.1.0" }
 framework-sync = { path = "crates/framework-sync", version = "0.1.0" }
+framework-durable = { path = "crates/framework-durable", version = "0.1.0" }
 framework-conformance = { path = "crates/framework-conformance", version = "0.1.0" }
 tokio = { version = "1.53", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 parking_lot = "0.12"
