@@ -320,6 +320,7 @@ impl Application {
             }),
             Request::Lifetimes => Reply::of(&backend.lifetimes()),
             Request::Stores => Reply::of(&crate::state::inspect_stores()),
+            Request::Jobs => Reply::Error("this process has no job queue; ask its server".into()),
             Request::Capabilities => Reply::of(&self.capability_report(backend)),
             Request::Mappers => Reply::of(&backend.mappers()),
             Request::History { component } => Reply::of(

@@ -7,7 +7,9 @@
 /// other application on that host does. A host without a pointer cursor
 /// (touch, terminal) does not advertise [`crate::Capability::Cursors`] and
 /// ignores it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum Cursor {
     /// The host's default arrow.
     #[default]

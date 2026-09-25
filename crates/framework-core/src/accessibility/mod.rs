@@ -51,7 +51,7 @@ use crate::input::Scalar;
 use crate::layout::Rect;
 
 /// A portable accessibility role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum AccessibilityRole {
     /// No specific role; the node is not exposed as a distinct accessible

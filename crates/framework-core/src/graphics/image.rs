@@ -47,12 +47,41 @@ impl std::error::Error for ImageError {}
 /// assert!(ImageData::rgba(2, 2, vec![0; 4], false).is_err());
 /// # Ok::<(), framework_core::ImageError>(())
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(into = "ImageRepr", try_from = "ImageRepr")]
 pub struct ImageData {
     width: u32,
     height: u32,
     pixels: Arc<[u8]>,
     premultiplied: bool,
+}
+
+/// The wire form of [`ImageData`], rebuilt through [`ImageData::rgba`] so
+/// a transmitted image is checked like any other.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ImageRepr {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+    premultiplied: bool,
+}
+
+impl From<ImageData> for ImageRepr {
+    fn from(image: ImageData) -> Self {
+        Self {
+            width: image.width,
+            height: image.height,
+            pixels: image.pixels.to_vec(),
+            premultiplied: image.premultiplied,
+        }
+    }
+}
+
+impl TryFrom<ImageRepr> for ImageData {
+    type Error = ImageError;
+    fn try_from(repr: ImageRepr) -> Result<Self, ImageError> {
+        Self::rgba(repr.width, repr.height, repr.pixels, repr.premultiplied)
+    }
 }
 
 impl ImageData {

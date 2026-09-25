@@ -1,0 +1,6 @@
+CREATE TABLE notes (
+    id INTEGER PRIMARY KEY,
+    owner INTEGER NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    indexed INTEGER NOT NULL DEFAULT 0
+);

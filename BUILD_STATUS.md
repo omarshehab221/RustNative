@@ -14,6 +14,110 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 49 — The server application model — complete (Windows scope)
+
+**Built.** The new `framework-server` crate, with `framework-server-macros`
+for `query!`. Guides: `docs/server.md` and
+`docs/server/security-checklist.md`.
+
+- **The application model on the client's contracts**
+  - Routes are `framework_core::Route` patterns.
+  - Handlers are `async fn`s with typed extractors: `Path`, `Query`,
+    `Json`, `Form`, `State`, `Session`, `Principal`, `RequestScope`,
+    `CsrfToken`, and `CspNonce`.
+  - Middleware runs before and after the handler.
+  - Error pages are HTML or JSON, depending on `Accept`.
+  - Each request gets a `RequestScope` that is cancelled when the response
+    is sent. A transaction tied to the scope commits only while the request
+    is still live.
+  - The application is a `tower::Service` (`C37`). It is served by hyper,
+    or mounted inside an existing service with `prefix`.
+- **Authentication and authorization**
+  - Sessions are sealed with AES-256-GCM. Passwords use Argon2id. Bearer
+    tokens are HMAC-signed.
+  - Passkeys: WebAuthn ES256 registration and assertion, with a minimal
+    CBOR reader (`C52-2`).
+  - Federation: OAuth authorization code with PKCE.
+  - Access is part of each route's type (`public`, `signed_in`, or
+    `authorized::<Policy>`). A route that states none does not compile.
+- **Data**
+  - A pooled, bundled SQLite (`rusqlite` 0.40, without its cache, so no
+    duplicate `hashbrown`).
+  - `query!` checks SQL against the migrations at compile time and infers
+    the row type.
+  - Migrations have up and down steps and a dry run.
+  - `schema::diff` generates migrations from `schema.toml`, with rename
+    detection and squashing (`C38`). The CLI is `rustnative db diff`,
+    `migrate`, `rollback`, and `squash`.
+  - Row policies come with a fixture harness (`C39`).
+- **Jobs**
+  - A durable queue with idempotency keys, exponential backoff, and dead
+    jobs.
+  - Cron schedules.
+  - An inspection endpoint that answers the new `jobs` request in the
+    Milestone 44 protocol.
+- **Secure defaults**, each with a test (see the checklist):
+  - CSRF double-submit;
+  - a CSP with a per-response nonce;
+  - security headers;
+  - `__Host-` cookies;
+  - rate limiting and a body limit;
+  - escaping `Html`;
+  - errors that hide internal detail.
+- **Admin surface**: generated from the model and gated by a policy.
+- **Typed server functions**: `framework_core::server_fn`. The server
+  serves them with `server_fn`, and a client calls them over any
+  `HttpService`.
+- **Server-only components** (`C05`): `ServerComponentDef`, with the tree
+  payload in the new `framework_core::wire` format. The client merges it
+  with the ordinary reconciler.
+- **The API schema** (`C35`):
+  - `ApiSchema` types;
+  - an OpenAPI 3.1 document at `/openapi.json`;
+  - a `breaking_changes` contract check;
+  - a generated TypeScript client.
+- **Configuration**: layered (defaults, file, environment, secrets
+  directory) into a typed value, with no global. `Secret` never prints.
+- **Operations**: `/healthz`, `/readyz`, `/metrics`, and the startup report
+  (`C40`).
+- **Web output**: `Head`, `Sitemap`, and `render::page`, which serves a
+  component tree as a page under the strict CSP (`C41-1`).
+- **Push**: Web Push (aes128gcm with VAPID), plus WNS, APNs, and FCM request
+  builders (`C54-1`).
+- **Examples**
+  - `examples/notes-shared`: the definitions and the shared view.
+  - `examples/server-demo`: the server.
+  - `examples/server-client`: the Windows client.
+
+**Found and fixed.**
+- Route parameters were iterated in alphabetical order, so a
+  `Path<(String, String)>` read `/admin/:table/:id` backwards.
+  `Route::parameter_names` now gives the pattern's order.
+- A route parameter that looked numeric could not be extracted as a
+  `String`. Text is now tried as well.
+
+**Verified.** Full gate.
+- 26 `framework-server` tests and its doc tests.
+- The CLI `db` test.
+- A wire round-trip of every syntax-equivalence case the format carries.
+- The notes server:
+  - sign-in, notes, and jobs;
+  - the page;
+  - the admin surface;
+  - the published contract `api/v1.json`.
+- The client:
+  - headless, against the in-process server: sign in, write, and see the
+    server-rendered summary;
+  - over a real socket through `WinHttp`.
+- A compile-fail test shows shared code cannot reach the server crate.
+
+**Not verified / owed.**
+- The Web track: browser interactivity for server pages, the serverless
+  deployment shape, and the web client half of server functions (Web
+  milestones H and K).
+- Live WNS, APNs, and FCM sends need credentials.
+- Passkey attestation formats other than `none`.
+
 ### Milestone 48 — Components, tokens, and visualization — complete (Windows scope)
 
 **Built.** Guides: `docs/components.md`, `docs/tokens.md`,

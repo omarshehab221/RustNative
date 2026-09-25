@@ -1,0 +1,6 @@
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    admin INTEGER NOT NULL DEFAULT 0
+);

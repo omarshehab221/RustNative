@@ -31,6 +31,8 @@ framework-core.workspace = true
 framework-i18n.workspace = true
 # The style file's location, read the way the build script reads it.
 framework-build.workspace = true
+# `db` generates, applies, and squashes migrations (Milestone 49).
+framework-server.workspace = true
 prettyplease = "0.2"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"

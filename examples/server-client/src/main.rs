@@ -1,0 +1,22 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
+//! The notes client: start `server-demo`, then `cargo run -p server-client`
+//! (or pass the server's base URL).
+
+use std::sync::Arc;
+
+use framework_core::{Application, Component, Platform, Services, Size, Window};
+use framework_windows::{WinHttp, WindowsPlatform};
+use server_client::{Connection, NotesClient};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let base = std::env::args().nth(1).unwrap_or_else(|| "http://127.0.0.1:8080".into());
+    let connection = Connection { base, name: "grace".into(), password: "compiler".into() };
+    let mut application = Application::with_services(
+        NotesClient::new(connection),
+        Window::new("Notes", Size::new(520, 600)),
+        Services::default().with_http(Arc::new(WinHttp::new())),
+    );
+    WindowsPlatform::new().run(&mut application)?;
+    Ok(())
+}

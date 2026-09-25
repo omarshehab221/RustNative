@@ -1,0 +1,4 @@
+# The server's settings; the environment (NOTES_*) and a secrets
+# directory override them (docs/server.md).
+address = "127.0.0.1:8080"
+database = "notes.db"

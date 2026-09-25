@@ -14,7 +14,7 @@
 //! declared ones are `Auto`.
 
 /// The size of one row or column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Track {
     /// Exactly this many pixels.
     Fixed(i32),
@@ -25,7 +25,7 @@ pub enum Track {
 }
 
 /// A grid's tracks, gap, and padding.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct GridStyle {
     /// The columns, from the start edge.
     pub columns: Vec<Track>,
@@ -67,7 +67,7 @@ impl GridStyle {
 }
 
 /// Where a child of a grid goes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct GridPlacement {
     /// The first row it occupies.
     pub row: usize,

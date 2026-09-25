@@ -207,6 +207,10 @@ pub enum Request {
     /// The live inspectable stores (`crate::Store::inspectable`) and their
     /// values.
     Stores,
+    /// A server's durable jobs (`framework_server::jobs`), newest first:
+    /// kind, status, attempts, and last error. An application process has
+    /// none and says so.
+    Jobs,
 }
 
 /// The runtime's answer.

@@ -11,12 +11,37 @@ use super::geometry::{Alignment, EdgeInsets, Overflow, SizeMode};
 /// it. This is the model this crate follows wherever a type's fields carry a
 /// real invariant — contrast with the plain data carriers in
 /// `crate::layout::geometry`, which have none.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(from = "ConstraintsRepr")]
 pub struct Constraints {
     min_width: i32,
     max_width: Option<i32>,
     min_height: i32,
     max_height: Option<i32>,
+}
+
+/// The wire form of [`Constraints`], rebuilt through its setters so a
+/// transmitted value cannot break the `min <= max` invariant.
+#[derive(serde::Deserialize)]
+struct ConstraintsRepr {
+    min_width: i32,
+    max_width: Option<i32>,
+    min_height: i32,
+    max_height: Option<i32>,
+}
+
+impl From<ConstraintsRepr> for Constraints {
+    fn from(repr: ConstraintsRepr) -> Self {
+        let mut constraints =
+            Self::new().with_min_width(repr.min_width).with_min_height(repr.min_height);
+        if let Some(max) = repr.max_width {
+            constraints = constraints.with_max_width(max);
+        }
+        if let Some(max) = repr.max_height {
+            constraints = constraints.with_max_height(max);
+        }
+        constraints
+    }
 }
 
 impl Constraints {
@@ -124,7 +149,7 @@ const fn raise_to(max: Option<i32>, min: i32) -> Option<i32> {
 }
 
 /// A node's own sizing, margin, alignment, and constraints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LayoutStyle {
     /// How this node's width is determined.
     pub width: SizeMode,
@@ -237,7 +262,7 @@ macro_rules! container_style {
     ($name:ident) => {
         /// Padding, gap, and cross-axis alignment for a container node along
         /// one axis (see [`ColumnStyle`]/[`RowStyle`]).
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
         pub struct $name {
             /// Space reserved between this container's border and its
             /// children, on each edge.

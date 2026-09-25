@@ -2981,6 +2981,14 @@ server-rendered, and serverless without modification.
 **Depends on** Web milestone H, Milestone 47 (data and forms), Milestone 40
 (mounting).
 
+**Status (2026-09-25): implemented** for the server and the Windows client.
+`examples/server-demo` serves authenticated, SQLite-backed, job-processing
+traffic. `examples/server-client`, a Windows application, consumes it
+through typed server functions and a server-only component, from one
+codebase (`examples/notes-shared`). The same view is also served as a page.
+The Web track's shapes (browser client, serverless) are owed with Web H and
+K. See `docs/server.md` and `BUILD_STATUS.md`.
+
 ## Milestone 50 — Deployment, updates, and fleet operations
 
 Shipping once is packaging; shipping repeatedly is a different problem, and

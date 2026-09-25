@@ -97,6 +97,18 @@ impl Route {
         Ok(Self { segments })
     }
 
+    /// The parameters' names, in the order the pattern names them.
+    #[must_use]
+    pub fn parameter_names(&self) -> Vec<&str> {
+        self.segments
+            .iter()
+            .filter_map(|segment| match segment {
+                Segment::Param(name) | Segment::Rest(name) => Some(name.as_str()),
+                Segment::Literal(_) => None,
+            })
+            .collect()
+    }
+
     /// Matches `path` (a URL path, optionally followed by `?query` or
     /// `#fragment`, which are ignored), returning the captured parameters.
     #[must_use]

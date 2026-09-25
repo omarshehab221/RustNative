@@ -1,0 +1,28 @@
+[package]
+name = "notes-shared"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# Milestone 49's example: what the notes server and its Windows client
+# share — the server functions, the server-only component's definition,
+# and the view both render. Nothing here needs the server.
+[dependencies]
+framework-core.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# The server build: items only the server may reach.
+server = []

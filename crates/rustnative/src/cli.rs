@@ -74,6 +74,12 @@ enum Command {
         #[command(subcommand)]
         command: crate::i18n::I18nCommand,
     },
+    /// Database migrations (`PLAN.md` Milestone 49).
+    Db {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::db::DbCommand,
+    },
     /// Design tokens (`PLAN.md` Milestone 48).
     Tokens {
         /// What to do.
@@ -346,6 +352,7 @@ impl Cli {
             Command::Inspect { target, question } => crate::inspect::run(&target, question),
             Command::Generate { what } => crate::generate::run(&here, &what),
             Command::I18n { command } => crate::i18n::run(&here, &command),
+            Command::Db { command } => crate::db::run(&here, &command),
             Command::Tokens { command: TokensCommand::Import { file, out } } => {
                 crate::tokens::import(&here, &file, out)
             }

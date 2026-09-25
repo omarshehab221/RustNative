@@ -315,6 +315,7 @@ macro_rules! app_theme {
 pub mod accessibility;
 pub mod affinity;
 pub mod animation;
+pub mod api_schema;
 pub mod application;
 pub mod capability;
 pub mod clock;
@@ -346,6 +347,7 @@ pub mod platform;
 pub mod preview;
 pub mod reconcile;
 pub mod scheduler;
+pub mod server_fn;
 pub mod services;
 pub mod state;
 pub mod style;
@@ -353,6 +355,7 @@ pub mod teardown;
 mod text_profile;
 pub mod virtualization;
 pub mod window;
+pub mod wire;
 
 pub use accessibility::{
     AccessibilityTree, AccessibleAction, AccessibleActionKind, AccessibleNode, AccessibleValue,

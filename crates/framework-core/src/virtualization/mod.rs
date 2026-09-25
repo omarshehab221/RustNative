@@ -56,7 +56,9 @@ pub use extent::ExtentCache;
 pub use range::VirtualRange;
 
 /// The axis a virtual list runs along.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum Axis {
     /// Items are stacked top to bottom; the list scrolls vertically.
     #[default]
@@ -66,7 +68,7 @@ pub enum Axis {
 }
 
 /// How long each item in a virtual list is along the list's axis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ItemExtent {
     /// Every item is exactly this long. Nothing is measured and nothing is
     /// stored per item, so a list of any length costs the same.
@@ -98,7 +100,7 @@ impl Default for ItemExtent {
 /// let style = VirtualListStyle::new(50_000, ItemExtent::Fixed(28)).overscan(4);
 /// assert_eq!(style.item_count, 50_000);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct VirtualListStyle {
     /// How many items the list logically has, realized or not.
     pub item_count: usize,

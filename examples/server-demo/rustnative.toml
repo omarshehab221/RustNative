@@ -1,0 +1,8 @@
+# The notes server (Milestone 49).
+[app]
+name = "server-demo"
+id = "dev.rustnative.server-demo"
+display-name = "Rust Native notes server"
+version = "0.1.0"
+publisher = "CN=Rust Native"
+description = "An authenticated, SQLite-backed, job-processing server"

@@ -28,7 +28,19 @@ use crate::event::AccessibilityRole;
 use crate::graphics::ImageData;
 
 /// A day in the proleptic Gregorian calendar.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct CalendarDate {
     /// The year.
     pub year: i32,
@@ -62,7 +74,7 @@ impl std::fmt::Display for CalendarDate {
 
 /// What a [`crate::Node::Control`] is; see the [module
 /// documentation](crate::control).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum Control {
     /// A check box with a label.
