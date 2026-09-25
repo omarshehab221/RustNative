@@ -345,6 +345,7 @@ pub mod preview;
 pub mod reconcile;
 pub mod scheduler;
 pub mod services;
+pub mod state;
 pub mod style;
 pub mod teardown;
 pub mod virtualization;
@@ -366,7 +367,7 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::{Command, CommandId, CommandRegistry, Shortcut};
 pub use component::{
     AnimationRequest, AnimationRequests, Callback, Component, ComponentContext, ComponentHost,
-    ComponentTree, EffectCleanup, EffectContext, InputRequest, InputRequests, RenderCause,
+    ComponentTree, EffectCleanup, EffectContext, Failure, InputRequest, InputRequests, RenderCause,
     RenderError, RenderRecord, WindowRequests,
 };
 pub use environment::{
@@ -408,14 +409,16 @@ pub use persistence::{MemoryStateStore, Persisted, StateStore};
 pub use platform::{Platform, UnsupportedPlatform};
 pub use reconcile::{TreeDiff, TreeNode, TreeOp, TreeSnapshot};
 pub use scheduler::{
-    Executor, ExecutorHandle, LocalBoxedTask, LocalExecutor, LocalPool, ManualExecutor, Scheduler,
-    SleepFuture, TaskHandle, TaskId, TaskScope, TokioExecutor,
+    Background, Executor, ExecutorHandle, LocalBoxedTask, LocalExecutor, LocalPool, ManualExecutor,
+    Offloaded, Scheduler, SleepFuture, Supervised, SupervisionPolicy, TaskFailure, TaskHandle,
+    TaskId, TaskScope, TokioExecutor,
 };
 pub use services::{
-    ClipboardService, FileDialogKind, FileDialogRequest, FileDialogService, HttpRequest,
-    HttpResponse, HttpService, MemoryClipboard, MemoryStorage, Method, ServiceError, Services,
-    StorageService, SystemService,
+    CertificatePins, ClipboardService, FileDialogKind, FileDialogRequest, FileDialogService,
+    HttpRequest, HttpResponse, HttpService, MemoryClipboard, MemoryStorage, Method, ServiceError,
+    Services, StorageService, SystemService,
 };
+pub use state::{Derived, Store, StoreSnapshot};
 pub use style::{
     Color, ComponentStyle, ControlState, DeclarationSet, ResolvedStyle, ShadowLayer, StateStyles,
     StyleCapabilities, StyleOverride, StyleProperty, StyleSupport, StyleValue, Theme, TokenTable,

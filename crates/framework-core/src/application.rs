@@ -216,7 +216,25 @@ impl Application {
             handled,
             pass: handled.then_some(pass),
         });
+        self.trace_failures(id);
         handled
+    }
+
+    /// Traces the failures window `id`'s error boundaries contained since
+    /// the last call.
+    pub(crate) fn trace_failures(&mut self, id: WindowId) {
+        let Some(entry) = self.windows.get_mut(&id) else { return };
+        for failure in entry.components.take_failures() {
+            self.inspection.push(
+                id.get(),
+                0,
+                crate::inspect::TraceKind::Failure {
+                    component: failure.component,
+                    message: failure.message,
+                    attempt: failure.attempt,
+                },
+            );
+        }
     }
 
     fn dispatch_untraced(&mut self, id: WindowId, event: Event) -> bool {
@@ -450,6 +468,7 @@ impl Application {
         self.apply_window_commands(commands);
         if changed && self.inspection.active() {
             self.trace_change(id, started, |pass| crate::inspect::TraceKind::Tasks { pass });
+            self.trace_failures(id);
         }
         changed
     }
@@ -612,6 +631,12 @@ impl Application {
     pub fn handle_component_panic(&self, report: &PanicReport) -> PanicAction {
         let other_windows_remain = self.windows.keys().any(|id| *id != report.window);
         self.panic_policy.resolve(report, other_windows_remain)
+    }
+
+    /// The failures window `id`'s error boundaries contained since the last
+    /// call (see [`crate::component::boundary`]).
+    pub fn take_failures(&mut self, id: WindowId) -> Vec<crate::Failure> {
+        self.windows.get_mut(&id).map(|entry| entry.components.take_failures()).unwrap_or_default()
     }
 
     /// Returns the application-wide services.

@@ -209,6 +209,59 @@ pub trait HttpService: Send + Sync {
     async fn execute(&self, request: HttpRequest) -> Result<HttpResponse, ServiceError>;
 }
 
+/// Certificate pinning as declared policy (`PLAN.md` Milestone 47, `C34`):
+/// for each pinned host, the SHA-256 digests of the certificates it may
+/// present. An [`HttpService`] that enforces pins (on Windows,
+/// `framework_windows::WinHttp`) refuses a connection to a pinned host whose
+/// certificate matches none of its digests, before the request body is
+/// sent. A host with no pins is checked by the system's trust store alone.
+///
+/// ```
+/// use framework_core::CertificatePins;
+///
+/// let digest = [7_u8; 32];
+/// let pins = CertificatePins::new().pin("api.example.com", digest);
+/// assert!(pins.allows("api.example.com", &digest));
+/// assert!(!pins.allows("api.example.com", &[0; 32]));
+/// assert!(pins.allows("other.example.com", &[0; 32]), "unpinned hosts are not restricted");
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CertificatePins {
+    pins: Vec<(String, [u8; 32])>,
+}
+
+impl CertificatePins {
+    /// No pins.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Allows `host` to present the certificate whose SHA-256 digest is
+    /// `sha256` (among any others pinned for it).
+    #[must_use]
+    pub fn pin(mut self, host: impl Into<String>, sha256: [u8; 32]) -> Self {
+        self.pins.push((host.into().to_ascii_lowercase(), sha256));
+        self
+    }
+
+    /// Whether `host` has pins.
+    #[must_use]
+    pub fn is_pinned(&self, host: &str) -> bool {
+        self.pins.iter().any(|(pinned, _)| pinned.eq_ignore_ascii_case(host))
+    }
+
+    /// Whether `host` may present a certificate with digest `sha256`.
+    #[must_use]
+    pub fn allows(&self, host: &str, sha256: &[u8; 32]) -> bool {
+        !self.is_pinned(host)
+            || self
+                .pins
+                .iter()
+                .any(|(pinned, digest)| pinned.eq_ignore_ascii_case(host) && digest == sha256)
+    }
+}
+
 /// Persistent key-value storage.
 #[async_trait::async_trait]
 pub trait StorageService: Send + Sync {

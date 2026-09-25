@@ -138,6 +138,17 @@ pub(crate) fn enter(locale: Locale, catalogues: Option<Arc<Catalogues>>) {
     });
 }
 
+/// How many render scopes are open, recorded by an error boundary so the
+/// scopes a panic left open can be closed.
+pub(crate) fn depth() -> usize {
+    SCOPES.with(|scopes| scopes.borrow().len())
+}
+
+/// Closes every scope above `depth`.
+pub(crate) fn truncate(depth: usize) {
+    SCOPES.with(|scopes| scopes.borrow_mut().truncate(depth));
+}
+
 /// Ends the innermost scope; returns whether a message was shown in it.
 pub(crate) fn leave() -> bool {
     SCOPES.with(|scopes| scopes.borrow_mut().pop().is_some_and(|scope| scope.read.get()))

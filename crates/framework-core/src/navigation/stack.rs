@@ -206,6 +206,73 @@ impl<R> NavigationStack<R> {
     }
 }
 
+/// The default size budget for a stack's saved state: 64 KiB, the order of
+/// what hosts' restoration mechanisms accept (`C14`).
+pub const SAVED_STATE_BUDGET: usize = 64 * 1024;
+
+/// A stack's saved state did not fit its budget.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedStateTooLarge {
+    /// How large it was, in bytes.
+    pub size: usize,
+    /// The budget.
+    pub budget: usize,
+    /// The entry whose route is largest, and its size — where to look.
+    pub largest: Option<(EntryId, usize)>,
+}
+
+impl std::fmt::Display for SavedStateTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the navigation state is {} bytes, over its budget of {}",
+            self.size, self.budget
+        )?;
+        if let Some((entry, size)) = self.largest {
+            write!(f, "; the largest entry, {}, is {size} bytes", entry.key())?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for SavedStateTooLarge {}
+
+impl<R: Serialize> NavigationStack<R> {
+    /// The stack's saved state, for the host's restoration mechanism: each
+    /// destination's route, which is the subset of its state it declares
+    /// worth restoring (`C14`) — the rest is rebuilt. Refused when larger
+    /// than `budget` bytes, naming the largest entry, so an oversized
+    /// destination is found in development rather than dropped by the host.
+    ///
+    /// ```
+    /// use framework_core::navigation::{NavigationStack, SAVED_STATE_BUDGET};
+    ///
+    /// let mut stack = NavigationStack::new("home".to_owned());
+    /// stack.push("x".repeat(100));
+    /// assert!(stack.saved_state(SAVED_STATE_BUDGET).is_ok());
+    /// let error = stack.saved_state(64).unwrap_err();
+    /// assert_eq!(error.largest.map(|(_, size)| size), Some(102));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// The encoded stack is larger than `budget`.
+    pub fn saved_state(&self, budget: usize) -> Result<Vec<u8>, SavedStateTooLarge> {
+        let bytes = serde_json::to_vec(self).unwrap_or_default();
+        if bytes.len() <= budget {
+            return Ok(bytes);
+        }
+        let largest = self
+            .entries
+            .iter()
+            .map(|entry| {
+                (entry.id, serde_json::to_vec(&entry.route).map_or(0, |route| route.len()))
+            })
+            .max_by_key(|(_, size)| *size);
+        Err(SavedStateTooLarge { size: bytes.len(), budget, largest })
+    }
+}
+
 /// A handle a screen uses to navigate the stack that shows it.
 ///
 /// A navigator sends [`NavigationCommand`]s to the stack's owner through an

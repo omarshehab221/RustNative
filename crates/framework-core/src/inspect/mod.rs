@@ -204,6 +204,9 @@ pub enum Request {
     /// Asks the application to close, as the person closing its window
     /// would: state is flushed and placement saved.
     Quit,
+    /// The live inspectable stores (`crate::Store::inspectable`) and their
+    /// values.
+    Stores,
 }
 
 /// The runtime's answer.

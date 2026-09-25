@@ -97,7 +97,11 @@ pub use platform::WindowsPlatform;
 #[cfg(windows)]
 pub use services::clipboard::WindowsClipboard;
 #[cfg(windows)]
+pub use services::data::{WicDecoder, WindowsConditions};
+#[cfg(windows)]
 pub use services::dialogs::WindowsFileDialogs;
+#[cfg(windows)]
+pub use services::http::WinHttp;
 #[cfg(windows)]
 pub use services::locale::WindowsLocale;
 #[cfg(windows)]

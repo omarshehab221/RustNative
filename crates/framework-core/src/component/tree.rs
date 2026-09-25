@@ -205,6 +205,16 @@ pub struct ComponentTree {
     node_sizes: HashMap<NodeId, crate::layout::Size>,
     /// The container size classes each component read, per node.
     size_reads: HashMap<ComponentId, Vec<(NodeId, crate::environment::SizeClasses)>>,
+    /// Each component's store selections from its last render.
+    selections: HashMap<ComponentId, Vec<crate::state::Selection>>,
+    /// The store epoch the last check for stale selections saw.
+    seen_epoch: u64,
+    /// Values each component provides to its subtree by type.
+    scoped: HashMap<ComponentId, crate::state::ScopedValues>,
+    /// The error boundaries, by component.
+    boundaries: HashMap<ComponentId, Rc<RefCell<super::boundary::BoundaryState>>>,
+    /// Failures contained since [`Self::take_failures`] was last called.
+    failures: Vec<super::boundary::Failure>,
 }
 
 impl ComponentTree {
@@ -281,6 +291,11 @@ impl ComponentTree {
             commands: crate::command::CommandRegistry::default(),
             node_sizes: HashMap::new(),
             size_reads: HashMap::new(),
+            selections: HashMap::new(),
+            seen_epoch: crate::state::epoch(),
+            scoped: HashMap::new(),
+            boundaries: HashMap::new(),
+            failures: Vec::new(),
         };
         let root_scope =
             TaskScope::new(tree.scheduler.clone(), Rc::clone(&tree.local), ComponentId::ROOT);
@@ -415,6 +430,7 @@ impl ComponentTree {
     /// Marks every component that read an environment value or preference
     /// that has since changed.
     fn mark_stale_readers(&mut self) {
+        self.mark_stale_selections();
         let mut stale = Vec::new();
         for (id, seen) in &self.env_seen {
             if let Some((name, _)) =
@@ -930,6 +946,13 @@ impl ComponentTree {
         self.local.run_until_stalled();
         let completed = self.scheduler.drain();
         if completed.is_empty() {
+            // Local work (a data layer's fetch, say) may have updated a
+            // store without delivering a message to anyone.
+            if self.stores_changed() {
+                let before = self.generation;
+                let _ = self.render_pass(false);
+                return self.generation != before;
+            }
             return false;
         }
         let mut changed = false;
@@ -938,8 +961,23 @@ impl ComponentTree {
             let Some(mut entry) = self.components.remove(&target) else {
                 continue;
             };
-            if entry.component.message_any(message) {
-                entry.component.updated();
+            let delivered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let delivered = entry.component.message_any(message);
+                if delivered {
+                    entry.component.updated();
+                }
+                delivered
+            }));
+            let delivered = match delivered {
+                Ok(delivered) => delivered,
+                Err(payload) => {
+                    self.components.insert(target, entry);
+                    self.fail(target, payload);
+                    changed = true;
+                    continue;
+                }
+            };
+            if delivered {
                 self.dirty.entry(target).or_insert(RenderCause::Message);
                 changed = true;
             } else {
@@ -959,8 +997,9 @@ impl ComponentTree {
             }
             self.components.insert(target, entry);
         }
-        if changed {
+        if changed || self.stores_changed() {
             let _ = self.render_pass(false);
+            changed = true;
         }
         changed
     }
@@ -1076,8 +1115,22 @@ impl ComponentTree {
             let Some(mut entry) = self.components.remove(&target) else {
                 continue;
             };
-            if entry.component.message_any(message) {
-                entry.component.updated();
+            let delivered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let delivered = entry.component.message_any(message);
+                if delivered {
+                    entry.component.updated();
+                }
+                delivered
+            }));
+            let delivered = match delivered {
+                Ok(delivered) => delivered,
+                Err(payload) => {
+                    self.components.insert(target, entry);
+                    self.fail(target, payload);
+                    continue;
+                }
+            };
+            if delivered {
                 self.dirty.entry(target).or_insert(RenderCause::Message);
             } else {
                 // `message_any` returns `false` only when the boxed
@@ -1250,6 +1303,7 @@ impl ComponentTree {
         self.preferences_seen.remove(&id);
         self.commands.clear_owner(id);
         self.size_reads.remove(&id);
+        self.selections.remove(&id);
         if let Some(previous) = self.provided.remove(&id) {
             self.provided_previous.insert(id, previous);
         }
@@ -1455,6 +1509,9 @@ impl ComponentTree {
         self.preferences_seen.remove(&id);
         self.commands.clear_owner(id);
         self.size_reads.remove(&id);
+        self.selections.remove(&id);
+        self.scoped.remove(&id);
+        self.boundaries.remove(&id);
     }
 
     fn update_component(&mut self, id: ComponentId, event: &Event) -> bool {
@@ -1462,10 +1519,15 @@ impl ComponentTree {
             return false;
         };
 
-        entry.component.update(event.clone());
-        entry.component.updated();
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            entry.component.update(event.clone());
+            entry.component.updated();
+        }));
         self.components.insert(id, entry);
         self.mark_dirty(id, RenderCause::Event);
+        if let Err(payload) = outcome {
+            self.fail(id, payload);
+        }
         true
     }
 
@@ -1571,6 +1633,7 @@ fn scope_component_node_ids(
 }
 
 mod inspection;
+mod resilience;
 
 #[cfg(test)]
 mod tests;

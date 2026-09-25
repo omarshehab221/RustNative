@@ -16,6 +16,9 @@ workspace = true
 
 [dependencies]
 framework-core.workspace = true
+# The data layer's host contracts (Milestone 47): conditions for background
+# work and an image decoder, answered by this backend.
+framework-data.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 # Window placement is saved through the application's state store in the

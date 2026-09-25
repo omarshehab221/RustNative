@@ -12,6 +12,8 @@ mod commands;
 mod container;
 pub(crate) mod context;
 mod cursor;
+#[cfg(test)]
+mod data_integration;
 pub(crate) mod embed;
 pub(crate) mod foreign;
 pub(crate) mod graphics;

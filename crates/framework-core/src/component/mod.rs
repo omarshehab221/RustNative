@@ -11,12 +11,14 @@
 //! standards audit's P1.21/P2.22 findings on module boundaries, which this
 //! split is a direct response to.
 
+pub mod boundary;
 mod context;
 mod effects;
 mod error;
 mod invalidation;
 mod tree;
 
+pub use boundary::Failure;
 pub use context::{
     AnimationRequest, AnimationRequests, Callback, ComponentContext, InputRequest, InputRequests,
     WindowRequests,

@@ -9,11 +9,15 @@
 
 mod executor;
 mod local;
+pub mod supervise;
 
 pub use executor::{
     BoxedSleep as SleepFuture, BoxedTask, Executor, ExecutorHandle, ManualExecutor, TokioExecutor,
 };
 pub use local::{LocalBoxedTask, LocalExecutor, LocalPool};
+pub use supervise::{
+    Background, Offloaded, Supervised, SupervisionPolicy, TaskFailure, panic_message,
+};
 
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};

@@ -2761,6 +2761,13 @@ application.
 **Depends on** Milestone 45 (deterministic async in tests) and Milestone 20's
 service contracts.
 
+**Status (2026-09-25): implemented** on Windows and the headless backend.
+`examples/data-demo` shows cached, deduplicated, paginated data with
+optimistic updates and a durable offline queue. A failing subtree is
+contained and retried without restarting. The same machinery runs on
+native controls in `native::data_integration`. See `docs/data.md` and
+`BUILD_STATUS.md`.
+
 ## Milestone 48 — Components, tokens, and visualization
 
 Primitives are not a component set, and the path from a design system to

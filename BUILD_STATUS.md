@@ -14,6 +14,88 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 47 — State, resilience, and data — complete (Windows scope)
+
+**Built.** `docs/data.md`.
+
+- **Core** (`framework-core`):
+  - `Store<T>` shared state, provided to a subtree (`provide_scoped`,
+    `scoped`) and read by slice (`select`). A component re-renders only when
+    its slice changes by value (`C08`). Updates are ordered, and nested
+    updates are queued. `Derived<I, O>` caches values. `Store::inspectable`
+    feeds `rustnative inspect stores`.
+  - Error boundaries (`context.boundary`) contain a panic in render, update,
+    or message delivery. The subtree is removed as on unmount, a fallback is
+    shown, and the failure is reported to `take_failures` and the inspection
+    trace (`TraceKind::Failure`). `SupervisionPolicy` is isolate, restart
+    with backoff, or escalate (`C17`). `TaskScope::spawn_supervised` applies
+    the same policies to tasks.
+  - `collect` for streams (`C12`), `prepare` for off-thread preparation
+    (`C09-2`), and `Background` for message-less UI-thread work and
+    offloaded work.
+  - `NavigationStack::saved_state` with a 64 KiB budget (`C14`), and
+    `CertificatePins`.
+- **Data layer** (`framework-data`, a new crate):
+  - `QueryClient` with exhaustive `QueryState` (`C29`), deduplication, stale
+    and retention lifetimes, stale-while-revalidate, a `Revalidate` policy,
+    retries with seeded jitter, hierarchical invalidation, cancellation when
+    unobserved, structural sharing, infinite queries, prefetch, and
+    `BatchLoader` (`C30`).
+  - Mutations with optimistic updates and rollback, a durable offline queue
+    replayed in order on reconnect and at start, and a `ConflictPolicy`.
+  - Forms: `Schema`, typed `Field`s, `Changeset`, `FieldErrors`, constraint
+    mapping, and `Form` submission (`C36`).
+  - `Migrations` and `VersionedStore`, with a dry run.
+  - `History` (undo and redo), `StateMachine` with state-scoped work and
+    Mermaid output (`C10`), and `Operation` (`C87`).
+  - `BackgroundWork` with network, power, and deadline constraints.
+  - `LocalTable` live queries and `PagingSource` (`C31`).
+  - `HttpClient` interceptors (auth refresh, retry, logging, ETag cache) and
+    typed `Endpoint`s (`C34`).
+  - `ImageLoader` with decode, downscale, disk cache, and retention.
+- **Windows**:
+  - `WinHttp`, the platform's `HttpService`. It enforces pins: it sends the
+    headers, checks the certificate's SHA-256 through `BCryptHash`, and only
+    then writes the body. It refuses plain HTTP and redirects for pinned
+    hosts.
+  - `WindowsConditions` (`GetSystemPowerStatus`, `WinINet`) and
+    `WicDecoder` (WIC decode with a Fant-downscaling scaler).
+- **Example**: `examples/data-demo`, a task board over an in-process server.
+
+**Verified.** Full gate.
+
+- Core tests cover slice-only re-renders, stores updated by background
+  work, render and handler failures contained, restart with backoff on
+  virtual time, manual retry, an uncontained panic still reaching the
+  application, supervised task restarts, and stream delivery.
+- `framework-data` has 22 tests: dedup, freshness, retention, retries,
+  failure and empty states, invalidation, identity kept, optimistic
+  rollback, the durable offline queue, merge conflicts, pagination,
+  batching, forms, migrations, paging gaps, live queries, the interceptor
+  chain, constraints, pre-emption, state-scoped cancellation, and decoding.
+- On Windows:
+  - a real WinHTTP round trip to a local server, and WIC decoding;
+  - `native::data_integration`: a fetched query lands in a native control,
+    an optimistic item shows and rolls back, and a handler panic is
+    contained with a native fallback while the window stays open, then
+    rebuilt by "Try again".
+- The example's headless tests cover:
+  - one request for two observers, and pagination;
+  - optimistic add confirmed by the server;
+  - offline queueing across a restart, sent in order;
+  - the weather widget contained and restarted with backoff, and retried by
+    hand, with the board untouched.
+
+**Not verified / owed.**
+- Certificate-pin mismatch against a live TLS server. The tests cover the
+  digest, the policy, and the plain-HTTP refusal, but no TLS endpoint is in
+  the test environment.
+- Suspension of hidden subtrees' streams and queries is Milestone 54.
+- Request scope and server-side schema validation are Milestone 49.
+- The progress component is Milestone 48.
+- The image memory budget is by time, not bytes.
+- Mobile background schedulers are owed with those backends.
+
 ### Milestone 46 — Internationalization and localization — complete (Windows scope)
 
 **Built.** `docs/i18n.md`.

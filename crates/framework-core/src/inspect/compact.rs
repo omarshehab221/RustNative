@@ -204,6 +204,9 @@ fn frames(entry: &TraceEntry) -> Vec<(u16, Vec<Arg>)> {
         TraceKind::Edit { component, field, pass } => {
             ((4, vec![text(component), text(field), cost]), Some(pass))
         }
+        TraceKind::Failure { component, message, attempt } => {
+            ((5, vec![text(component), text(message), Arg::Int(u64::from(*attempt))]), None)
+        }
     };
     std::iter::once(head).chain(pass.map(pass_frames).unwrap_or_default()).collect()
 }

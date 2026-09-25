@@ -3,7 +3,11 @@
 //! async execution helpers below.
 
 pub mod clipboard;
+#[cfg(windows)]
+pub mod data;
 pub mod dialogs;
+#[cfg(windows)]
+pub mod http;
 #[cfg(windows)]
 pub mod locale;
 pub mod notifications;

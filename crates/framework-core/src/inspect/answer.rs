@@ -219,6 +219,7 @@ impl Application {
             TraceKind::Event { event, .. } => event.clone(),
             TraceKind::Tasks { .. } => "tasks".to_owned(),
             TraceKind::Edit { component, field, .. } => format!("edit {component}.{field}"),
+            TraceKind::Failure { component, .. } => format!("failure {component}"),
         };
         let seq = self.inspection.push(id.get(), micros, kind);
         self.inspection.remember(seq, cause, states);
@@ -318,6 +319,7 @@ impl Application {
                 )
             }),
             Request::Lifetimes => Reply::of(&backend.lifetimes()),
+            Request::Stores => Reply::of(&crate::state::inspect_stores()),
             Request::Capabilities => Reply::of(&self.capability_report(backend)),
             Request::Mappers => Reply::of(&backend.mappers()),
             Request::History { component } => Reply::of(

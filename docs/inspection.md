@@ -22,9 +22,10 @@ lifetimes, its capability and style tables, and its mappers.
 | `state` / `set_state` | one component's state. Editing goes through the message the component names (`Component::edit`), so an edit is delivered and rendered like any other message |
 | `explain_layout` | the node's rectangle and why: its parent and container style, its width and height modes against what it was given or measured, constraints, margin, alignment. Uses the backend's own rectangles when it has them |
 | `explain_style` | each property's source by precedence level (`C18-2`): the **class** that set it (named as written), a **declaration** (`styles!`), a **typed override** set in code, or the **component default** (the theme's default for the kind). Also shows the token it references with its resolved value, the condition it is written under (`hover:`, `dark:`, `md:`), and whether it applies now |
-| `trace` | events and task deliveries, with their cost and the render pass each caused. Each component either **rendered**, with its cause (`event`, `message`, `props`, `environment(<key>)`, …), or was **skipped** because nothing it depends on changed (`C04-2`) |
+| `trace` | events and task deliveries — and failures an error boundary contained — with their cost and the render pass each caused. Each component either **rendered**, with its cause (`event`, `message`, `props`, `environment(<key>)`, …), or was **skipped** because nothing it depends on changed (`C04-2`) |
 | `tasks` | unfinished tasks per component, which are cancelled when it unmounts |
 | `lifetimes` | host objects created, destroyed, and live, with the most recent of each |
+| `stores` | every live `Store::inspectable`, with its version and value (`docs/data.md`) |
 | `capabilities` | what the host advertises. Also what it does not, and which services the application did not provide, each with a reason. Includes the backend's style table (realized / approximated / unavailable, with its reason) and unit mapping |
 | `mappers` | active per-property mapper customizations (`C24-2`) |
 | `history` | inspectable state after each change, oldest first: stepping back through state |

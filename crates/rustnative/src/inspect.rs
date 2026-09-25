@@ -95,6 +95,8 @@ pub enum Question {
     Tasks,
     /// Host objects created and destroyed.
     Lifetimes,
+    /// The live inspectable stores and their values.
+    Stores,
     /// What the host advertises and what it refused.
     Caps,
     /// Active mapper customizations.
@@ -217,6 +219,7 @@ pub fn run(target: &Target, question: Question) -> Result<()> {
         Question::Trace { since } => Request::Trace { since: *since },
         Question::Tasks => Request::Tasks { window: None },
         Question::Lifetimes => Request::Lifetimes,
+        Question::Stores => Request::Stores,
         Question::Caps => Request::Capabilities,
         Question::Mappers => Request::Mappers,
         Question::History { component } => Request::History { component: component.clone() },

@@ -30,6 +30,10 @@ pub enum RenderCause {
     Theme,
     /// A full render was requested explicitly.
     Forced,
+    /// The slice of a store it selected changed.
+    Store,
+    /// A failure in its subtree was contained at it, an error boundary.
+    Failure,
 }
 
 impl std::fmt::Display for RenderCause {
@@ -43,6 +47,8 @@ impl std::fmt::Display for RenderCause {
             Self::Preference(key) => write!(f, "preference({key})"),
             Self::Theme => f.write_str("theme"),
             Self::Forced => f.write_str("forced"),
+            Self::Store => f.write_str("store"),
+            Self::Failure => f.write_str("failure"),
         }
     }
 }

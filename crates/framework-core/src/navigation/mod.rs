@@ -17,4 +17,7 @@ mod route;
 mod stack;
 
 pub use route::{Route, RouteError, RouteParams, Router, url_path};
-pub use stack::{EntryId, NavigationCommand, NavigationEntry, NavigationStack, Navigator};
+pub use stack::{
+    EntryId, NavigationCommand, NavigationEntry, NavigationStack, Navigator, SAVED_STATE_BUDGET,
+    SavedStateTooLarge,
+};

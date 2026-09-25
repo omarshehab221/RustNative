@@ -60,6 +60,15 @@ pub enum TraceKind {
         /// The render pass it caused.
         pass: PassInfo,
     },
+    /// An error boundary contained a failure (`PLAN.md` Milestone 47).
+    Failure {
+        /// The boundary's key path.
+        component: String,
+        /// The panic's message.
+        message: String,
+        /// How many failures the boundary has contained.
+        attempt: u32,
+    },
 }
 
 /// One traced happening.

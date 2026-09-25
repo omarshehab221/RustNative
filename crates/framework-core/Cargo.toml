@@ -36,6 +36,8 @@ serde_json = "1"
 # The inspection server's and the development agent's tokens: the operating
 # system's cryptographic random number generator.
 getrandom = "0.3"
+# The stream contract `TaskScope::collect` accepts (Milestone 47).
+futures-core = "0.3"
 
 [features]
 # The markup syntax (`rsx!`, and `.rsx` files, which lower to it). On by
