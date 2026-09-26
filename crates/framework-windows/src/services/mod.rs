@@ -16,6 +16,10 @@ pub mod notifications;
 #[cfg(windows)]
 pub mod permissions;
 #[cfg(windows)]
+pub mod product;
+#[cfg(windows)]
+pub mod secure_storage;
+#[cfg(windows)]
 pub mod state_store;
 pub mod system;
 

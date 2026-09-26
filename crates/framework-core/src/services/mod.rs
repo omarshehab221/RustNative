@@ -393,6 +393,11 @@ pub struct Services {
     locale: Option<Arc<dyn crate::i18n::LocaleService>>,
     printing: Option<Arc<dyn crate::industrial::PrintService>>,
     serial: Option<Arc<dyn crate::industrial::SerialService>>,
+    surfaces: crate::surfaces::Surfaces,
+    flags: crate::product::Flags,
+    secure_storage: Option<Arc<dyn crate::product::SecureStorage>>,
+    push: Option<Arc<dyn crate::product::PushService>>,
+    commerce: Option<Arc<dyn crate::product::CommerceService>>,
 }
 
 impl fmt::Debug for Services {
@@ -410,11 +415,78 @@ impl fmt::Debug for Services {
             .field("locale", &self.locale.is_some())
             .field("printing", &self.printing.is_some())
             .field("serial", &self.serial.is_some())
+            .field("secure_storage", &self.secure_storage.is_some())
+            .field("push", &self.push.is_some())
+            .field("commerce", &self.commerce.is_some())
+            .field("surfaces", &self.surfaces)
+            .field("flags", &self.flags)
             .finish()
     }
 }
 
 impl Services {
+    /// The handle through which the application asks for surfaces beyond
+    /// its windows (Milestone 57); always present, realized where the
+    /// backend has them.
+    #[must_use]
+    pub const fn surfaces(&self) -> &crate::surfaces::Surfaces {
+        &self.surfaces
+    }
+
+    /// Returns `self` with `flags` as the feature flags (to share one
+    /// [`crate::product::Flags`] with the code that refreshes it).
+    #[must_use]
+    pub fn with_flags(mut self, flags: crate::product::Flags) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    /// The feature flags (Milestone 57): compiled defaults until remote
+    /// configuration or a local override says otherwise.
+    #[must_use]
+    pub const fn flags(&self) -> &crate::product::Flags {
+        &self.flags
+    }
+
+    /// Returns `self` with the secure store set (Milestone 57).
+    #[must_use]
+    pub fn with_secure_storage(mut self, service: Arc<dyn crate::product::SecureStorage>) -> Self {
+        self.secure_storage = Some(service);
+        self
+    }
+
+    /// Returns the secure store, if any.
+    #[must_use]
+    pub fn secure_storage(&self) -> Option<&Arc<dyn crate::product::SecureStorage>> {
+        self.secure_storage.as_ref()
+    }
+
+    /// Returns `self` with remote push set (Milestone 57).
+    #[must_use]
+    pub fn with_push(mut self, service: Arc<dyn crate::product::PushService>) -> Self {
+        self.push = Some(service);
+        self
+    }
+
+    /// Returns remote push, if any.
+    #[must_use]
+    pub fn push(&self) -> Option<&Arc<dyn crate::product::PushService>> {
+        self.push.as_ref()
+    }
+
+    /// Returns `self` with the store's billing set (Milestone 57).
+    #[must_use]
+    pub fn with_commerce(mut self, service: Arc<dyn crate::product::CommerceService>) -> Self {
+        self.commerce = Some(service);
+        self
+    }
+
+    /// Returns the store's billing, if any.
+    #[must_use]
+    pub fn commerce(&self) -> Option<&Arc<dyn crate::product::CommerceService>> {
+        self.commerce.as_ref()
+    }
+
     /// Returns `self` with the printing service set (Milestone 51).
     #[must_use]
     pub fn with_printing(mut self, service: Arc<dyn crate::industrial::PrintService>) -> Self {

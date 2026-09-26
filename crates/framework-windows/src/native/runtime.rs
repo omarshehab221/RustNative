@@ -55,6 +55,8 @@ pub(crate) struct Runtime {
     /// Running animations and the clock they are timed by — see
     /// `native::animation`.
     pub(crate) animation: AnimationState,
+    /// The tray icon, on the primary window — see `native::surfaces`.
+    pub(crate) tray: super::surfaces::Tray,
 }
 
 impl Runtime {
@@ -122,6 +124,8 @@ impl Runtime {
         // measured, either of which moves the window of items it needs.
         virtual_list::after_render(self);
         self.report_surface_changes();
+        // What a render asked of the tray, jump list, or taskbar.
+        super::surfaces::apply(self);
         super::inspect::sync_overlay(self);
         // The input-latency budget measures to here: the change realized.
         framework_core::perf::realized();
@@ -160,6 +164,8 @@ impl Runtime {
         // A resized window shows a different number of items.
         virtual_list::after_render(self);
         self.report_surface_changes();
+        // What a render asked of the tray, jump list, or taskbar.
+        super::surfaces::apply(self);
         super::inspect::sync_overlay(self);
     }
 
@@ -229,6 +235,7 @@ impl Runtime {
         }
         self.apply_input_requests();
         super::lifecycle::after_dispatch(self);
+        super::surfaces::apply(self);
         self.schedule_deferred();
 
         // A component may have queued a window-open or window-close
@@ -257,6 +264,7 @@ impl Runtime {
         self.schedule_deferred();
         self.apply_input_requests();
         super::lifecycle::after_dispatch(self);
+        super::surfaces::apply(self);
         self.sync_windows()
     }
 
@@ -483,6 +491,7 @@ impl WindowRegistry {
             embedded,
             input: InputState::default(),
             animation: AnimationState::default(),
+            tray: super::surfaces::Tray::default(),
         });
 
         let runtime_ptr: *mut Runtime = &raw mut *runtime;

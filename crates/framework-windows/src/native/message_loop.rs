@@ -757,6 +757,16 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
         | WM_QUERYENDSESSION
         | WM_ENDSESSION
         | WM_POWERBROADCAST => session_message(hwnd, message, wparam),
+        super::surfaces::WM_FRAMEWORK_TRAY => {
+            // Version 4 callbacks: the event is the low word of `lParam`.
+            #[allow(
+                clippy::cast_sign_loss,
+                reason = "the low word is read as the bits Windows packed"
+            )]
+            let event = u32::from(super::util::loword(lparam as usize));
+            with_runtime(hwnd, |runtime| super::surfaces::tray_callback(runtime, event));
+            0
+        }
         WM_NOTIFY => {
             // SAFETY: `WM_NOTIFY`'s `lParam` is a pointer to an `NMHDR`
             // (the header every notification structure starts with), valid
@@ -923,6 +933,8 @@ fn window_proc_impl(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) ->
         WM_DESTROY => {
             // Saved while the window still has a placement to read.
             with_runtime(hwnd, |runtime| super::lifecycle::save_placement(runtime));
+            // The tray icon goes with its window.
+            with_runtime(hwnd, super::surfaces::teardown);
             // UI Automation is released first, and its disconnections raised
             // outside the runtime borrow, like every other call into it.
             if let Some(ready) = with_runtime(hwnd, super::uia::release_window) {

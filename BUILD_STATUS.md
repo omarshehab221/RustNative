@@ -14,6 +14,75 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 57 — Surfaces beyond the main window, and product services — complete for Windows
+
+**Built.** Guide: `docs/surfaces.md`.
+
+- **Surfaces.** `framework_core::surfaces::Surfaces`, in every
+  application's services, asks for the tray icon and its menu, a jump
+  list, taskbar progress, and notifications. They answer with the new
+  `Event::SurfaceAction`, routed to the window's root component like a
+  menu choice.
+  - **Tray:** `Shell_NotifyIconW` on the primary window, with version-4
+    callbacks.
+  - **Menu:** `TrackPopupMenu`; a choice arrives as its item's id.
+  - **Clicks:** the icon arrives as `"activate"`, and the notification
+    balloon as `"notification"`.
+  - **Jump list:** `ICustomDestinationList` tasks with titles.
+  - **Taskbar progress:** `ITaskbarList3`.
+  - The icon is removed with its window.
+  - `Capability::Surface(TrayExtra | JumpList | TaskbarProgress)` is now
+    advertised. The remaining surfaces are answered as unavailable, with
+    the reasons in the guide.
+- **Product services** (`framework_core::product`).
+  - **`SecureStorage`:** stated traits (hardware backing, biometric
+    gating), an in-memory store, and `WindowsSecureStorage` (Credential
+    Manager, with DPAPI sealing for the user).
+  - **`Flags`:** typed flags with compiled defaults, remote
+    configuration, local overrides (`RUSTNATIVE_FLAGS`), a cache for
+    offline use, a version counter, and `refresh` over `HttpService`.
+  - **`PushService` and `CommerceService`:** the contracts, with
+    `FakeStore` for development.
+  - `WindowsPush` and `WindowsStore` answer `Unavailable` with the reason:
+    WNS and Store billing need Store-associated package identity.
+  - `Services` carries the surfaces, flags, secure storage, push, and
+    commerce.
+- **The example.** `examples/product-services` uses a tray menu, a jump
+  list, export progress on the taskbar, a notification whose click
+  returns, a token in secure storage, and a remotely toggled layout, with
+  no native code of its own.
+
+**Verified.** Full gate.
+- **A native harness test:**
+  - the shell knows the tray icon after the application asks for it;
+  - the icon click, the notification click, and a menu choice each arrive
+    as `SurfaceAction`;
+  - the shell accepts the jump list (and an empty one);
+  - progress clears;
+  - the icon is gone after the window closes.
+- **Secure storage:** a secret round-trips, the credential holds only its
+  DPAPI-sealed form, and deletion is idempotent.
+- **Unavailable services:** `WindowsPush` and `WindowsStore` state why.
+- **Capabilities:** the platform advertises the three realized surfaces
+  and refuses the rest.
+- **The example, on the headless backend:**
+  - the surface requests, in order;
+  - the tray action does what the button does;
+  - the return from the notification;
+  - the token persists across a restart;
+  - the remote flag switches the layout.
+- **Flags:** a doctest.
+
+**Not verified / owed.**
+- **Needs MSIX package identity:** multi-button toasts, WNS push,
+  Store billing, Windows 11 widgets, and share targets. Real-store receipt
+  validation on the server comes with Store billing.
+- **The mobile reference application in the plan's done-when:** a widget,
+  a share extension, push with actions, and a purchase. It is owed with
+  Milestones 35 and 36.
+- **Hardware-backed and biometric-gated secure storage** (Windows Hello
+  key credentials).
+
 ### Milestone 51 — Observability, security, and compliance — complete for Windows and the server
 
 **Built.** Guide: `docs/observability.md`. Also written:

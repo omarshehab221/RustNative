@@ -144,6 +144,10 @@ impl Platform for WindowsPlatform {
                 // Milestone 51: the spooler and COM ports.
                 Capability::Printing,
                 Capability::SerialPorts,
+                // Milestone 57: surfaces beyond the window.
+                Capability::Surface(framework_core::SurfaceKind::TrayExtra),
+                Capability::Surface(framework_core::SurfaceKind::JumpList),
+                Capability::Surface(framework_core::SurfaceKind::TaskbarProgress),
             ]
             .into_iter()
             .chain(crate::native::accelerator::gpu_available().then_some(Capability::Accelerator(
@@ -226,8 +230,7 @@ mod tests {
         ] {
             assert!(capabilities.supports(realized), "{realized:?}");
         }
-        // System sharing is still only a portable contract, and no surface
-        // beyond the main window is realized until Milestone 57.
+        // System sharing is still only a portable contract.
         assert!(!capabilities.supports(Capability::SystemShare));
         assert!(capabilities.supports(Capability::Printing));
         assert!(capabilities.supports(Capability::SerialPorts));
@@ -244,11 +247,23 @@ mod tests {
             )),
             crate::native::accelerator::npu_available()
         );
+        // Milestone 57 realizes the tray, the jump list, and taskbar
+        // progress; the rest need package identity or are not Windows
+        // concepts (`docs/surfaces.md`).
         for surface in [
-            framework_core::SurfaceKind::Widget,
             framework_core::SurfaceKind::TrayExtra,
             framework_core::SurfaceKind::JumpList,
             framework_core::SurfaceKind::TaskbarProgress,
+        ] {
+            assert!(capabilities.supports(Capability::Surface(surface)), "{surface:?}");
+        }
+        for surface in [
+            framework_core::SurfaceKind::Widget,
+            framework_core::SurfaceKind::LiveActivity,
+            framework_core::SurfaceKind::Tile,
+            framework_core::SurfaceKind::Extension,
+            framework_core::SurfaceKind::InstantApp,
+            framework_core::SurfaceKind::CompanionDevice,
         ] {
             assert!(!capabilities.supports(Capability::Surface(surface)), "{surface:?}");
         }

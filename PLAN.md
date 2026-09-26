@@ -3376,6 +3376,18 @@ remotely toggled feature, with no application-authored native code.
 **Depends on** Milestone 39 (vocabulary and grants), the relevant backends, and
 Milestone 49 (receipt validation and push sending).
 
+**Status (2026-09-26): implemented for Windows.** This covers:
+
+- the tray icon and its menu, the jump list, taskbar progress, and
+  notifications, answered through `Event::SurfaceAction`;
+- secure storage (Credential Manager with DPAPI);
+- typed feature flags with remote configuration;
+- honest `Unavailable` answers for push and Store billing, which need
+  package identity.
+
+The mobile reference application is owed with Milestones 35 and 36. See
+`docs/surfaces.md` and `BUILD_STATUS.md`.
+
 ## What these milestones do not change
 
 Nothing in section 11 overrides sections 1–2. The architecture is unchanged:

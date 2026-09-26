@@ -189,6 +189,19 @@ pub enum Event {
         /// The window being notified.
         window: WindowId,
     },
+    /// A surface beyond the window was used: a tray menu item chosen, the
+    /// tray icon clicked (`"activate"`), a notification clicked
+    /// (`"notification"`). Routed like a menu choice, to the window's root
+    /// component (`PLAN.md` Milestone 57, [`crate::surfaces`]).
+    SurfaceAction {
+        /// The window whose surface it was (the primary window).
+        window: WindowId,
+        /// Which surface.
+        surface: crate::capability::SurfaceKind,
+        /// The action: a menu item's id, or one of the constants in
+        /// [`crate::surfaces`].
+        action: String,
+    },
     /// A drag entered a drop-target node. Answer with
     /// `ComponentContext::input().set_drop_effect(...)` to accept it.
     DragEnter {
@@ -394,6 +407,7 @@ impl Event {
             | Self::WindowCloseRequested { .. }
             | Self::WindowStateChanged { .. }
             | Self::MenuAction { .. }
+            | Self::SurfaceAction { .. }
             | Self::ClipboardChanged { .. }
             | Self::DeepLink { .. }
             | Self::Command { .. }
@@ -447,6 +461,7 @@ impl Event {
             | Self::WindowCloseRequested { .. }
             | Self::WindowStateChanged { .. }
             | Self::MenuAction { .. }
+            | Self::SurfaceAction { .. }
             | Self::ClipboardChanged { .. }
             | Self::DeepLink { .. }
             | Self::Command { .. }

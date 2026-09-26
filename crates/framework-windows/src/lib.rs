@@ -115,6 +115,10 @@ pub use services::locale::WindowsLocale;
 #[cfg(windows)]
 pub use services::permissions::WindowsPermissions;
 #[cfg(windows)]
+pub use services::product::{WindowsPush, WindowsStore};
+#[cfg(windows)]
+pub use services::secure_storage::WindowsSecureStorage;
+#[cfg(windows)]
 pub use services::state_store::FileStateStore;
 #[cfg(windows)]
 pub use services::system::WindowsSystem;
