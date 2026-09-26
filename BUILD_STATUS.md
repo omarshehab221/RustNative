@@ -2989,7 +2989,7 @@ actually confirms it.
 
 **Advanced input system**
 
-Every remaining platform target is planned to the same depth, and none is implemented yet. The Web roadmap covers compile-time client JavaScript generation, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, server rendering with client attachment, serverless/edge deployment, service workers/PWA, and browser packaging/testing/deployment; the terminal backend covers the cell grid, Unicode-width measurement, key and mouse protocols, and terminal restoration; macOS and iOS are specified in full and wait on hardware this project does not have yet.
+Every remaining platform target is planned to the same depth, and none is implemented yet. The Web roadmap covers compile-time client JavaScript generation with opt-in WebAssembly subtrees, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, server rendering with client attachment, serverless/edge deployment, service workers/PWA, and browser packaging/testing/deployment; the terminal backend covers the cell grid, Unicode-width measurement, key and mouse protocols, and terminal restoration; macOS and iOS are specified in full and wait on hardware this project does not have yet.
 
 Milestones 20–24 add service injection/mocks, theme tokens and style resolution,
 capability discovery with a native escape hatch, portable system-integration
@@ -3021,12 +3021,12 @@ Shared core work for the remaining hosts
         ↓
 macOS / Linux / Android / iOS / Embedded / Terminal backends
         ↓
-Web (Rust server + HTML/CSS/generated JS; client-side, server-rendered, serverless)
+Web (Rust server + HTML/CSS/generated JS, opt-in WASM subtrees; client-side, server-rendered, serverless)
 ```
 
 **Advanced input system**
 
-Every remaining platform target is planned to the same depth, and none is implemented yet. The Web roadmap covers compile-time client JavaScript generation, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, server rendering with client attachment, serverless/edge deployment, service workers/PWA, and browser packaging/testing/deployment; the terminal backend covers the cell grid, Unicode-width measurement, key and mouse protocols, and terminal restoration; macOS and iOS are specified in full and wait on hardware this project does not have yet.
+Every remaining platform target is planned to the same depth, and none is implemented yet. The Web roadmap covers compile-time client JavaScript generation with opt-in WebAssembly subtrees, semantic DOM/CSS realization, browser events and accessibility, Web APIs/capabilities, Workers, routing/history, server rendering with client attachment, serverless/edge deployment, service workers/PWA, and browser packaging/testing/deployment; the terminal backend covers the cell grid, Unicode-width measurement, key and mouse protocols, and terminal restoration; macOS and iOS are specified in full and wait on hardware this project does not have yet.
 
 Milestones 20–24 add service injection/mocks, theme tokens and style resolution,
 capability discovery with a native escape hatch, portable system-integration
@@ -3058,5 +3058,5 @@ Shared core work for the remaining hosts
         ↓
 macOS / Linux / Android / iOS / Embedded / Terminal backends
         ↓
-Web (Rust server + HTML/CSS/generated JS; client-side, server-rendered, serverless)
+Web (Rust server + HTML/CSS/generated JS, opt-in WASM subtrees; client-side, server-rendered, serverless)
 ```

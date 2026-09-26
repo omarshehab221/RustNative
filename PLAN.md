@@ -12,8 +12,9 @@ The long-term target platforms are:
 - Android
 - iOS
 - Web (Rust on the server; HTML, CSS, and compile-time generated JavaScript
-  over the browser DOM/Web APIs), in every deployment mode a web application
-  is written in: client-side, server-rendered, and serverless
+  in the browser, with WebAssembly for the subtrees that opt into it, over the
+  browser DOM/Web APIs), in every deployment mode a web application is written
+  in: client-side, server-rendered, and serverless
 - Terminal user interfaces, on the desktop operating systems and on embedded
   Linux consoles
 - Embedded Linux
@@ -101,7 +102,8 @@ Desktop, mobile, Web, terminal, and embedded targets are planned as peers. It is
 - browser accessibility semantics through HTML/ARIA;
 - Web APIs for storage, networking, clipboard, notifications, media, sensors, permissions, and other capabilities;
 - Rust on the server for every line of application code, serverful or serverless;
-- in the browser, only HTML, CSS, and JavaScript the framework generates at compile time from the application's client logic — no Rust runtime is shipped to the browser.
+- in the browser, HTML, CSS, and JavaScript the framework generates at compile time from the application's client logic by default;
+- WebAssembly for the subtrees that opt into it, where client logic needs the full language — heavy computation, rich offline behaviour, or logic such as sync merge functions that must be the same Rust in the browser as everywhere else.
 
 **Terminal.** A terminal backend should use the terminal's own primitives: the cell grid, its text attributes and colour depth, its key and mouse reporting protocols, its resize notifications, its alternate screen and cursor control, and — where the terminal offers one — its clipboard escape sequence. A terminal is a real host with real conventions, not a canvas for drawing fake title bars and shadows.
 
@@ -117,6 +119,7 @@ framework-core
 framework-<platform>        framework-web        framework-tui
     ↓                           ↓                     ↓
 native OS APIs             HTML + generated JS    terminal I/O
+                           (+ opt-in WASM)
     ↓                           ↓                     ↓
 native controls            DOM / CSS / Web APIs   cells / key + mouse
                                                   protocols
@@ -1144,7 +1147,7 @@ serverless       the same render runs per request in a function or edge runtime,
                  with nothing kept between requests
 ```
 
-In every mode the division is the same: all application code that runs on a server is Rust, and the browser receives only HTML, CSS, and JavaScript generated at compile time. The two sides communicate only through serializable data.
+In every mode the division is the same: all application code that runs on a server is Rust, and the browser receives HTML, CSS, and JavaScript generated at compile time, plus a WebAssembly module for each subtree that opts into one. The two sides communicate only through serializable data.
 
 Which milestones each mode needs:
 
@@ -1163,13 +1166,14 @@ Build a dedicated `framework-web` adapter that:
 - splits an application's logic into **client logic**, which runs in the browser, and **server logic**, which is Rust on the server;
 - defines client logic as a restricted subset of Rust — plain serializable state (numbers, strings, booleans, lists, plain structs), assignment, arithmetic, `if`/`match`, string formatting, showing and hiding, class toggles, input binding, list insertion and removal, and navigation — which covers toggles, tabs, counters, form validation, filtering, dialogs, and optimistic updates;
 - translates client logic into JavaScript at compile time through a procedural macro, once per build rather than per request, so the emitted code is a cacheable static asset and a strict Content Security Policy needs no per-request nonces;
-- reports code outside the subset as a compile error that names the two ways forward: mark it `#[server]`, which makes it an explicit server call, or supply hand-written JavaScript through the native escape hatch;
+- reports code outside the subset as a compile error that names the three ways forward: mark it `#[server]`, which makes it an explicit server call; mark the subtree as a WebAssembly subtree, which runs it as full Rust in the browser; or supply hand-written JavaScript through the native escape hatch;
+- compiles each WebAssembly subtree into its own lazily loaded module over the single-threaded executor seam and the host clock, attached to the same server-rendered markup through the same node identities, and sharing the page's client state with the generated JavaScript as the same serializable data;
 - declares client state with serializable types and emits a matching JavaScript shape from the same Rust definition, so the browser and the server share one schema;
 - embeds each page's initial client state in the rendered HTML as JSON, together with the element hooks the generated code attaches to;
 - owns browser-side initialization and lifecycle, and integrates with the browser event loop and microtask/task model;
 - creates and tracks DOM handles without exposing browser types to `framework-core`.
 
-The client and the server exchange serializable data and nothing else: no Rust runs in the browser, and no JavaScript runs on the server. The subset is kept deliberately small, because every construct in it is a translation the framework maintains for as long as it exists; on every other target the same client logic is ordinary Rust and runs natively, so the subset constrains only what the browser receives.
+The client and the server exchange serializable data and nothing else, and no JavaScript runs on the server. The subset is kept deliberately small, because every construct in it is a translation the framework maintains for as long as it exists, and because a WebAssembly subtree is always available for what the subset does not express. Within the subset, numeric and string semantics that differ between Rust and JavaScript — 64-bit integers, overflow, UTF-8 versus UTF-16 indexing, float formatting — are restricted or wrapped so both sides agree on the same data. On every other target the same client logic is ordinary Rust and runs natively, so the subset constrains only what the browser receives, and a route with no WebAssembly subtree pays nothing for the option.
 
 ### Web milestone B — Native DOM realization
 
@@ -1184,7 +1188,7 @@ Row      → <div>
 Dialog   → <dialog> or an appropriate semantic composition
 ```
 
-The adapter must retain stable node identity and native DOM ownership just like the desktop backends retain native HWND ownership. The server renderer and the generated client code address nodes through the same stable identities, so the markup one produces is exactly what the other attaches to.
+The adapter must retain stable node identity and native DOM ownership just like the desktop backends retain native HWND ownership. The server renderer, the generated client code, and any WebAssembly subtree address nodes through the same stable identities, so the markup one produces is exactly what the others attach to.
 
 ### Web milestone C — CSS/layout integration
 
@@ -1237,7 +1241,7 @@ Integrate:
 - native HTML accessibility;
 - ARIA roles/properties/states where a semantic HTML element is insufficient.
 
-The framework accessibility model must map to real browser semantics rather than emulate accessibility behavior itself. Browser input is handled by the generated client code; an event reaches the server only when the handler it triggers is a server call.
+The framework accessibility model must map to real browser semantics rather than emulate accessibility behavior itself. Browser input is handled in the browser, by the generated client code or by the WebAssembly subtree that owns the node; an event reaches the server only when the handler it triggers is a server call.
 
 ### Web milestone E — Browser services/capabilities
 
@@ -1266,9 +1270,9 @@ Capability availability must be explicit because browser support varies by brows
 
 ### Web milestone F — Async/runtime scheduling
 
-The scheduler must support browser constraints without blocking the browser main thread. Generated client code runs on the browser's event loop and task model, and DOM operations must remain on the browser thread where required.
+The scheduler must support browser constraints without blocking the browser main thread. Generated client code and WebAssembly subtrees run on the browser's event loop and task model, and DOM operations must remain on the browser thread where required.
 
-Long-running CPU work belongs on the server, reached through a server call. Client work that must stay in the browser has a path to Web Workers running generated code when the capability is available, with a serializable message bridge back into the page.
+Long-running CPU work that must stay in the browser runs in a WebAssembly subtree, with a path to Web Workers running that module when the capability is available and a serializable message bridge back into the page; otherwise it belongs on the server, reached through a server call.
 
 ### Web milestone G — Routing, navigation, persistence, and browser lifecycle
 
@@ -1286,7 +1290,7 @@ Add browser-native lifecycle concepts:
 
 ### Web milestone H — Server-rendered HTML, client attachment, and progressive enhancement
 
-The framework should support server-rendered HTML as a deployment mode, with the generated client code attaching to that markup in the browser rather than re-rendering it. This requires deterministic tree identity and an ownership model under which the server's markup and the client's code agree on every node.
+The framework should support server-rendered HTML as a deployment mode, with the generated client code — and any WebAssembly subtree — attaching to that markup in the browser rather than re-rendering it. This requires deterministic tree identity and an ownership model under which the server's markup and the client's code agree on every node.
 
 This milestone owns the server half of the Web target, and the pieces it adds are shared by both server-side modes (Web milestone K runs exactly this render in a serverless host):
 
@@ -1304,6 +1308,7 @@ Rust server/runtime
 HTML output + initial client state as JSON
       ↓
 browser loads page and the generated JavaScript
+(and, lazily, the module of each WebAssembly subtree)
       ↓
 client code attaches to the existing DOM
       ↓
@@ -1322,7 +1327,8 @@ rather than eliminating it:
   a documented wire format and versioning story;
 - **selective attachment**: only subtrees that need interactivity receive
   client code, decided by the framework from the tree rather than by
-  annotation, so a route with no interactive subtree ships no JavaScript at all;
+  annotation, so a route with no interactive subtree ships no JavaScript at all,
+  and one with no WebAssembly subtree ships no WebAssembly;
 - **streaming**: a subtree may declare a pending representation and the
   renderer flushes the shell before it resolves, which is what makes per-request
   hosts' time limits survivable;
@@ -1363,9 +1369,10 @@ Support service-worker-backed application architectures for offline caching, bac
 The CLI/package system must eventually support:
 
 - client JavaScript emission from the application's client logic;
+- WebAssembly builds and their JavaScript glue for WebAssembly subtrees, one lazily loaded module per subtree;
 - emission of the shared serializable schema for client state and server calls;
 - static assets;
-- source maps from the generated JavaScript back to the Rust it came from — development tooling only, never needed at runtime;
+- source maps from the generated JavaScript and WebAssembly back to the Rust they came from — development tooling only, never needed at runtime;
 - development server;
 - browser hot reload/development workflow;
 - production bundling;
@@ -1389,7 +1396,8 @@ Web support is complete only when an application can be developed, tested, packa
 Section 11 adds to this milestone:
 
 - **client code splitting by route**, with lazily fetched subtrees, a
-  per-route payload budget, and a startup budget that is independent of total
+  per-route payload budget that counts WebAssembly modules with the generated
+  JavaScript, and a startup budget that is independent of total
   application size — measured on a throttled low-end device profile
   (Milestone 42);
 - **`rustnative deploy`** with a documented adapter contract covering at least
@@ -1415,7 +1423,7 @@ The serverless mode runs Web milestone H's renderer per request in a host that k
 - **one route table**: `Route`/`Router` from Milestone 30 matches the request path server-side and the URL client-side, rather than a second routing model for the server;
 - **host limits surfaced as capabilities**: execution timeouts, memory ceilings, absent or ephemeral filesystems, and response-size limits are answers the application can ask for, not surprises in production;
 - **tooling**: host adapters for at least one function runtime and one edge/WASM runtime, plus a local emulator so the serverless path is runnable and debuggable without deploying;
-- **the equivalence test**: one application, the same state, rendered client-side, server-rendered, and serverless, must produce the same DOM. That test is what keeps the three modes one target instead of three codebases.
+- **the equivalence test**: one application, the same state, rendered client-side, server-rendered, and serverless, and with a subtree's client logic run as generated JavaScript and as WebAssembly, must produce the same DOM. That test is what keeps the three modes one target instead of three codebases.
 
 This milestone is request-shaped. The per-invocation discipline above — nothing
 durable in the process, a scope bounded by the invocation, configuration read
@@ -3284,15 +3292,18 @@ Satisfies: `C07-1`, `C32-1`–`C32-3`, `C33-1`–`C33-3`, `C84-1`, `C85-1`,
   collection (server authority, last-writer-wins, or a merge function), with at
   least one adapter; optional conflict-free replicated types for collaborative
   text, lists, maps, and counters, whose merge functions are property-tested
-  for commutativity, associativity, and idempotence; and schema versioning for
-  replicated data across clients at different application versions;
+  for commutativity, associativity, and idempotence, and which run in the
+  browser as a WebAssembly subtree so every client merges with the same Rust;
+  and schema versioning for replicated data across clients at different
+  application versions;
 - **a server-interactive mode**: per-connection component trees on the server,
   events over a persistent connection, reconciler-produced diffs applied on the
   client by the ordinary reconciler, reconnection with state recovery,
   deployment draining, and optimistic client hooks for latency-sensitive
   interactions;
-- **render mode per subtree** — static, server-interactive, client-interactive,
-  or automatic (server-interactive until the client code arrives) — with state
+- **render mode per subtree** — static, server-interactive, client-interactive
+  (generated JavaScript or WebAssembly), or automatic (server-interactive until
+  the client code arrives) — with state
   transfer on a mode switch specified and tested;
 - **channels and presence** as service contracts usable by every mode;
 - **device desired state**: a typed desired/reported contract reconciled on the

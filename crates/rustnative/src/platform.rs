@@ -25,7 +25,8 @@ pub enum Platform {
     /// Embedded targets (Milestone 37).
     Embedded,
     /// The browser: Rust on the server, HTML/CSS and compile-time generated
-    /// JavaScript in the browser (see PLAN.md's web roadmap).
+    /// JavaScript in the browser, with WebAssembly for subtrees that opt in
+    /// (see PLAN.md's web roadmap).
     Web,
 }
 

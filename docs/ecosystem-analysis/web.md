@@ -296,7 +296,8 @@ explain a non-obvious execution model.
 **Opportunities.** Client JavaScript generated only from the client subset,
 and only for interactive subtrees, is small by construction, so the *outcome*
 resumability buys is available without constraining closures in the rest of
-the application — provided that code is split. The requirement to extract is
+the application — provided that code is split, and WebAssembly is shipped only
+for the subtrees that opt into it. The requirement to extract is
 code splitting at route and interaction granularity, and it is measurable.
 
 **Threats.** If artifact size is ignored, generated client code can be

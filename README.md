@@ -714,6 +714,7 @@ application:
 framework-core → framework-web → Rust on the server
                                       ↓
                     HTML / CSS / compile-time generated JavaScript
+                    (+ WebAssembly for subtrees that opt in)
                                       ↓
                     DOM / browser events / Web APIs
 
@@ -722,17 +723,21 @@ server-rendered  a Rust server renders HTML per request; generated JS attaches
 serverless       the same render per request in a function or edge runtime
 ```
 
-All application code on a server is Rust. The browser receives only HTML, CSS,
-and JavaScript generated at compile time from client logic written in a
-restricted subset of Rust; code outside the subset is a compile error unless it
-is marked as a server call. The two sides exchange serializable data only.
+All application code on a server is Rust. By default the browser receives
+HTML, CSS, and JavaScript generated at compile time from client logic written
+in a restricted subset of Rust. A subtree that needs the full language — heavy
+computation, rich offline behaviour, sync merge functions — opts into
+WebAssembly and runs as full Rust in a lazily loaded module; other code outside
+the subset is a compile error unless it is marked as a server call. The two
+sides exchange serializable data only.
 
-The scope covers client code generation and browser lifecycle, DOM ownership,
-CSS/layout integration, browser focus, text input, pointer, touch, keyboard
-and IME, HTML/ARIA accessibility, fetch/WebSocket/storage capabilities, Web
-Workers, URL/history routing, server rendering with client attachment and
-typed server functions, service workers and PWAs, serverless and edge
-deployment, and the browser development, testing, and bundling tooling.
+The scope covers client code generation, opt-in WebAssembly subtrees, and
+browser lifecycle, DOM ownership, CSS/layout integration, browser focus, text
+input, pointer, touch, keyboard and IME, HTML/ARIA accessibility,
+fetch/WebSocket/storage capabilities, Web Workers, URL/history routing, server
+rendering with client attachment and typed server functions, service workers
+and PWAs, serverless and edge deployment, and the browser development,
+testing, and bundling tooling.
 
 **Terminal** (Milestone 38) — a `framework-tui` adapter realizing the same
 tree onto a terminal's cell grid: the Windows console in virtual-terminal
