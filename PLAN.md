@@ -11,8 +11,9 @@ The long-term target platforms are:
 - Linux
 - Android
 - iOS
-- Web (WebAssembly + browser DOM/Web APIs), in every deployment mode a web
-  application is written in: client-side, server-rendered, and serverless
+- Web (Rust on the server; HTML, CSS, and compile-time generated JavaScript
+  over the browser DOM/Web APIs), in every deployment mode a web application
+  is written in: client-side, server-rendered, and serverless
 - Terminal user interfaces, on the desktop operating systems and on embedded
   Linux consoles
 - Embedded Linux
@@ -99,8 +100,8 @@ Desktop, mobile, Web, terminal, and embedded targets are planned as peers. It is
 - browser focus and selection APIs;
 - browser accessibility semantics through HTML/ARIA;
 - Web APIs for storage, networking, clipboard, notifications, media, sensors, permissions, and other capabilities;
-- WebAssembly for the shared Rust runtime;
-- JavaScript bindings only at the browser boundary where required by Web APIs.
+- Rust on the server for every line of application code, serverful or serverless;
+- in the browser, only HTML, CSS, and JavaScript the framework generates at compile time from the application's client logic — no Rust runtime is shipped to the browser.
 
 **Terminal.** A terminal backend should use the terminal's own primitives: the cell grid, its text attributes and colour depth, its key and mouse reporting protocols, its resize notifications, its alternate screen and cursor control, and — where the terminal offers one — its clipboard escape sequence. A terminal is a real host with real conventions, not a canvas for drawing fake title bars and shadows.
 
@@ -115,7 +116,7 @@ framework-core
     ↓
 framework-<platform>        framework-web        framework-tui
     ↓                           ↓                     ↓
-native OS APIs             WASM + browser         terminal I/O
+native OS APIs             HTML + generated JS    terminal I/O
     ↓                           ↓                     ↓
 native controls            DOM / CSS / Web APIs   cells / key + mouse
                                                   protocols
@@ -123,7 +124,7 @@ native controls            DOM / CSS / Web APIs   cells / key + mouse
 
 The framework must also explicitly account for each host's constraints, and design for them up front rather than discovering them at integration time:
 
-- **browser**: the single-threaded main-thread model for DOM access, asynchronous Web APIs, browser lifecycle, URL/history/navigation, page visibility, storage quotas, user-gesture restrictions, hydration, and browser security boundaries;
+- **browser**: the single-threaded main-thread model for DOM access, asynchronous Web APIs, browser lifecycle, URL/history/navigation, page visibility, storage quotas, user-gesture restrictions, attaching client code to server-rendered markup, and browser security boundaries;
 - **terminal**: cell-granular geometry, no overlapping native windows, text-only measurement, colour and capability differences between terminals, input that arrives as escape sequences, and accessibility that belongs to the terminal rather than to the application;
 - **mobile**: process lifecycle and reclaim, configuration changes, and permission prompts;
 - **embedded**: constrained memory, fixed displays, and the absence of a general-purpose OS.
@@ -912,9 +913,10 @@ rustnative doctor [--json]
 The toolchains it drives, and the ones it will: Windows uses Cargo with the
 MSVC build tools and the Windows SDK; macOS and iOS will use Xcode and the
 Apple SDKs, Linux the system compiler, Android Gradle with the SDK and NDK,
-the Web the `wasm32` targets plus glue and bundling (and, for its serverless
-mode, the target its host runtime expects), the terminal Cargo alone, and
-embedded targets their own toolchains through Cargo.
+the Web Cargo for the server plus the framework's client JavaScript emitter and
+bundling (and, for its serverless mode, the target its host runtime expects),
+the terminal Cargo alone, and embedded targets their own toolchains through
+Cargo.
 
 ---
 
@@ -1134,11 +1136,15 @@ The Web track is lettered rather than numbered because it predates the numbering
 The same application, the same components, and the same tree must be deployable in every mode a web application is actually written in, chosen at deployment time rather than by rewriting:
 
 ```text
-client-side      the application runs in the browser; the host serves static files
-server-rendered  a long-lived Rust server renders HTML per request; the browser hydrates it
+client-side      pages are rendered at build time; the host serves static HTML, CSS,
+                 and generated JavaScript, and server calls go to a separate backend
+server-rendered  a long-lived Rust server renders HTML per request; the browser runs
+                 the generated JavaScript against it
 serverless       the same render runs per request in a function or edge runtime,
                  with nothing kept between requests
 ```
+
+In every mode the division is the same: all application code that runs on a server is Rust, and the browser receives only HTML, CSS, and JavaScript generated at compile time. The two sides communicate only through serializable data.
 
 Which milestones each mode needs:
 
@@ -1150,20 +1156,20 @@ serverless       the above, plus H and K
 
 An application that renders identically in all three is the test that the modes are genuinely one target (see Web milestone K).
 
-### Web milestone A — WASM runtime and browser host
+### Web milestone A — Browser host and client code generation
 
 Build a dedicated `framework-web` adapter that:
 
-- compiles the shared Rust runtime to WebAssembly;
-- owns browser-side initialization and lifecycle;
-- bridges Rust to JavaScript/Web APIs only at the platform boundary;
-- creates and tracks DOM/native handles without exposing browser types to `framework-core`;
-- integrates with the browser event loop and microtask/task model.
+- splits an application's logic into **client logic**, which runs in the browser, and **server logic**, which is Rust on the server;
+- defines client logic as a restricted subset of Rust — plain serializable state (numbers, strings, booleans, lists, plain structs), assignment, arithmetic, `if`/`match`, string formatting, showing and hiding, class toggles, input binding, list insertion and removal, and navigation — which covers toggles, tabs, counters, form validation, filtering, dialogs, and optimistic updates;
+- translates client logic into JavaScript at compile time through a procedural macro, once per build rather than per request, so the emitted code is a cacheable static asset and a strict Content Security Policy needs no per-request nonces;
+- reports code outside the subset as a compile error that names the two ways forward: mark it `#[server]`, which makes it an explicit server call, or supply hand-written JavaScript through the native escape hatch;
+- declares client state with serializable types and emits a matching JavaScript shape from the same Rust definition, so the browser and the server share one schema;
+- embeds each page's initial client state in the rendered HTML as JSON, together with the element hooks the generated code attaches to;
+- owns browser-side initialization and lifecycle, and integrates with the browser event loop and microtask/task model;
+- creates and tracks DOM handles without exposing browser types to `framework-core`.
 
-Two pieces of core work belong to this milestone rather than to the backend, because they are contracts rather than bindings:
-
-- `Executor` is already the pluggable seam a browser executor needs, but `BoxedTask`/`BoxedSleep` are `Send` futures, and the browser drives futures on one thread. The bound has to be relaxed portably, or a browser-side seam supplied, before a real browser executor exists;
-- `std::time::Instant` is unavailable on the browser's WASM target. Time must reach the framework through the executor/host clock — the direction `Executor::sleep` already established — rather than from the standard library.
+The client and the server exchange serializable data and nothing else: no Rust runs in the browser, and no JavaScript runs on the server. The subset is kept deliberately small, because every construct in it is a translation the framework maintains for as long as it exists; on every other target the same client logic is ordinary Rust and runs natively, so the subset constrains only what the browser receives.
 
 ### Web milestone B — Native DOM realization
 
@@ -1178,7 +1184,7 @@ Row      → <div>
 Dialog   → <dialog> or an appropriate semantic composition
 ```
 
-The adapter must retain stable node identity and native DOM ownership just like the desktop backends retain native HWND ownership.
+The adapter must retain stable node identity and native DOM ownership just like the desktop backends retain native HWND ownership. The server renderer and the generated client code address nodes through the same stable identities, so the markup one produces is exactly what the other attaches to.
 
 ### Web milestone C — CSS/layout integration
 
@@ -1231,7 +1237,7 @@ Integrate:
 - native HTML accessibility;
 - ARIA roles/properties/states where a semantic HTML element is insufficient.
 
-The framework accessibility model must map to real browser semantics rather than emulate accessibility behavior itself.
+The framework accessibility model must map to real browser semantics rather than emulate accessibility behavior itself. Browser input is handled by the generated client code; an event reaches the server only when the handler it triggers is a server call.
 
 ### Web milestone E — Browser services/capabilities
 
@@ -1256,13 +1262,13 @@ The capability system must include browser implementations for, where supported:
 - service workers;
 - web workers.
 
-Capability availability must be explicit because browser support varies by browser, security context, permissions, user gesture, and deployment mode.
+Capability availability must be explicit because browser support varies by browser, security context, permissions, user gesture, and deployment mode. Client logic reaches these capabilities through bindings the code generator emits; server logic reaches its own services in Rust.
 
 ### Web milestone F — Async/runtime scheduling
 
-The scheduler must support browser constraints without blocking the browser main thread. Tasks should map to appropriate WASM/browser mechanisms, and DOM operations must remain on the browser thread where required.
+The scheduler must support browser constraints without blocking the browser main thread. Generated client code runs on the browser's event loop and task model, and DOM operations must remain on the browser thread where required.
 
-Long-running CPU work should have a path to Web Workers when the capability is available, with a message bridge back into the framework scheduler.
+Long-running CPU work belongs on the server, reached through a server call. Client work that must stay in the browser has a path to Web Workers running generated code when the capability is available, with a serializable message bridge back into the page.
 
 ### Web milestone G — Routing, navigation, persistence, and browser lifecycle
 
@@ -1278,15 +1284,15 @@ Add browser-native lifecycle concepts:
 - persistence and restoration;
 - storage-backed application state.
 
-### Web milestone H — Server-rendered HTML, hydration, and progressive enhancement
+### Web milestone H — Server-rendered HTML, client attachment, and progressive enhancement
 
-The framework should support server-rendered HTML as a deployment mode, followed by Rust/WASM hydration on the client. This requires deterministic tree identity and a hydration-safe native ownership model.
+The framework should support server-rendered HTML as a deployment mode, with the generated client code attaching to that markup in the browser rather than re-rendering it. This requires deterministic tree identity and an ownership model under which the server's markup and the client's code agree on every node.
 
 This milestone owns the server half of the Web target, and the pieces it adds are shared by both server-side modes (Web milestone K runs exactly this render in a serverless host):
 
 - an **HTML renderer** over the existing tree and style resolution, with no platform event loop and no native objects — the same `view()` that produces DOM produces markup;
 - **server-side data loading**: a render may await, and the renderer must be able to render a tree whose data arrives asynchronously, with a deterministic result;
-- **typed server functions**: a call from a component to a Rust function that exists only on the server, carried over HTTP and delivered through the same message/callback model, so client-side and server-rendered applications share one way of reaching the server;
+- **typed server functions**: a call from client logic to a Rust function marked `#[server]` that exists only on the server, carried over HTTP as serializable data and delivered through the same message/callback model, so client-side and server-rendered applications share one way of reaching the server;
 - **per-request state**: no process-wide mutable state on the render path; services, storage, and session data are constructed for the request;
 - **static generation** as the degenerate case: rendering the same pages at build time for hosts that serve only files, reusing this renderer rather than a separate one.
 
@@ -1295,38 +1301,37 @@ The Web roadmap therefore includes:
 ```text
 Rust server/runtime
       ↓
-HTML output
+HTML output + initial client state as JSON
       ↓
-browser loads page
+browser loads page and the generated JavaScript
       ↓
-WASM runtime
+client code attaches to the existing DOM
       ↓
-hydrate existing DOM
-      ↓
-normal reconciliation
+local updates in the browser; server calls exchange JSON
 ```
 
-Hydration must preserve semantic HTML, support accessibility before hydration where practical, and detect/handle server-client tree mismatches deterministically.
+Attachment must preserve semantic HTML, keep the page accessible before the client code loads, and detect/handle server-client tree mismatches deterministically.
 
 Section 11 adds four requirements to this milestone, each of which exists
 because the dominant archetype in this space manages the corresponding problem
 rather than eliminating it:
 
 - **the server seam is typed end to end**: a server function has one
-  definition, is compile-time checked at both call sites, needs no generated
-  glue, and has a documented wire format and versioning story;
-- **selective hydration**: only subtrees that need interactivity are attached,
-  decided by the framework from the tree rather than by annotation, so a route
-  with no interactive subtree ships no WASM at all;
+  definition, is compile-time checked at both call sites, has its client-side
+  shape emitted from that same definition rather than written by hand, and has
+  a documented wire format and versioning story;
+- **selective attachment**: only subtrees that need interactivity receive
+  client code, decided by the framework from the tree rather than by
+  annotation, so a route with no interactive subtree ships no JavaScript at all;
 - **streaming**: a subtree may declare a pending representation and the
   renderer flushes the shell before it resolves, which is what makes per-request
   hosts' time limits survivable;
-- **mismatch as a non-category**: because one renderer and one layout model
-  produce both the server's output and the client's attachment, divergence is a
+- **mismatch as a non-category**: because one tree definition produces both
+  the server's markup and the client code that attaches to it, divergence is a
   bug in one code path rather than a disagreement between two. The cross-mode
   equivalence test in Web milestone K is promoted to a stated guarantee, and a
   progressive-enhancement baseline — forms, navigation, and submissions that
-  work before and without the client runtime — is part of this milestone rather
+  work before and without the client code — is part of this milestone rather
   than an aspiration.
 
 Three further concepts from the survey belong to this milestone's render path
@@ -1357,10 +1362,10 @@ Support service-worker-backed application architectures for offline caching, bac
 
 The CLI/package system must eventually support:
 
-- WASM builds;
-- JavaScript/WASM glue generation;
+- client JavaScript emission from the application's client logic;
+- emission of the shared serializable schema for client state and server calls;
 - static assets;
-- source maps;
+- source maps from the generated JavaScript back to the Rust it came from — development tooling only, never needed at runtime;
 - development server;
 - browser hot reload/development workflow;
 - production bundling;
@@ -1379,11 +1384,11 @@ rustnative build web --mode server
 rustnative build web --mode serverless [--host <adapter>]
 ```
 
-Web support is complete only when an application can be developed, tested, packaged, deployed, and updated through the same framework tooling rather than merely compiled to WASM.
+Web support is complete only when an application can be developed, tested, packaged, deployed, and updated through the same framework tooling rather than merely emitted as HTML and JavaScript.
 
 Section 11 adds to this milestone:
 
-- **client module splitting by route**, with lazily fetched subtrees, a
+- **client code splitting by route**, with lazily fetched subtrees, a
   per-route payload budget, and a startup budget that is independent of total
   application size — measured on a throttled low-end device profile
   (Milestone 42);
@@ -1400,7 +1405,8 @@ Section 11 adds to this milestone:
 
 The serverless mode runs Web milestone H's renderer per request in a host that keeps nothing between requests, and it is a distinct milestone because those hosts impose constraints a long-lived server does not:
 
-- **two runtime shapes**, both of which the render path must build for: a native binary invoked per request (managed function runtimes, through a runtime adapter) and a WASM sandbox (edge/worker runtimes, and `wasm32-wasip1` hosts);
+- **two runtime shapes**, both of which the render path must build for: a native binary invoked per request (managed function runtimes, through a runtime adapter) and a WASM sandbox (edge/worker runtimes, and `wasm32-wasip1` hosts). This is server code compiled to WebAssembly for the host, not code sent to the browser;
+- **the WASM sandbox shape runs on the shared core seams**: these sandboxes drive futures on one thread, so the render path uses the single-threaded executor seam rather than `Send` tasks; and `std::time::Instant` is unavailable on the sandboxed WASM targets, so time reaches the framework through the host clock rather than from the standard library;
 - **stateless by construction**: nothing durable lives in the process. Anything that must outlive a request goes through a service — storage, HTTP, or a database — and the state store on that path is per request;
 - **cold start and binary size are correctness-adjacent**: no process-wide lazily created runtime on this path (the shared Tokio runtime is exactly what must not be reached for), a single-threaded executor, and a size/startup budget measured in CI like any other regression;
 - **no work outliving the response**: a request owns a task scope bounded by the response, cancelled the way a component's scope is cancelled at unmount. A task that survives the response is a bug, not a background job;
@@ -3030,8 +3036,8 @@ Satisfies: `W-MF-6`, `W-MF-7`, `W-DP-1`, `W-DP-2`, `W-DP-3`, `W-SL-2`,
   failed boot, and staged fleet rollout, delegating to an existing bootloader
   rather than writing one;
 - **static and progressive shapes**: a route with no interactive subtree ships
-  no client module at all, and forms, navigation, and submissions work before
-  and without the client runtime;
+  no client JavaScript at all, and forms, navigation, and submissions work
+  before and without the client code;
 - **single-artifact deployment**: a server binary with embedded assets and no
   separate asset pipeline to operate.
 
@@ -3286,7 +3292,7 @@ Satisfies: `C07-1`, `C32-1`–`C32-3`, `C33-1`–`C33-3`, `C84-1`, `C85-1`,
   deployment draining, and optimistic client hooks for latency-sensitive
   interactions;
 - **render mode per subtree** — static, server-interactive, client-interactive,
-  or automatic (server-interactive until the client module arrives) — with state
+  or automatic (server-interactive until the client code arrives) — with state
   transfer on a mode switch specified and tested;
 - **channels and presence** as service contracts usable by every mode;
 - **device desired state**: a typed desired/reported contract reconciled on the

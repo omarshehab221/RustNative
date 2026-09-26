@@ -112,7 +112,9 @@ fidelity, accessibility, and internationalization are nobody's job.
 **Opportunities.** Ownership makes precise dependency tracking explicit rather
 than magic: dependencies can be values a developer can read. Macros and
 monomorphization give build-time specialization inside the language's own
-toolchain, with stack traces that point at source instead of at emitted code.
+toolchain, and the client JavaScript those macros emit carries source maps
+back to the Rust it came from, so stack traces point at source instead of at
+emitted code.
 And the transient-state rule (`PLAN.md` 2.10) already gives us the
 change-proportional path for exactly the updates that matter most — it is
 currently an implementation practice rather than a contract.
@@ -180,10 +182,12 @@ concurrency, which is exactly what per-request hosts do.
 
 **Opportunities.** A typed seam end to end: a server-only function called from
 a component as an ordinary compiled call, one definition, checked by the
-compiler, no generator — unreachable for them without changing substrate.
-Hydration mismatch deleted as a category, because one renderer and one layout
-model produce both sides; `PLAN.md` Web milestone K's equivalence test should
-be promoted from a test to a stated guarantee. Identical behaviour off-platform,
+compiler, with the browser side emitted from that definition rather than
+written by hand — unreachable for them without changing substrate.
+Server/client mismatch deleted as a category, because one tree definition
+produces both the server's markup and the client code that attaches to it;
+`PLAN.md` Web milestone K's equivalence test should be promoted from a test to
+a stated guarantee. Identical behaviour off-platform,
 with every rendering strategy runnable locally. Footprint as a headline number.
 A stability policy as a direct answer to their loudest complaint.
 
@@ -212,8 +216,8 @@ in [`concepts-app.md`](concepts-app.md),
   second routing model.
 - `W-MF-3` `[W]` Streaming HTML with pending-representation boundaries: the
   shell flushes before slow subtrees resolve.
-- `W-MF-4` `[W]` Selective hydration decided by the framework from the tree,
-  not by annotation.
+- `W-MF-4` `[W]` Selective attachment of client code decided by the framework
+  from the tree, not by annotation.
 - `W-MF-5` `[W]` Cross-mode rendered-output equivalence enforced in CI and
   published as a guarantee.
 - `W-MF-6` `[W]` Deployment adapters as a stable documented contract — one
@@ -248,7 +252,7 @@ for most pages; excellent authoring integration; interoperable islands.
 **Weaknesses.** Awkward shared state; weak for dense application-shaped
 products; a boundary the developer must maintain by hand.
 
-**Opportunities.** Islands *without* the boundary: selective hydration derived
+**Opportunities.** Islands *without* the boundary: selective attachment derived
 from the tree (`W-MF-4`) produces the same shipped-byte outcome while shared
 state stays ordinary component state, because there is only one model. That is
 a strictly better position and should be stated as one. Content-first authoring
@@ -265,7 +269,7 @@ independently of this archetype, in [`concepts-app.md`](concepts-app.md).
 **What we must ship.**
 
 - `W-IS-1` `[W]` Zero client payload for fully static routes: a route with no
-  interactive subtree ships no WASM.
+  interactive subtree ships no JavaScript.
 - `W-IS-2` `[W]` A typed structured-content pipeline rendered through the same
   component model.
 - `W-IS-3` `[W]` A documented progressive-enhancement baseline: forms,
@@ -289,14 +293,15 @@ hardest problem in W1 and W3. Lazy loading at interaction granularity.
 Small ecosystem, high conceptual overhead, and debugging tools that must
 explain a non-obvious execution model.
 
-**Opportunities.** A compiled client module starts in a fraction of an
-interpreted bundle's time, so the *outcome* resumability buys is available
-without constraining closures — provided the module is small and split. The
-requirement to extract is code splitting at route and interaction granularity,
-and it is measurable.
+**Opportunities.** Client JavaScript generated only from the client subset,
+and only for interactive subtrees, is small by construction, so the *outcome*
+resumability buys is available without constraining closures in the rest of
+the application — provided that code is split. The requirement to extract is
+code splitting at route and interaction granularity, and it is measurable.
 
-**Threats.** If artifact size is ignored, a compiled module can be *larger*
-than a well-split interpreted bundle and their argument lands against us.
+**Threats.** If artifact size is ignored, generated client code can be
+*larger* than a well-split hand-written bundle and their argument lands
+against us.
 
 **Concepts introduced here.** `C07` per-component render modes; `C42` resource
 loading and user-centric metrics. Each is analysed on its own merits,
@@ -869,7 +874,7 @@ concept documents).
 1. **The server-full gap (`W-SF-*`).** The largest uncontested opportunity in
    this analysis: nobody offers a batteries-included application backend in a
    compiled, statically typed language with a native UI story attached.
-2. **The typed network seam (`W-MF-1`) and the end of hydration mismatch
+2. **The typed network seam (`W-MF-1`) and the end of server/client mismatch
    (`W-MF-4`, `W-MF-5`).** Root-layer advantages the incumbent cannot copy
    without changing substrate.
 3. **Per-request and edge footprint (`W-SL-*`, `W-ED-*`).** Their worst

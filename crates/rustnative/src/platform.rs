@@ -24,7 +24,8 @@ pub enum Platform {
     Ios,
     /// Embedded targets (Milestone 37).
     Embedded,
-    /// The browser, through WebAssembly (see PLAN.md's web roadmap).
+    /// The browser: Rust on the server, HTML/CSS and compile-time generated
+    /// JavaScript in the browser (see PLAN.md's web roadmap).
     Web,
 }
 

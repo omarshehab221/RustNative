@@ -614,7 +614,7 @@ Then:
 - desktop application can use Tokio;
 - tests can use deterministic/manual scheduling;
 - another host can integrate an existing executor;
-- future Web backend can map scheduling to browser/WASM semantics.
+- future Web backend can map scheduling to browser semantics.
 
 This is the strongest long-term architecture.
 

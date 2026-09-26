@@ -711,21 +711,28 @@ canvas, in all three deployment modes, chosen at build time from one
 application:
 
 ```text
-framework-core → framework-web → WebAssembly + browser bindings
+framework-core → framework-web → Rust on the server
                                       ↓
-                    DOM / CSS / browser events / Web APIs
+                    HTML / CSS / compile-time generated JavaScript
+                                      ↓
+                    DOM / browser events / Web APIs
 
-client-side      runs in the browser; the host serves files
-server-rendered  a Rust server renders HTML per request; the browser hydrates
+client-side      pages built ahead of time; the host serves files
+server-rendered  a Rust server renders HTML per request; generated JS attaches
 serverless       the same render per request in a function or edge runtime
 ```
 
-The scope covers the WASM runtime and browser lifecycle, DOM ownership and
-reconciliation, CSS/layout integration, browser focus, text input, pointer,
-touch, keyboard and IME, HTML/ARIA accessibility, fetch/WebSocket/storage
-capabilities, Web Workers, URL/history routing, server rendering with
-hydration and typed server functions, service workers and PWAs, serverless and
-edge deployment, and the browser development, testing, and bundling tooling.
+All application code on a server is Rust. The browser receives only HTML, CSS,
+and JavaScript generated at compile time from client logic written in a
+restricted subset of Rust; code outside the subset is a compile error unless it
+is marked as a server call. The two sides exchange serializable data only.
+
+The scope covers client code generation and browser lifecycle, DOM ownership,
+CSS/layout integration, browser focus, text input, pointer, touch, keyboard
+and IME, HTML/ARIA accessibility, fetch/WebSocket/storage capabilities, Web
+Workers, URL/history routing, server rendering with client attachment and
+typed server functions, service workers and PWAs, serverless and edge
+deployment, and the browser development, testing, and bundling tooling.
 
 **Terminal** (Milestone 38) — a `framework-tui` adapter realizing the same
 tree onto a terminal's cell grid: the Windows console in virtual-terminal
