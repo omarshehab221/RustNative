@@ -398,6 +398,7 @@ pub struct Services {
     secure_storage: Option<Arc<dyn crate::product::SecureStorage>>,
     push: Option<Arc<dyn crate::product::PushService>>,
     commerce: Option<Arc<dyn crate::product::CommerceService>>,
+    packages: Arc<std::collections::BTreeMap<String, Arc<dyn std::any::Any + Send + Sync>>>,
 }
 
 impl fmt::Debug for Services {
@@ -420,11 +421,43 @@ impl fmt::Debug for Services {
             .field("commerce", &self.commerce.is_some())
             .field("surfaces", &self.surfaces)
             .field("flags", &self.flags)
+            .field("packages", &self.packages.keys().collect::<Vec<_>>())
             .finish()
     }
 }
 
 impl Services {
+    /// Installs a capability package (Milestone 52): checks it supports
+    /// `backend` and this framework version, builds its service from a
+    /// scope holding only the grants it declares, and keeps the service
+    /// under the package's name in these services — nowhere global.
+    ///
+    /// # Errors
+    ///
+    /// The package does not support `backend` or this framework version,
+    /// or declined to build here.
+    pub fn install<P: crate::package::CapabilityPackage>(
+        self,
+        package: &P,
+        backend: &str,
+    ) -> Result<Self, crate::package::PackageError> {
+        let manifest = package.manifest();
+        manifest.check(backend)?;
+        let scope = self.scoped(manifest.grants.clone());
+        let service = package.build(scope, backend).ok_or_else(|| {
+            crate::package::PackageError::Declined { package: manifest.name.clone() }
+        })?;
+        let mut packages = (*self.packages).clone();
+        packages.insert(manifest.name, Arc::new(service));
+        Ok(Self { packages: Arc::new(packages), ..self })
+    }
+
+    /// The service a package installed under `name`, if it did.
+    #[must_use]
+    pub fn package<T: Send + Sync + 'static>(&self, name: &str) -> Option<Arc<T>> {
+        self.packages.get(name).cloned().and_then(|service| service.downcast::<T>().ok())
+    }
+
     /// The handle through which the application asks for surfaces beyond
     /// its windows (Milestone 57); always present, realized where the
     /// backend has them.

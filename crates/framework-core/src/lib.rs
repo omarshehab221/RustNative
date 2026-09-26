@@ -340,6 +340,7 @@ pub mod localization;
 pub mod menu;
 pub mod navigation;
 pub mod node;
+pub mod package;
 pub mod panic;
 pub mod perf;
 pub mod permission;

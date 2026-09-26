@@ -1282,6 +1282,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kits"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "framework-core",
+ "framework-server",
+ "http",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1400,6 +1413,15 @@ dependencies = [
  "elliptic-curve",
  "primeorder",
  "sha2",
+]
+
+[[package]]
+name = "package-battery"
+version = "0.1.0"
+dependencies = [
+ "framework-core",
+ "toml",
+ "windows-sys",
 ]
 
 [[package]]
@@ -2016,6 +2038,15 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "span"
+version = "0.1.0"
+dependencies = [
+ "framework-core",
+ "framework-headless",
+ "framework-windows",
 ]
 
 [[package]]

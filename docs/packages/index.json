@@ -1,0 +1,11 @@
+[
+  {
+    "name": "package-battery",
+    "version": "0.1.0",
+    "description": "The machine's battery and power source",
+    "contract": "BatteryService",
+    "backends": ["windows", "headless"],
+    "framework": ">=0.1, <0.2",
+    "grants": []
+  }
+]

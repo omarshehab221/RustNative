@@ -14,6 +14,117 @@ met on those two, and its other half is listed as owed.
 
 <!-- milestone entries, newest first -->
 
+### Milestone 52 — The project around the framework — complete for Windows (device end owed)
+
+With this entry, every milestone and tier in `PLAN.md` is built on the
+Windows backend, except the other backends themselves. The following work
+is owed, and each milestone's own entry names the parts it owes:
+
+- Milestones 33–38: macOS, Linux, Android, iOS, embedded, and terminal.
+- The Web track's milestones A–K.
+
+**Built.**
+
+- **Stability.**
+  - `docs/policy/stability.md` sets out semantic versioning across the
+    crates, a deprecation window of two minor releases, the MSRV policy,
+    and the rule that a breaking change ships with a codemod.
+  - `rustnative upgrade --from <version> [--dry-run]` runs the codemods.
+    They are syntax-aware and rewrite exactly the affected spans in place,
+    leaving formatting and comments untouched. Where a codemod cannot be
+    certain, it reports the position instead of guessing.
+  - The first codemod converts `EdgeInsets` from `left`/`right` to
+    `start`/`end` (Milestone 39). It is tested against a corpus in
+    `crates/rustnative/tests/codemod-corpus/`.
+- **Capability packages (`C71`).**
+  - `framework_core::package` adds `CapabilityPackage` and
+    `PackageManifest` (backends, framework version range, grants), with
+    Cargo-compatible version matching.
+  - `Services::install(&package, backend)` checks all three, builds the
+    service from a scope holding only the declared grants, and keeps it
+    under the package's name. Nothing is registered globally.
+  - `rustnative add <path|name>` reads the package's
+    `[package.metadata.rustnative]`, refuses an incompatible package with
+    the reason, and adds the dependency.
+  - `rustnative search` reads the index, `docs/packages/index.json` or
+    `--index`.
+  - `examples/package-battery` is a third-party-style package: a portable
+    `BatteryService`, with Windows code (`GetSystemPowerStatus`) and
+    headless code.
+- **Feature kits (`C57-3`).** `rustnative generate kit auth|admin|commerce`
+  writes working code on the server model.
+  - `auth`: Argon2id passwords, sealed sessions, CSRF on every change,
+    and the first account as administrator.
+  - `admin`: the generated admin surface, for administrators only.
+  - `commerce`: a catalogue, and a checkout that validates each receipt on
+    the server before recording an entitlement.
+  - `examples/kits` compiles and tests the templates themselves.
+- **`rustnative describe --json`.** It lists:
+  - 24 markup elements, each attribute with the builder method it calls;
+  - 818 utility classes, with the properties each one sets, and the
+    variants;
+  - 46 capabilities (`Capability::ALL`, which inspection now reports
+    against too), 41 events (`EVENT_NAMES`), the services, the component
+    contract, and the layout semantics.
+  - `docs/api/framework.json` is its committed output.
+- **Documents.**
+  - Measured core costs: `docs/performance/core-costs.md`.
+  - The change-detection contract (`C03-1`):
+    `docs/policy/change-detection.md`.
+  - The embedded non-duplication policy: `docs/policy/embedded.md`.
+  - Guides: an index mapping each task to its guide and a runnable
+    example (`docs/guides/README.md`), and a first-application guide in
+    both syntaxes and both style spellings.
+  - An API reference note: `docs/api/README.md`.
+  - New entries in the rejected-concepts list (`C72`).
+- **The span example.** `examples/span` is one thermostat application that
+  runs in a desktop window and at a device's 240×320 screen.
+
+**Verified.** Full gate.
+- **Codemods.** The corpus cases rewrite exactly as expected, with the
+  expected number of places reported by hand. A second upgrade changes
+  nothing more. End to end, `upgrade` with `--dry-run` writes nothing,
+  and then rewrites in place.
+- **Packages.**
+  - The package installs only on the backends it declares, and nothing
+    leaks into other `Services`.
+  - Its `Cargo.toml` metadata matches its manifest.
+  - `add` accepts the sample, refuses an Android-only package with the
+    reason, and does not add a dependency twice. `search` finds the
+    sample.
+- **Kits.**
+  - Sign-up, with validation and a unique name, then sign-out and sign-in,
+    with the same answer for a wrong password as for an unknown name.
+  - The admin surface answers 200 for the first account and 403 for the
+    second.
+  - A checkout is validated, an unknown product is refused, and
+    entitlements are kept per buyer.
+  - `generate kit` refuses a project without the server model, and
+    refuses `admin` before `auth`.
+- **Describe.**
+  - The committed description is current, or a test fails.
+  - The event list equals the `Event` enum, parsed from its source.
+- **Core costs.**
+  - Heap per node is checked against the document on every run: 1241 B
+    for the tree and 2367 B for its snapshot.
+  - The stack each chain depth needs was measured by a child-process
+    binary search, down to 4 KiB: 67 KiB at depth 100 and 579 KiB at depth
+    1,000.
+  - Worst-case times were recorded in a release build.
+- **The span example:** the same behaviour, and every control fits, at
+  both screen sizes.
+- **Doc parity:** the new guides show every tree in both syntaxes and
+  both spellings.
+
+**Not verified / owed.**
+- **The device end of the span, and the embedded obligations** (Milestone
+  37): the executor adapter on hardware, `embedded-hal` peripherals,
+  `probe-rs`, board metadata (`C73`), and the RTOS adapter (`C79`).
+- **A published crates.io index and a hosted API reference.** The index
+  and the reference are generated and committed, not hosted.
+- **Codemods for `.rsx` files and `rsx!` bodies.** The first codemod
+  touches Rust syntax only. No markup attribute changed in that release.
+
 ### Milestone 57 — Surfaces beyond the main window, and product services — complete for Windows
 
 **Built.** Guide: `docs/surfaces.md`.

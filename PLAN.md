@@ -3245,6 +3245,19 @@ of the target range.
 
 **Depends on** everything above it, which is why it is last.
 
+**Status (2026-09-26): implemented for Windows.** This covers:
+
+- the stability policy, with codemods run by `rustnative upgrade`;
+- the capability-package contract, with `add` and `search` and a sample
+  package;
+- feature kits;
+- `rustnative describe --json`;
+- measured core costs, the change-detection contract, and guides;
+- the span example on the desktop and at a device's screen size.
+
+The device end of the span, and the embedded adapters, are owed with
+Milestone 37. See `BUILD_STATUS.md`.
+
 ---
 
 ## Milestone 55 — Reconciliation beyond the screen: real time and sync

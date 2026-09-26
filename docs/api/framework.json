@@ -1,0 +1,8877 @@
+{
+  "capabilities": [
+    "Clipboard",
+    "Notifications",
+    "Camera",
+    "WebContent",
+    "MediaPlayback",
+    "Bluetooth",
+    "Storage",
+    "Location",
+    "FileDialogs",
+    "SystemShare",
+    "UrlLaunch",
+    "MultipleWindows",
+    "WindowManagement",
+    "SystemAppearance",
+    "DragAndDrop",
+    "Menus",
+    "Touch",
+    "Pen",
+    "Gamepad",
+    "Ime",
+    "Animations",
+    "ReducedMotionPreference",
+    "CustomDrawing",
+    "NativeSurfaces",
+    "StatePersistence",
+    "DeepLinks",
+    "Lifecycle",
+    "Cursors",
+    "Hover",
+    "CommandShortcuts",
+    "RightToLeft",
+    "HostTraits",
+    "Permissions",
+    "Surface(Widget)",
+    "Surface(LiveActivity)",
+    "Surface(Tile)",
+    "Surface(Extension)",
+    "Surface(InstantApp)",
+    "Surface(CompanionDevice)",
+    "Surface(TrayExtra)",
+    "Surface(JumpList)",
+    "Surface(TaskbarProgress)",
+    "Printing",
+    "SerialPorts",
+    "Accelerator(Gpu)",
+    "Accelerator(Npu)"
+  ],
+  "component": {
+    "methods": [
+      "fn new(props: Self::Props) -> Self",
+      "fn props(&self) -> &Self::Props",
+      "fn set_props(&mut self, props: Self::Props)",
+      "fn view(&self) -> Node",
+      "fn update(&mut self, event: Event)",
+      "fn render(&mut self, context: &mut ComponentContext<'_, Self::Message>) -> Node (default: view)"
+    ],
+    "rules": [
+      "state changes only in update, in answer to an event or a message",
+      "render is a function of state, props, and what the context provides",
+      "keys name nodes; events and queries find nodes by key"
+    ],
+    "trait": "framework_core::Component",
+    "types": [
+      "Props: PartialEq + Clone",
+      "Message"
+    ]
+  },
+  "elements": [
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::label_with_layout",
+          "flag": false,
+          "kind": "Argument",
+          "name": "text",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Label",
+      "name": "Label"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::button_with_layout",
+          "flag": false,
+          "kind": "Argument",
+          "name": "text",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Button",
+      "name": "Button"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::text_input_with_layout",
+          "flag": false,
+          "kind": "Argument",
+          "name": "value",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "TextInput",
+      "name": "TextInput"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::canvas",
+          "flag": false,
+          "kind": "Argument",
+          "name": "draw_list",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Canvas",
+      "name": "Canvas"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        }
+      ],
+      "children": false,
+      "constructor": "Surface",
+      "name": "Surface"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::foreign",
+          "flag": false,
+          "kind": "Argument",
+          "name": "kind",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Foreign",
+      "name": "Foreign"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::tab_bar",
+          "flag": false,
+          "kind": "Argument",
+          "name": "labels",
+          "required": true
+        },
+        {
+          "builder": "Node::tab_bar",
+          "flag": false,
+          "kind": "Argument",
+          "name": "selected",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "TabBar",
+      "name": "TabBar"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "ColumnStyle::padding",
+          "flag": false,
+          "kind": "Container",
+          "name": "padding",
+          "required": false
+        },
+        {
+          "builder": "ColumnStyle::gap",
+          "flag": false,
+          "kind": "Container",
+          "name": "gap",
+          "required": false
+        },
+        {
+          "builder": "ColumnStyle::align_items",
+          "flag": false,
+          "kind": "Container",
+          "name": "align_items",
+          "required": false
+        },
+        {
+          "builder": "ColumnStyle::overflow",
+          "flag": false,
+          "kind": "Container",
+          "name": "overflow",
+          "required": false
+        }
+      ],
+      "children": true,
+      "constructor": "Column",
+      "name": "Column"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "RowStyle::padding",
+          "flag": false,
+          "kind": "Container",
+          "name": "padding",
+          "required": false
+        },
+        {
+          "builder": "RowStyle::gap",
+          "flag": false,
+          "kind": "Container",
+          "name": "gap",
+          "required": false
+        },
+        {
+          "builder": "RowStyle::align_items",
+          "flag": false,
+          "kind": "Container",
+          "name": "align_items",
+          "required": false
+        },
+        {
+          "builder": "RowStyle::overflow",
+          "flag": false,
+          "kind": "Container",
+          "name": "overflow",
+          "required": false
+        }
+      ],
+      "children": true,
+      "constructor": "Row",
+      "name": "Row"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::virtual_list_with_layout",
+          "flag": false,
+          "kind": "Argument",
+          "name": "list",
+          "required": true
+        }
+      ],
+      "children": true,
+      "constructor": "VirtualList",
+      "name": "VirtualList"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Node::grid",
+          "flag": false,
+          "kind": "Argument",
+          "name": "tracks",
+          "required": true
+        }
+      ],
+      "children": true,
+      "constructor": "Grid",
+      "name": "Grid"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Checkbox",
+          "flag": false,
+          "kind": "Argument",
+          "name": "label",
+          "required": true
+        },
+        {
+          "builder": "Control::Checkbox",
+          "flag": false,
+          "kind": "Argument",
+          "name": "checked",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Checkbox",
+      "name": "Checkbox"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Radio",
+          "flag": false,
+          "kind": "Argument",
+          "name": "label",
+          "required": true
+        },
+        {
+          "builder": "Control::Radio",
+          "flag": false,
+          "kind": "Argument",
+          "name": "selected",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Radio",
+      "name": "Radio"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Toggle",
+          "flag": false,
+          "kind": "Argument",
+          "name": "label",
+          "required": true
+        },
+        {
+          "builder": "Control::Toggle",
+          "flag": false,
+          "kind": "Argument",
+          "name": "on",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Toggle",
+      "name": "Toggle"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Slider",
+          "flag": false,
+          "kind": "Argument",
+          "name": "value",
+          "required": true
+        },
+        {
+          "builder": "Control::Slider",
+          "flag": false,
+          "kind": "Argument",
+          "name": "min",
+          "required": true
+        },
+        {
+          "builder": "Control::Slider",
+          "flag": false,
+          "kind": "Argument",
+          "name": "max",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Slider",
+      "name": "Slider"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Progress",
+          "flag": false,
+          "kind": "Argument",
+          "name": "percent",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Progress",
+      "name": "Progress"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Select",
+          "flag": false,
+          "kind": "Argument",
+          "name": "options",
+          "required": true
+        },
+        {
+          "builder": "Control::Select",
+          "flag": false,
+          "kind": "Argument",
+          "name": "selected",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Select",
+      "name": "Select"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::ListBox",
+          "flag": false,
+          "kind": "Argument",
+          "name": "items",
+          "required": true
+        },
+        {
+          "builder": "Control::ListBox",
+          "flag": false,
+          "kind": "Argument",
+          "name": "selected",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "ListBox",
+      "name": "ListBox"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::DatePicker",
+          "flag": false,
+          "kind": "Argument",
+          "name": "date",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "DatePicker",
+      "name": "DatePicker"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Spinner",
+          "flag": false,
+          "kind": "Argument",
+          "name": "value",
+          "required": true
+        },
+        {
+          "builder": "Control::Spinner",
+          "flag": false,
+          "kind": "Argument",
+          "name": "min",
+          "required": true
+        },
+        {
+          "builder": "Control::Spinner",
+          "flag": false,
+          "kind": "Argument",
+          "name": "max",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Spinner",
+      "name": "Spinner"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        }
+      ],
+      "children": false,
+      "constructor": "Separator",
+      "name": "Separator"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Link",
+          "flag": false,
+          "kind": "Argument",
+          "name": "text",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Link",
+      "name": "Link"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::MultilineText",
+          "flag": false,
+          "kind": "Argument",
+          "name": "value",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "MultilineText",
+      "name": "MultilineText"
+    },
+    {
+      "attributes": [
+        {
+          "builder": "the constructor's `key`",
+          "flag": false,
+          "kind": "Key",
+          "name": "key",
+          "required": true
+        },
+        {
+          "builder": "LayoutStyle::width",
+          "flag": false,
+          "kind": "Layout",
+          "name": "width",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::height",
+          "flag": false,
+          "kind": "Layout",
+          "name": "height",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::margin",
+          "flag": false,
+          "kind": "Layout",
+          "name": "margin",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::align_self",
+          "flag": false,
+          "kind": "Layout",
+          "name": "align_self",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::constraints",
+          "flag": false,
+          "kind": "Layout",
+          "name": "constraints",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::direction",
+          "flag": false,
+          "kind": "Layout",
+          "name": "direction",
+          "required": false
+        },
+        {
+          "builder": "LayoutStyle::grid",
+          "flag": false,
+          "kind": "Layout",
+          "name": "grid",
+          "required": false
+        },
+        {
+          "builder": "Node::with_accessibility",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "accessibility",
+          "required": false
+        },
+        {
+          "builder": "Node::with_class(classes!(\"…\"))",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "class",
+          "required": false
+        },
+        {
+          "builder": "Node::with_style, or Node::with_declarations(styles!(\"…\")) for a string",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "style",
+          "required": false
+        },
+        {
+          "builder": "Node::with_input",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "input",
+          "required": false
+        },
+        {
+          "builder": "Node::with_opacity",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "opacity",
+          "required": false
+        },
+        {
+          "builder": "Node::with_transition",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "transition",
+          "required": false
+        },
+        {
+          "builder": "Node::with_item_index",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "item_index",
+          "required": false
+        },
+        {
+          "builder": "Node::with_command",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "command",
+          "required": false
+        },
+        {
+          "builder": "Node::with_cursor",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "cursor",
+          "required": false
+        },
+        {
+          "builder": "Node::with_shared_id",
+          "flag": false,
+          "kind": "Modifier",
+          "name": "shared_id",
+          "required": false
+        },
+        {
+          "builder": "Node::disabled",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "disabled",
+          "required": false
+        },
+        {
+          "builder": "Node::hidden",
+          "flag": true,
+          "kind": "Modifier",
+          "name": "hidden",
+          "required": false
+        },
+        {
+          "builder": "Control::Image",
+          "flag": false,
+          "kind": "Argument",
+          "name": "image",
+          "required": true
+        }
+      ],
+      "children": false,
+      "constructor": "Image",
+      "name": "Image"
+    }
+  ],
+  "events": [
+    "Click",
+    "FocusGained",
+    "FocusLost",
+    "KeyDown",
+    "TextInput",
+    "TextChanged",
+    "WindowResized",
+    "WindowMoved",
+    "WindowCloseRequested",
+    "WindowStateChanged",
+    "MenuAction",
+    "KeyUp",
+    "PointerDown",
+    "PointerMove",
+    "PointerUp",
+    "PointerCancel",
+    "PointerEnter",
+    "PointerLeave",
+    "Wheel",
+    "Gesture",
+    "Composition",
+    "Clipboard",
+    "ClipboardChanged",
+    "SurfaceAction",
+    "DragEnter",
+    "DragOver",
+    "DragLeave",
+    "Drop",
+    "AccessibilityAction",
+    "TabSelected",
+    "Toggled",
+    "ValueChanged",
+    "SelectionChanged",
+    "DateChanged",
+    "Command",
+    "DeepLink",
+    "Lifecycle",
+    "SurfaceResized",
+    "VisibleRangeChanged",
+    "AnimationFinished",
+    "Gamepad"
+  ],
+  "framework": "0.1.0",
+  "layout": [
+    "column and row stack children along their axis, with gap and padding in logical start/end",
+    "grid places children in named tracks",
+    "width and height are Fixed, Fill, or Content; Fill shares what is left",
+    "constraints clamp a node's size; margins are outside it",
+    "direction follows the environment (LTR or RTL); start and end mirror"
+  ],
+  "services": [
+    "http",
+    "storage",
+    "clipboard",
+    "file_dialogs",
+    "system",
+    "state_store",
+    "permissions",
+    "locale",
+    "printing",
+    "serial",
+    "secure_storage",
+    "push",
+    "commerce",
+    "surfaces and flags (always present)"
+  ],
+  "syntaxes": {
+    "builder": "Node::<constructor>(key, …) with with_* modifiers",
+    "markup": "rsx! bodies and .rsx files; each element lowers to the constructor named here"
+  },
+  "utilities": [
+    {
+      "class": "bg-amber-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-amber-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-black",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-blue-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-cyan-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-emerald-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-fuchsia-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-gray-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-green-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-indigo-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-lime-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-neutral-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-orange-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-pink-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-purple-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-red-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-rose-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-sky-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-slate-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-stone-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-teal-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-violet-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-white",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-yellow-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-100",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-200",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-300",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-400",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-50",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-500",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-600",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-700",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-800",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-900",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "bg-zinc-950",
+      "sets": [
+        "background-color"
+      ]
+    },
+    {
+      "class": "block",
+      "sets": [
+        "display"
+      ]
+    },
+    {
+      "class": "border-amber-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-amber-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-black",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-blue-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-cyan-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-emerald-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-fuchsia-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-gray-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-green-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-indigo-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-lime-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-neutral-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-orange-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-pink-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-purple-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-red-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-rose-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-sky-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-slate-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-stone-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-teal-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-violet-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-white",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-yellow-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-100",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-200",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-300",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-400",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-50",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-500",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-600",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-700",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-800",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-900",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "border-zinc-950",
+      "sets": [
+        "border-color"
+      ]
+    },
+    {
+      "class": "flex",
+      "sets": [
+        "display"
+      ]
+    },
+    {
+      "class": "font-black",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-bold",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-extrabold",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-extralight",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-light",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-medium",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-mono",
+      "sets": [
+        "font-family"
+      ]
+    },
+    {
+      "class": "font-normal",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-sans",
+      "sets": [
+        "font-family"
+      ]
+    },
+    {
+      "class": "font-semibold",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "font-serif",
+      "sets": [
+        "font-family"
+      ]
+    },
+    {
+      "class": "font-thin",
+      "sets": [
+        "font-weight"
+      ]
+    },
+    {
+      "class": "gap-4",
+      "sets": [
+        "gap"
+      ]
+    },
+    {
+      "class": "h-4",
+      "sets": [
+        "height"
+      ]
+    },
+    {
+      "class": "h-auto",
+      "sets": [
+        "height"
+      ]
+    },
+    {
+      "class": "h-full",
+      "sets": [
+        "height"
+      ]
+    },
+    {
+      "class": "hidden",
+      "sets": [
+        "display"
+      ]
+    },
+    {
+      "class": "items-center",
+      "sets": [
+        "align-items"
+      ]
+    },
+    {
+      "class": "items-end",
+      "sets": [
+        "align-items"
+      ]
+    },
+    {
+      "class": "items-start",
+      "sets": [
+        "align-items"
+      ]
+    },
+    {
+      "class": "items-stretch",
+      "sets": [
+        "align-items"
+      ]
+    },
+    {
+      "class": "m-4",
+      "sets": [
+        "margin-top",
+        "margin-inline-end",
+        "margin-bottom",
+        "margin-inline-start"
+      ]
+    },
+    {
+      "class": "max-h-4",
+      "sets": [
+        "max-height"
+      ]
+    },
+    {
+      "class": "max-w-4",
+      "sets": [
+        "max-width"
+      ]
+    },
+    {
+      "class": "mb-4",
+      "sets": [
+        "margin-bottom"
+      ]
+    },
+    {
+      "class": "me-4",
+      "sets": [
+        "margin-inline-end"
+      ]
+    },
+    {
+      "class": "min-h-4",
+      "sets": [
+        "min-height"
+      ]
+    },
+    {
+      "class": "min-w-4",
+      "sets": [
+        "min-width"
+      ]
+    },
+    {
+      "class": "ms-4",
+      "sets": [
+        "margin-inline-start"
+      ]
+    },
+    {
+      "class": "mt-4",
+      "sets": [
+        "margin-top"
+      ]
+    },
+    {
+      "class": "mx-4",
+      "sets": [
+        "margin-inline-start",
+        "margin-inline-end"
+      ]
+    },
+    {
+      "class": "my-4",
+      "sets": [
+        "margin-top",
+        "margin-bottom"
+      ]
+    },
+    {
+      "class": "overflow-hidden",
+      "sets": [
+        "overflow"
+      ]
+    },
+    {
+      "class": "overflow-scroll",
+      "sets": [
+        "overflow"
+      ]
+    },
+    {
+      "class": "overflow-visible",
+      "sets": [
+        "overflow"
+      ]
+    },
+    {
+      "class": "p-4",
+      "sets": [
+        "padding-top",
+        "padding-inline-end",
+        "padding-bottom",
+        "padding-inline-start"
+      ]
+    },
+    {
+      "class": "pb-4",
+      "sets": [
+        "padding-bottom"
+      ]
+    },
+    {
+      "class": "pe-4",
+      "sets": [
+        "padding-inline-end"
+      ]
+    },
+    {
+      "class": "ps-4",
+      "sets": [
+        "padding-inline-start"
+      ]
+    },
+    {
+      "class": "pt-4",
+      "sets": [
+        "padding-top"
+      ]
+    },
+    {
+      "class": "px-4",
+      "sets": [
+        "padding-inline-start",
+        "padding-inline-end"
+      ]
+    },
+    {
+      "class": "py-4",
+      "sets": [
+        "padding-top",
+        "padding-bottom"
+      ]
+    },
+    {
+      "class": "rounded",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-2xl",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-3xl",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-4xl",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-full",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-lg",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-md",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-none",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-sm",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-xl",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "rounded-xs",
+      "sets": [
+        "border-radius"
+      ]
+    },
+    {
+      "class": "self-center",
+      "sets": [
+        "align-self"
+      ]
+    },
+    {
+      "class": "self-end",
+      "sets": [
+        "align-self"
+      ]
+    },
+    {
+      "class": "self-start",
+      "sets": [
+        "align-self"
+      ]
+    },
+    {
+      "class": "self-stretch",
+      "sets": [
+        "align-self"
+      ]
+    },
+    {
+      "class": "shadow",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-2xl",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-2xs",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-inner",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-lg",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-md",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-none",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-sm",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-xl",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "shadow-xs",
+      "sets": [
+        "box-shadow"
+      ]
+    },
+    {
+      "class": "size-4",
+      "sets": [
+        "width",
+        "height"
+      ]
+    },
+    {
+      "class": "text-2xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-3xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-4xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-5xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-6xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-7xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-8xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-9xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-amber-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-amber-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-base",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-black",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-blue-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-cyan-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-emerald-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-fuchsia-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-gray-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-green-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-indigo-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lg",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-lime-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-lime-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-neutral-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-orange-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-pink-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-purple-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-red-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-rose-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sky-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-slate-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-sm",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-stone-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-stone-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-teal-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-violet-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-white",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-xl",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-xs",
+      "sets": [
+        "font-size"
+      ]
+    },
+    {
+      "class": "text-yellow-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-yellow-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-100",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-200",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-300",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-400",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-50",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-500",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-600",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-700",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-800",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-900",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "text-zinc-950",
+      "sets": [
+        "color"
+      ]
+    },
+    {
+      "class": "w-4",
+      "sets": [
+        "width"
+      ]
+    },
+    {
+      "class": "w-auto",
+      "sets": [
+        "width"
+      ]
+    },
+    {
+      "class": "w-full",
+      "sets": [
+        "width"
+      ]
+    }
+  ],
+  "variants": [
+    "hover",
+    "focus",
+    "focus-visible",
+    "active",
+    "disabled",
+    "dark",
+    "rtl",
+    "ltr",
+    "motion-reduce",
+    "motion-safe",
+    "pointer-coarse",
+    "pointer-fine",
+    "2xl",
+    "lg",
+    "md",
+    "sm",
+    "xl"
+  ]
+}

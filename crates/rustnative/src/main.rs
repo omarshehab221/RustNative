@@ -33,6 +33,7 @@ mod config;
 mod crash;
 mod db;
 mod deploy;
+mod describe;
 mod dev;
 mod diagnostics;
 mod doctor;
@@ -40,16 +41,19 @@ mod error;
 mod generate;
 mod i18n;
 mod inspect;
+mod kits;
 mod lsp;
 mod lsp_assist;
 mod markup;
 mod markup_edit;
 mod package;
+mod packages;
 mod pgo;
 mod platform;
 mod project;
 mod tokens;
 mod toolchain;
+mod upgrade;
 
 use std::process::ExitCode;
 

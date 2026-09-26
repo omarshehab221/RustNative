@@ -106,6 +106,41 @@ enum Command {
     /// accessibility results, and requirement traceability (`PLAN.md`
     /// Milestone 51).
     Compliance,
+    /// Add a capability package, after checking it supports this
+    /// project's backends and framework version (`PLAN.md` Milestone 52).
+    Add {
+        /// A path to the package's crate, or a name from the index.
+        package: String,
+        /// Another index file.
+        #[arg(long, value_name = "FILE")]
+        index: Option<PathBuf>,
+    },
+    /// Search the capability-package index.
+    Search {
+        /// Words in a package's name, description, or contract.
+        term: String,
+        /// Another index file.
+        #[arg(long, value_name = "FILE")]
+        index: Option<PathBuf>,
+    },
+    /// Carry the project across breaking changes with codemods (`PLAN.md`
+    /// Milestone 52, `docs/policy/stability.md`).
+    Upgrade {
+        /// The framework version the project was written for.
+        #[arg(long)]
+        from: String,
+        /// Show what would change without writing.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Describe the framework for tools: elements and their builder
+    /// methods, utilities, capabilities, events, and services (`PLAN.md`
+    /// Milestone 52).
+    Describe {
+        /// Print the whole description as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Design tokens (`PLAN.md` Milestone 48).
     Tokens {
         /// What to do.
@@ -394,6 +429,17 @@ impl Cli {
             Command::Generate { what } => crate::generate::run(&here, &what),
             Command::I18n { command } => crate::i18n::run(&here, &command),
             Command::Db { command } => crate::db::run(&here, &command),
+            Command::Add { package, index } => {
+                crate::packages::add(&here, &package, index.as_deref())
+            }
+            Command::Search { term, index } => crate::packages::search(&term, index.as_deref()),
+            Command::Upgrade { from, dry_run } => {
+                crate::upgrade::run(&Project::find(&here)?.root, &from, dry_run)
+            }
+            Command::Describe { json } => {
+                crate::describe::run(json);
+                Ok(())
+            }
             Command::Crash { command } => crate::crash::run(&here, &command),
             Command::Compliance => crate::compliance::run(&here),
             Command::Deploy { command } => crate::deploy::run(&here, command),

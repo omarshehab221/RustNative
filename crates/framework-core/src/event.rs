@@ -13,6 +13,52 @@ use crate::lifecycle::Lifecycle;
 use crate::virtualization::VirtualRange;
 use crate::window::WindowPresentation;
 
+/// The name of every [`Event`] variant, in declaration order — what
+/// `rustnative describe` lists (its tests check this against the enum).
+pub const EVENT_NAMES: &[&str] = &[
+    "Click",
+    "FocusGained",
+    "FocusLost",
+    "KeyDown",
+    "TextInput",
+    "TextChanged",
+    "WindowResized",
+    "WindowMoved",
+    "WindowCloseRequested",
+    "WindowStateChanged",
+    "MenuAction",
+    "KeyUp",
+    "PointerDown",
+    "PointerMove",
+    "PointerUp",
+    "PointerCancel",
+    "PointerEnter",
+    "PointerLeave",
+    "Wheel",
+    "Gesture",
+    "Composition",
+    "Clipboard",
+    "ClipboardChanged",
+    "SurfaceAction",
+    "DragEnter",
+    "DragOver",
+    "DragLeave",
+    "Drop",
+    "AccessibilityAction",
+    "TabSelected",
+    "Toggled",
+    "ValueChanged",
+    "SelectionChanged",
+    "DateChanged",
+    "Command",
+    "DeepLink",
+    "Lifecycle",
+    "SurfaceResized",
+    "VisibleRangeChanged",
+    "AnimationFinished",
+    "Gamepad",
+];
+
 /// Input produced by a platform backend and delivered to the active
 /// component tree.
 ///

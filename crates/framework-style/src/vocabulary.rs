@@ -238,6 +238,32 @@ impl Vocabulary {
         known_classes(self)
     }
 
+    /// Every variant prefix this vocabulary accepts (`hover`, `dark`,
+    /// `md`, and the project's own), for tools and suggestions.
+    #[must_use]
+    pub fn variant_names(&self) -> Vec<String> {
+        let mut known: Vec<String> = STATES.iter().map(|(name, _)| (*name).to_owned()).collect();
+        known.extend(
+            [
+                "dark",
+                "rtl",
+                "ltr",
+                "motion-reduce",
+                "motion-safe",
+                "pointer-coarse",
+                "pointer-fine",
+            ]
+            .map(str::to_owned),
+        );
+        known.extend(
+            self.tokens
+                .keys()
+                .filter_map(|name| name.strip_prefix("breakpoint-").map(str::to_owned)),
+        );
+        known.extend(self.variants.keys().cloned());
+        known
+    }
+
     /// Lowers a class string.
     ///
     /// # Errors

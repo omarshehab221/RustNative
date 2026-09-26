@@ -386,43 +386,7 @@ impl Application {
     fn capability_report(&self, backend: &dyn InspectBackend) -> CapabilityReport {
         use crate::capability::Capability as C;
         let advertised = backend.capabilities();
-        let every = [
-            C::Clipboard,
-            C::Notifications,
-            C::Camera,
-            C::Bluetooth,
-            C::Storage,
-            C::Location,
-            C::FileDialogs,
-            C::SystemShare,
-            C::UrlLaunch,
-            C::MultipleWindows,
-            C::WindowManagement,
-            C::SystemAppearance,
-            C::DragAndDrop,
-            C::Menus,
-            C::Touch,
-            C::Pen,
-            C::Gamepad,
-            C::Ime,
-            C::Animations,
-            C::ReducedMotionPreference,
-            C::CustomDrawing,
-            C::NativeSurfaces,
-            C::StatePersistence,
-            C::DeepLinks,
-            C::Lifecycle,
-            C::Cursors,
-            C::Hover,
-            C::CommandShortcuts,
-            C::RightToLeft,
-            C::HostTraits,
-            C::Permissions,
-            C::Printing,
-            C::SerialPorts,
-            C::Accelerator(crate::capability::AcceleratorKind::Gpu),
-            C::Accelerator(crate::capability::AcceleratorKind::Npu),
-        ];
+        let every = C::ALL;
         let mut refused: Vec<Refusal> = every
             .iter()
             .filter(|capability| !advertised.supports(**capability))

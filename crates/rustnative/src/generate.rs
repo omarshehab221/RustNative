@@ -45,6 +45,13 @@ pub enum Generate {
         /// Its name, in `PascalCase`.
         name: String,
     },
+    /// A feature kit: working, tested accounts, administration, or a
+    /// store, on the server application model (Milestone 52).
+    Kit {
+        /// Which kit.
+        #[arg(value_enum)]
+        kit: crate::kits::Kit,
+    },
 }
 
 /// `PascalCase` to `snake_case`.
@@ -294,6 +301,9 @@ pub fn router() -> Result<framework_core::navigation::Router, framework_core::na
 pub fn run(here: &Path, what: &Generate) -> Result<()> {
     let project = Project::find(here)?;
     let root = &project.root;
+    if let Generate::Kit { kit } = what {
+        return crate::kits::generate(root, *kit);
+    }
     let crate_name = project.config.app.name.replace('-', "_");
     let markup = markup(root);
     let lib_path = root.join("src").join("lib.rs");
@@ -307,6 +317,7 @@ pub fn run(here: &Path, what: &Generate) -> Result<()> {
     let (name, route) = match what {
         Generate::Component { name } | Generate::Service { name } => (name.clone(), None),
         Generate::Screen { name, route } => (name.clone(), Some(route.clone())),
+        Generate::Kit { .. } => unreachable!("kits return above"),
         Generate::ServerResource { .. } => {
             return Err(Error::Usage(
                 "`server-resource` generates against the server application model, which this \

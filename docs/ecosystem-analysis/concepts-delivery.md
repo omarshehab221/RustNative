@@ -640,6 +640,22 @@ are not re-litigated without new information.
 - **Runtime reflection-based dependency injection** (`C16`) — rejected:
   compile-time wiring through services and the environment gives the same
   outcome without runtime failure modes.
+- **A visual designer that writes its own format or generated code as the
+  source of truth** (`C56-2`) — rejected: a designer, where one exists,
+  edits the same `.rsx` markup the compiler reads, never a separate
+  document or a code-behind the developer must not touch.
+- **Embedding a Chromium runtime to host web content on Windows**
+  (Milestone 48) — declined: host web content through the system's own
+  component where the platform offers one without a redistributable, and
+  answer `Capability::WebContent` honestly as unavailable where it does not.
+- **Faking an unavailable host service** (Milestones 51, 57) — rejected: a
+  push, billing, or widget service the host withholds from an unpackaged
+  application answers `Unavailable` with the reason, never a stub that
+  appears to work. `FakeStore` exists for tests and is named as such.
+- **A framework-maintained package registry service** (Milestone 52) —
+  declined: packages are ordinary crates; an index is a JSON file an
+  organization or the project publishes, and `rustnative add` reads the
+  crate's own metadata.
 
 ---
 

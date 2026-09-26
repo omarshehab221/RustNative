@@ -88,6 +88,59 @@ pub enum Capability {
     Accelerator(AcceleratorKind),
 }
 
+impl Capability {
+    /// Every capability a backend can answer, in declaration order — what
+    /// inspection reports against and `rustnative describe` lists.
+    pub const ALL: &'static [Self] = &[
+        Self::Clipboard,
+        Self::Notifications,
+        Self::Camera,
+        Self::WebContent,
+        Self::MediaPlayback,
+        Self::Bluetooth,
+        Self::Storage,
+        Self::Location,
+        Self::FileDialogs,
+        Self::SystemShare,
+        Self::UrlLaunch,
+        Self::MultipleWindows,
+        Self::WindowManagement,
+        Self::SystemAppearance,
+        Self::DragAndDrop,
+        Self::Menus,
+        Self::Touch,
+        Self::Pen,
+        Self::Gamepad,
+        Self::Ime,
+        Self::Animations,
+        Self::ReducedMotionPreference,
+        Self::CustomDrawing,
+        Self::NativeSurfaces,
+        Self::StatePersistence,
+        Self::DeepLinks,
+        Self::Lifecycle,
+        Self::Cursors,
+        Self::Hover,
+        Self::CommandShortcuts,
+        Self::RightToLeft,
+        Self::HostTraits,
+        Self::Permissions,
+        Self::Surface(SurfaceKind::Widget),
+        Self::Surface(SurfaceKind::LiveActivity),
+        Self::Surface(SurfaceKind::Tile),
+        Self::Surface(SurfaceKind::Extension),
+        Self::Surface(SurfaceKind::InstantApp),
+        Self::Surface(SurfaceKind::CompanionDevice),
+        Self::Surface(SurfaceKind::TrayExtra),
+        Self::Surface(SurfaceKind::JumpList),
+        Self::Surface(SurfaceKind::TaskbarProgress),
+        Self::Printing,
+        Self::SerialPorts,
+        Self::Accelerator(AcceleratorKind::Gpu),
+        Self::Accelerator(AcceleratorKind::Npu),
+    ];
+}
+
 /// Kinds of compute accelerator (`C89-1`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
